@@ -1,0 +1,50 @@
+# dependencies (bun install)
+node_modules
+
+
+# output
+out
+dist
+*.tgz
+
+# wails build artifacts + frontend embed
+build/bin
+frontend/dist/*
+!frontend/dist/.gitkeep
+
+# tanstack router generated tree
+src/routeTree.gen.ts
+
+# nix build result symlink
+result
+
+# direnv / turbo
+.direnv
+.turbo
+
+# code coverage
+coverage
+*.lcov
+
+# logs
+logs
+_.log
+report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# caches
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# IntelliJ based IDEs
+.idea
+
+# Finder (MacOS) folder config
+.DS_Store

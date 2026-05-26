@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "ignorePatterns": ["src/wailsjs/**"],
+  "ignoreExports": [
+    {
+      "file": "src/components/ui/**",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/features/integrations/nodejs/nodejs-run-context.tsx",
+      "exports": ["*"]
+    },
+    {
+      "file": "src/features/integrations/python/python-run-context.tsx",
+      "exports": ["*"]
+    }
+  ]
+}
