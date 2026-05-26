@@ -1,0 +1,11 @@
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "editor.formatOnSave": true,
+  "biome.lsp.bin": {
+    "linux-x64": "./node_modules/@biomejs/cli-linux-x64/biome",
+    "linux-x64-musl": "./node_modules/@biomejs/cli-linux-x64-musl/biome"
+  }
+}
