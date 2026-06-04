@@ -26,6 +26,7 @@ type session struct {
 	ptm    *os.File
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
+	done   chan struct{}
 }
 
 type Runner struct {
@@ -64,7 +65,7 @@ func (r *Runner) Start(workDir string) (string, error) {
 		return "", fmt.Errorf("pty start: %w", err)
 	}
 
-	s := &session{id: id, ptm: ptm, cmd: cmd, cancel: cancel}
+	s := &session{id: id, ptm: ptm, cmd: cmd, cancel: cancel, done: make(chan struct{})}
 	r.mu.Lock()
 	r.sessions[id] = s
 	r.mu.Unlock()
@@ -92,6 +93,7 @@ func (r *Runner) Start(workDir string) (string, error) {
 				code = -1
 			}
 		}
+		close(s.done)
 
 		r.mu.Lock()
 		delete(r.sessions, id)
@@ -135,6 +137,14 @@ func (r *Runner) Stop(sessionID string) error {
 	r.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("session %q not found", sessionID)
+	}
+	if s.cmd.Process != nil {
+		select {
+		case <-s.done:
+			// already exited and reaped; PID may be reused, do not signal
+		default:
+			killTerminalProcesses(s.cmd.Process.Pid)
+		}
 	}
 	_ = s.ptm.Close()
 	s.cancel()
