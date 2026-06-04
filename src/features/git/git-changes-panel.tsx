@@ -1,6 +1,6 @@
 import hljs from 'highlight.js/lib/common';
 import 'highlight.js/styles/github-dark-dimmed.css';
-import { Check, ChevronDown, ChevronRight, FileEdit, FileX, ListTree, Loader2, Plus, Rows3, SquareArrowOutUpRight, Trash2, Undo2, Wand2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, FileEdit, FileX, ListTree, Loader2, Plus, RefreshCw, Rows3, SquareArrowOutUpRight, Trash2, Undo2, Wand2 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -49,6 +49,7 @@ interface Props {
   onOpenFile?: (path: string, line: number) => void;
   // Called after a successful push/sync when the user has ticked "Close session".
   onClose?(): Promise<void>;
+  onCountChange?: (count: number) => void;
 }
 
 type ShipAction = 'ship' | 'amend' | 'push-only' | 'push-with-lease' | 'commit-only' | 'sync';
@@ -175,7 +176,7 @@ function splitPath(path: string): { name: string; dir: string } {
   return { name: path.slice(idx + 1), dir: path.slice(0, idx) };
 }
 
-export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose }: Props) {
+export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange }: Props) {
   const { t } = useTranslation();
   const { viewMode: view, setViewMode: setView } = useGitChangesViewMode();
   const [diff, setDiff] = useState<string | null>(null);
@@ -239,6 +240,7 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
       }
       if (s !== null) {
         setStatuses(s);
+        onCountChange?.(s.length);
       }
       if (g !== null) {
         setGitState(g);
@@ -495,6 +497,9 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
                   <ListTree className="size-3.5" />
                 </button>
               </div>
+              <button type="button" onClick={() => void refresh()} disabled={busy} title={t('agents.detail.refreshChanges')} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                <RefreshCw className="size-3.5" />
+              </button>
             </div>
             <ScrollArea className="h-0 flex-1">
               <div className="flex flex-col gap-0.5 p-1">

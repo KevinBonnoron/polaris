@@ -25,7 +25,7 @@ import {
 } from '@/wailsjs/go/main/App';
 import { clearSelection } from '@/state/agent-selection';
 
-export function AgentDetailFilesTab({ agent }: { agent: Agent | null }) {
+export function AgentDetailFilesTab({ agent, onCountChange }: { agent: Agent | null; onCountChange?: (count: number) => void }) {
   const { project } = useCurrentProject();
   const ops: GitChangesOps | null = useMemo(() => {
     if (!agent?.id) {
@@ -74,5 +74,5 @@ export function AgentDetailFilesTab({ agent }: { agent: Agent | null }) {
     return null;
   }
 
-  return <GitChangesPanel ops={ops} pollInterval={agent?.status === 'working' ? 2000 : 0} resetKey={agent?.id} onOpenFile={project?.path ? onOpenFile : undefined} onClose={onClose} />;
+  return <GitChangesPanel ops={ops} pollInterval={agent?.status === 'working' ? 2000 : 0} resetKey={agent?.id} onOpenFile={project?.path ? onOpenFile : undefined} onClose={onClose} onCountChange={onCountChange} />;
 }
