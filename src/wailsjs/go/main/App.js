@@ -438,6 +438,10 @@ export function Ping() {
   return window['go']['main']['App']['Ping']();
 }
 
+export function PromoteAgentToWorktree(arg1, arg2) {
+  return window['go']['main']['App']['PromoteAgentToWorktree'](arg1, arg2);
+}
+
 export function PushAgent(arg1, arg2) {
   return window['go']['main']['App']['PushAgent'](arg1, arg2);
 }
