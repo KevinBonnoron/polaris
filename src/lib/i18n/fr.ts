@@ -182,6 +182,7 @@ export const fr: Translation = {
       filesFilterEmpty: 'Aucun fichier ne correspond au filtre.',
       filesViewList: 'Vue liste',
       filesViewTree: 'Vue arborescente',
+      refreshChanges: 'Actualiser',
       filesApprovedSection: '{{count}} approuvés',
       filesChangesSection: '{{count}} changements',
       filesNoApproved: 'Aucun fichier approuvé pour le moment.',

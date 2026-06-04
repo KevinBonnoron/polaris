@@ -26,7 +26,7 @@ func (app *App) GetProjectDiff(projectID string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return git.AgentDiff(dir)
+	return git.ProjectDiff(dir)
 }
 
 func (app *App) GenerateCommitMessageForProject(projectID string) (string, error) {
@@ -34,7 +34,7 @@ func (app *App) GenerateCommitMessageForProject(projectID string) (string, error
 	if err != nil {
 		return "", err
 	}
-	diff, err := git.AgentDiff(dir)
+	diff, err := git.ProjectDiff(dir)
 	if err != nil {
 		return "", fmt.Errorf("get diff: %w", err)
 	}
@@ -46,7 +46,7 @@ func (app *App) GetProjectFileStatuses(projectID string) ([]git.FileChangeStatus
 	if err != nil {
 		return nil, err
 	}
-	return git.AgentFileStatuses(dir, nil)
+	return git.ProjectFileStatuses(dir)
 }
 
 func (app *App) GetProjectGitState(projectID string) (git.AgentState, error) {

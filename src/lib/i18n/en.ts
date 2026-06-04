@@ -180,6 +180,7 @@ export const en = {
       filesFilterEmpty: 'No files match the filter.',
       filesViewList: 'List view',
       filesViewTree: 'Tree view',
+      refreshChanges: 'Refresh',
       filesApprovedSection: '{{count}} approved',
       filesChangesSection: '{{count}} changes',
       filesNoApproved: 'No approved files yet.',

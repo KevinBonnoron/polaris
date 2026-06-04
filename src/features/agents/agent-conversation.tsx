@@ -67,7 +67,9 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const status = agent?.status;
   const isDraft = status === 'draft';
   const isWorking = status === 'working';
-  const filesModified = agent?.filesModified ?? 0;
+  const [liveFileCount, setLiveFileCount] = useState<number | null>(null);
+  useEffect(() => { setLiveFileCount(null); }, [agentId]);
+  const filesModified = liveFileCount ?? agent?.filesModified ?? 0;
 
   const provider = providers.find((p) => p.id === agent?.providerId) ?? undefined;
   const cliCfg = agent && !agent.providerId ? (agent.kind === 'opencode' ? opencode : cliKinds.find((k) => k.id === agent.kind)) : undefined;
@@ -308,7 +310,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         </TabsContent>
 
         <TabsContent forceMount value="files" className={cn('m-0 flex min-h-0 flex-1 flex-col', activeTab !== 'files' && 'hidden')}>
-          <AgentDetailFilesTab agent={agent} />
+          <AgentDetailFilesTab agent={agent} onCountChange={setLiveFileCount} />
         </TabsContent>
       </Tabs>
 

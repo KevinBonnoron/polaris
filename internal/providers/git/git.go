@@ -378,6 +378,133 @@ func AgentDiff(dir string) (string, error) {
 	return out.String(), nil
 }
 
+// ProjectDiff returns a unified diff of uncommitted changes only (staged,
+// unstaged, and untracked). Unlike AgentDiff it does not include commits.
+func ProjectDiff(dir string) (string, error) {
+	if dir == "" {
+		return "", fmt.Errorf("dir is required")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var out strings.Builder
+
+	for _, args := range [][]string{{"diff", "--staged"}, {"diff"}} {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = dir
+		sysexec.Hide(cmd)
+		if b, err := cmd.Output(); err == nil {
+			out.Write(b)
+		}
+	}
+
+	for _, path := range untrackedPaths(ctx, dir) {
+		cmd := exec.CommandContext(ctx, "git", "diff", "--no-index", "--", "/dev/null", path)
+		cmd.Dir = dir
+		sysexec.Hide(cmd)
+		b, _ := cmd.Output()
+		out.Write(b)
+	}
+
+	return out.String(), nil
+}
+
+// ProjectFileStatuses lists paths with uncommitted changes only (staged,
+// unstaged, untracked). Unlike AgentFileStatuses it does not include commits.
+func ProjectFileStatuses(dir string) ([]FileChangeStatus, error) {
+	if dir == "" {
+		return nil, fmt.Errorf("dir is required")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	statuses := make(map[string]*FileChangeStatus)
+	order := []string{}
+	upsert := func(path string) *FileChangeStatus {
+		if existing, ok := statuses[path]; ok {
+			return existing
+		}
+		entry := &FileChangeStatus{Path: path}
+		statuses[path] = entry
+		order = append(order, path)
+		return entry
+	}
+
+	parseNumstat := func(args ...string) {
+		cmd := exec.CommandContext(ctx, "git", args...)
+		cmd.Dir = dir
+		sysexec.Hide(cmd)
+		b, err := cmd.Output()
+		if err != nil {
+			return
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			fields := strings.Split(line, "\t")
+			if len(fields) < 3 {
+				continue
+			}
+			added := parseNumstatCount(fields[0])
+			removed := parseNumstatCount(fields[1])
+			path := fields[len(fields)-1]
+			entry := upsert(path)
+			entry.Added += added
+			entry.Removed += removed
+		}
+	}
+
+	parsePorcelain := func() {
+		cmd := exec.CommandContext(ctx, "git", "status", "--porcelain=v1", "-z", "--untracked-files=all")
+		cmd.Dir = dir
+		sysexec.Hide(cmd)
+		b, err := cmd.Output()
+		if err != nil {
+			return
+		}
+		records := strings.Split(string(b), "\x00")
+		for _, rec := range records {
+			if len(rec) < 3 {
+				continue
+			}
+			xy := rec[:2]
+			path := rec[3:]
+			entry := upsert(path)
+			x, y := rune(xy[0]), rune(xy[1])
+			switch {
+			case x == '?' && y == '?':
+				entry.Status = "?"
+				entry.Staged = false
+			case x != ' ' && y == ' ':
+				entry.Staged = true
+				entry.Status = string(x)
+			case x == ' ' && y != ' ':
+				entry.Staged = false
+				entry.Status = string(y)
+			default:
+				entry.Staged = false
+				if entry.Status == "" {
+					entry.Status = string(y)
+				}
+			}
+		}
+	}
+
+	parseNumstat("diff", "--numstat", "--staged")
+	parseNumstat("diff", "--numstat")
+	parsePorcelain()
+
+	out := make([]FileChangeStatus, 0, len(order))
+	for _, p := range order {
+		out = append(out, *statuses[p])
+	}
+	return out, nil
+}
+
 func untrackedPaths(ctx context.Context, dir string) []string {
 	cmd := exec.CommandContext(ctx, "git", "ls-files", "--others", "--exclude-standard", "-z")
 	cmd.Dir = dir
@@ -810,7 +937,11 @@ func AgentFileStatuses(dir string, scope []string) ([]FileChangeStatus, error) {
 
 	out := make([]FileChangeStatus, 0, len(order))
 	for _, p := range order {
-		out = append(out, *statuses[p])
+		entry := statuses[p]
+		if entry.Status == "" {
+			continue
+		}
+		out = append(out, *entry)
 	}
 	return out, nil
 }
