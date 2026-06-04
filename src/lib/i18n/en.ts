@@ -269,6 +269,8 @@ export const en = {
       stopAgent: 'Stop agent',
       couldNotStop: 'Could not stop agent',
       couldNotCopy: 'Could not copy log',
+      runServer: 'Run',
+      stopServer: 'Stop',
     },
     askUserQuestion: {
       title: 'Agent is asking a question',
