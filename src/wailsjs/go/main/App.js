@@ -202,6 +202,10 @@ export function GenerateCommitMessageForAgent(arg1) {
   return window['go']['main']['App']['GenerateCommitMessageForAgent'](arg1);
 }
 
+export function GenerateCommitMessageForProject(arg1) {
+  return window['go']['main']['App']['GenerateCommitMessageForProject'](arg1);
+}
+
 export function GetAgentDefaultModels() {
   return window['go']['main']['App']['GetAgentDefaultModels']();
 }
