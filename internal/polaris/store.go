@@ -208,6 +208,8 @@ func (store *Store) migrate() error {
 		`ALTER TABLE agents ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0`,
 		`UPDATE agents SET updatedAt = startedAt WHERE updatedAt = 0`,
 		`ALTER TABLE custom_providers ADD COLUMN icon TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE projects ADD COLUMN isolatedDefault INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE projects ADD COLUMN branchPrefix TEXT NOT NULL DEFAULT 'polaris/'`,
 	}
 	for _, q := range additiveCurrent {
 		if _, err := store.db.ExecContext(ctx, q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
@@ -314,7 +316,7 @@ func (store *Store) rebuildLegacyAgents(ctx context.Context) error {
 // --- projects ---
 
 func (store *Store) ListProjects() ([]Project, error) {
-	rows, err := store.db.Query(`SELECT id, name, color, path, logo, integrations FROM projects ORDER BY name COLLATE NOCASE`)
+	rows, err := store.db.Query(`SELECT id, name, color, path, logo, integrations, isolatedDefault, branchPrefix FROM projects ORDER BY name COLLATE NOCASE`)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +325,7 @@ func (store *Store) ListProjects() ([]Project, error) {
 	for rows.Next() {
 		var p Project
 		var integrations string
-		if err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Path, &p.Logo, &integrations); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Path, &p.Logo, &integrations, &p.IsolatedDefault, &p.BranchPrefix); err != nil {
 			return nil, err
 		}
 		if integrations != "" {
@@ -339,10 +341,10 @@ func (store *Store) ListProjects() ([]Project, error) {
 }
 
 func (store *Store) GetProject(id string) (*Project, error) {
-	row := store.db.QueryRow(`SELECT id, name, color, path, logo, integrations FROM projects WHERE id = ?`, id)
+	row := store.db.QueryRow(`SELECT id, name, color, path, logo, integrations, isolatedDefault, branchPrefix FROM projects WHERE id = ?`, id)
 	var p Project
 	var integrations string
-	if err := row.Scan(&p.ID, &p.Name, &p.Color, &p.Path, &p.Logo, &integrations); err != nil {
+	if err := row.Scan(&p.ID, &p.Name, &p.Color, &p.Path, &p.Logo, &integrations, &p.IsolatedDefault, &p.BranchPrefix); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -370,9 +372,9 @@ func (store *Store) UpsertProject(p Project) (Project, error) {
 		return p, err
 	}
 	_, err = store.db.Exec(
-		`INSERT INTO projects (id, name, color, path, logo, integrations) VALUES (?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, path=excluded.path, logo=excluded.logo, integrations=excluded.integrations`,
-		p.ID, p.Name, p.Color, p.Path, p.Logo, string(integrations),
+		`INSERT INTO projects (id, name, color, path, logo, integrations, isolatedDefault, branchPrefix) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET name=excluded.name, color=excluded.color, path=excluded.path, logo=excluded.logo, integrations=excluded.integrations, isolatedDefault=excluded.isolatedDefault, branchPrefix=excluded.branchPrefix`,
+		p.ID, p.Name, p.Color, p.Path, p.Logo, string(integrations), p.IsolatedDefault, p.BranchPrefix,
 	)
 	if err != nil {
 		return p, err
