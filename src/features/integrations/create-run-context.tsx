@@ -122,7 +122,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
     const launch = useCallback(
       async (args: string[], label: string, manifestPath?: string) => {
         const mp = manifestPath ?? config?.manifestPath;
-        if (!mp) return undefined;
+        if (!mp) { return undefined; }
         const runId = await fns.run(mp, config?.packageManager ?? defaultPm, config?.runEnv ?? '', args);
         setProjectRun({ runId, scriptName: label, manifest: mp, lines: [] });
         setTerminalOpen(true);
@@ -134,7 +134,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
     const startScript = useCallback(
       async (scriptName: string, manifestOverride?: string) => {
         const mp = manifestOverride ?? config?.manifestPath;
-        if (!mp || isRunning) return;
+        if (!mp || isRunning) { return; }
         try {
           const runId = await fns.start(mp, config?.packageManager ?? defaultPm, scriptName, config?.runEnv ?? '');
           setProjectRun({ runId, scriptName, manifest: mp, lines: [] });
@@ -148,7 +148,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
 
     const runCommand = useCallback(
       async (args: string[], label: string, manifestPath?: string) => {
-        if (!config?.manifestPath || isRunning) return;
+        if (!config?.manifestPath || isRunning) { return; }
         try {
           await launch(args, label, manifestPath);
         } catch (err) {
@@ -160,7 +160,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
 
     const runInWorkspaces = useCallback(
       async (commands: WorkspaceCommand[]) => {
-        if (!config?.manifestPath || isRunning) return;
+        if (!config?.manifestPath || isRunning) { return; }
         for (const command of commands) {
           let runId: string | undefined;
           try {
@@ -169,7 +169,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
             toastError({ title: t(`${i18nPrefix}.couldNotRunCommand`), err });
             return;
           }
-          if (!runId) return;
+          if (!runId) { return; }
           await new Promise<void>((resolve) => {
             exitResolvers.current.set(runId, resolve);
           });
@@ -179,7 +179,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
     );
 
     const stop = useCallback(async () => {
-      if (!run || run.exited) return;
+      if (!run || run.exited) { return; }
       try {
         await fns.stop(run.runId);
       } catch (err) {
@@ -188,10 +188,10 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
     }, [run, t]);
 
     const restart = useCallback(async () => {
-      if (!run) return;
+      if (!run) { return; }
       const { runId, scriptName, manifest } = run;
       const mp = manifest ?? config?.manifestPath;
-      if (!mp) return;
+      if (!mp) { return; }
       if (!run.exited) {
         const exitPromise = new Promise<void>((resolve) => {
           exitResolvers.current.set(runId, resolve);
@@ -219,19 +219,14 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
       }
     }, [isRunning, setProjectRun, setTerminalOpen]);
 
-    return (
-      <Context.Provider value={{ run, isRunning, config, instances, instanceIndex, setInstanceIndex, terminalOpen, setTerminalOpen, startScript, runCommand, runInWorkspaces, stop, restart, clear }}>
-        {children}
-      </Context.Provider>
-    );
+    return <Context.Provider value={{ run, isRunning, config, instances, instanceIndex, setInstanceIndex, terminalOpen, setTerminalOpen, startScript, runCommand, runInWorkspaces, stop, restart, clear }}>{children}</Context.Provider>;
   }
 
   function useRun(): RunContextValue<TConfig> {
     const ctx = useContext(Context);
-    if (!ctx) throw new Error(`useRun must be used within the ${kind} Provider`);
+    if (!ctx) { throw new Error(`useRun must be used within the ${kind} Provider`); }
     return ctx;
   }
 
   return { Provider, useRun };
 }
-

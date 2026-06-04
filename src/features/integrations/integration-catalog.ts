@@ -323,7 +323,7 @@ async function loadDokployProjectOptions(values: Record<string, string>): Promis
 
 function pickScript(names: string[], candidates: string[]): string | undefined {
   for (const name of candidates) {
-    if (names.includes(name)) return name;
+    if (names.includes(name)) { return name; }
   }
   return undefined;
 }
@@ -343,9 +343,9 @@ async function detectNode(projectPath: string): Promise<IntegrationConfig | Inte
     const start = pickScript(names, ['dev', 'start', 'serve', 'develop']);
     const test = pickScript(names, ['test']);
     const build = pickScript(names, ['build']);
-    if (start) c.startScript = start;
-    if (test) c.testScript = test;
-    if (build) c.buildScript = build;
+    if (start) { c.startScript = start; }
+    if (test) { c.testScript = test; }
+    if (build) { c.buildScript = build; }
     return c;
   });
   return configs.length === 1 ? configs[0] : configs;
@@ -379,9 +379,9 @@ async function detectPython(projectPath: string): Promise<IntegrationConfig | In
     const start = pickScript(names, ['start', 'dev', 'serve', 'run']);
     const test = pickScript(names, ['test', 'pytest']);
     const build = pickScript(names, ['build', 'compile']);
-    if (start) c.startScript = start;
-    if (test) c.testScript = test;
-    if (build) c.buildScript = build;
+    if (start) { c.startScript = start; }
+    if (test) { c.testScript = test; }
+    if (build) { c.buildScript = build; }
     return c;
   });
   return configs.length === 1 ? configs[0] : configs;

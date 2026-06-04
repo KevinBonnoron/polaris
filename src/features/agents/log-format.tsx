@@ -136,14 +136,14 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
   let thinkingKey: string | null = null;
 
   const flushText = () => {
-    if (!textKey || !textLines.length) return;
+    if (!textKey || !textLines.length) { return; }
     const content = textLines.join('\n').trim();
-    if (content) out.push({ type: 'text', content, key: textKey });
+    if (content) { out.push({ type: 'text', content, key: textKey }); }
     textLines = [];
     textKey = null;
   };
   const flushThinking = () => {
-    if (!thinkingKey || !thinkingLines.length) return;
+    if (!thinkingKey || !thinkingLines.length) { return; }
     out.push({ type: 'thinking', lines: thinkingLines, key: thinkingKey });
     thinkingLines = [];
     thinkingKey = null;
@@ -154,12 +154,12 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
     switch (evt.type) {
       case 'text':
         flushThinking();
-        if (!textKey) textKey = `text-${blockIndex++}-${i}`;
+        if (!textKey) { textKey = `text-${blockIndex++}-${i}`; }
         textLines.push(evt.content ?? '');
         break;
       case 'thinking':
         flushText();
-        if (!thinkingKey) thinkingKey = `thinking-${blockIndex++}-${i}`;
+        if (!thinkingKey) { thinkingKey = `thinking-${blockIndex++}-${i}`; }
         thinkingLines.push(evt.content ?? '');
         break;
       case 'tool_call': {
@@ -179,13 +179,13 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
       case 'user_message':
         flushText();
         flushThinking();
-        if (evt.content) out.push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` });
+        if (evt.content) { out.push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` }); }
         break;
       case 'system': {
         flushText();
         flushThinking();
         const content = evt.content ?? '';
-        if (content) out.push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
+        if (content) { out.push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` }); }
         break;
       }
       // turn_end: skip
@@ -276,7 +276,7 @@ function parseToolCall(rest: string): { name: string; detail: string } | null {
   const name = body.slice(0, dotIdx);
   const raw = body.slice(dotIdx + 3);
   // For absolute file paths (no spaces), show only the basename
-  const detail = (raw.startsWith('/') && !raw.includes(' ')) ? (raw.split('/').pop() ?? raw) : raw;
+  const detail = raw.startsWith('/') && !raw.includes(' ') ? (raw.split('/').pop() ?? raw) : raw;
   return { name, detail };
 }
 

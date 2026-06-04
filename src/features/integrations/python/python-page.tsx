@@ -30,7 +30,9 @@ function PythonScripts({ scripts, runCtx }: { scripts: GenericScript[]; runCtx: 
                     {script.name}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="font-mono text-xs">{script.command}</TooltipContent>
+                <TooltipContent side="bottom" className="font-mono text-xs">
+                  {script.command}
+                </TooltipContent>
               </Tooltip>
             );
           })}

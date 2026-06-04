@@ -50,7 +50,7 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
           }
           try {
             const result = await i.detect(path);
-            if (!result) return null;
+            if (!result) { return null; }
             let config: Record<string, unknown>;
             if (i.multi && Array.isArray(result)) {
               config = { _instances: result };

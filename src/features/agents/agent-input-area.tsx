@@ -73,10 +73,10 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
 
   useEffect(() => {
     const el = inputRef.current;
-    if (!el) return;
+    if (!el) { return; }
     el.focus();
     const raf = requestAnimationFrame(() => {
-      if (!inputRef.current) return;
+      if (!inputRef.current) { return; }
       inputRef.current.focus();
       const len = inputRef.current.value.length;
       inputRef.current.setSelectionRange(len, len);
@@ -85,8 +85,8 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   }, [inputRef]);
 
   useEffect(() => {
-    if (message || attachments.length > 0) drafts.set(agentId, { message, attachments });
-    else drafts.delete(agentId);
+    if (message || attachments.length > 0) { drafts.set(agentId, { message, attachments }); }
+    else { drafts.delete(agentId); }
   }, [agentId, message, attachments]);
 
   useEffect(() => {
@@ -192,7 +192,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   };
 
   useEffect(() => {
-    if (!isWorking) return;
+    if (!isWorking) { return; }
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -338,10 +338,11 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
           break;
         }
         if (isDraft) {
-          if (agent)
+          if (agent) {
             agentsCollection.update(agent.id, (d) => {
               d.model = target.value;
             });
+          }
         } else if (agent) {
           void SetAgentModel(agent.id, target.value).catch((err) => toastError({ title: t('agents.detail.couldNotSetModel'), err }));
         }
@@ -368,7 +369,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
         break;
       }
       case 'teleport': {
-        if (!agent) break;
+        if (!agent) { break; }
         void TeleportClaudeSession(agent.projectId, args)
           .then(async (imported) => {
             try {

@@ -651,12 +651,12 @@ func DiscardPaths(dir string, tracked, untracked []string) error {
 // commit/push UI. All counts are best-effort: any sub-command failure yields
 // a zero value rather than an error so the UI can still render.
 type AgentState struct {
-	Branch       string `json:"branch"`
-	StagedCount  int    `json:"stagedCount"`
-	AheadCount   int    `json:"aheadCount"`
-	BehindCount  int    `json:"behindCount"`
-	HasUpstream  bool   `json:"hasUpstream"`
-	IsProtected  bool   `json:"isProtected"`
+	Branch      string `json:"branch"`
+	StagedCount int    `json:"stagedCount"`
+	AheadCount  int    `json:"aheadCount"`
+	BehindCount int    `json:"behindCount"`
+	HasUpstream bool   `json:"hasUpstream"`
+	IsProtected bool   `json:"isProtected"`
 }
 
 // CollectAgentState reads the branch + upstream divergence state for dir.

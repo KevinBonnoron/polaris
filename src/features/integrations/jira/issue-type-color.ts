@@ -13,6 +13,6 @@ const TINTS: Record<string, string> = {
 const DEFAULT = 'bg-slate-500/15 text-slate-300';
 
 export function tagTint(name: string | undefined): string {
-  if (!name) return DEFAULT;
+  if (!name) { return DEFAULT; }
   return TINTS[name.toLowerCase()] ?? DEFAULT;
 }

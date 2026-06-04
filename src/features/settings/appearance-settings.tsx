@@ -102,17 +102,19 @@ export function AppearanceSettings() {
           <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('settings.appearance.theme')}</h4>
           <p className="text-xs text-muted-foreground">{t('settings.appearance.themeHint')}</p>
         </div>
-        <Dialog onOpenChange={(open) => { if (!open) { setJsonInput(''); setFeedback(null); } }}>
+        <Dialog
+          onOpenChange={(open) => {
+            if (!open) {
+              setJsonInput('');
+              setFeedback(null);
+            }
+          }}
+        >
           <ThemePicker value={theme} onChange={setTheme}>
             <DialogTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
+              <button type="button" className="inline-flex items-center gap-2 rounded-full border border-dashed px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground">
                 <Plus className="size-2.5" />
-                {customThemes.length > 0
-                  ? `${t('settings.appearance.customThemes')} · ${customThemes.length}`
-                  : t('settings.appearance.customThemes')}
+                {customThemes.length > 0 ? `${t('settings.appearance.customThemes')} · ${customThemes.length}` : t('settings.appearance.customThemes')}
               </button>
             </DialogTrigger>
           </ThemePicker>
@@ -169,7 +171,7 @@ export function AppearanceSettings() {
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleFile(file);
+                    if (file) { handleFile(file); }
                     e.target.value = '';
                   }}
                 />
@@ -268,9 +270,7 @@ function CardAnimationPreview({ styleKey }: { styleKey: CardAnimationStyleKey })
         </div>
       );
     case 'glow':
-      return (
-        <div className={cn(base, 'animate-pulse ring-2 ring-primary/30')} />
-      );
+      return <div className={cn(base, 'animate-pulse ring-2 ring-primary/30')} />;
     case 'none':
       return <div className={base} />;
   }
@@ -360,9 +360,7 @@ function ThinkingStylePreview({ styleKey, accent }: { styleKey: ThinkingStyleKey
         <div
           className="h-1 w-full rounded-full"
           style={{
-            backgroundImage: accent
-              ? 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary) 85%, transparent) 50%, transparent 100%)'
-              : 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--muted-foreground) 55%, transparent) 50%, transparent 100%)',
+            backgroundImage: accent ? 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary) 85%, transparent) 50%, transparent 100%)' : 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--muted-foreground) 55%, transparent) 50%, transparent 100%)',
             backgroundSize: '200% 100%',
             animation: 'thinking-gradient 2.5s ease-in-out infinite',
           }}
@@ -379,12 +377,14 @@ function ThinkingStylePreview({ styleKey, accent }: { styleKey: ThinkingStyleKey
     case 'flicker':
       return (
         <span className="inline-flex items-center gap-1.5">
-          {([
-            { dur: '0.7s', delay: '0s' },
-            { dur: '1.1s', delay: '0.2s' },
-            { dur: '0.9s', delay: '0.4s' },
-            { dur: '1.3s', delay: '0.1s' },
-          ] as const).map(({ dur, delay }, i) => (
+          {(
+            [
+              { dur: '0.7s', delay: '0s' },
+              { dur: '1.1s', delay: '0.2s' },
+              { dur: '0.9s', delay: '0.4s' },
+              { dur: '1.3s', delay: '0.1s' },
+            ] as const
+          ).map(({ dur, delay }, i) => (
             <span key={i} className={cn('size-1 rounded-full', accent ? 'bg-primary/80' : 'bg-muted-foreground/60')} style={{ animation: `thinking-flicker ${dur} ease-in-out ${delay} infinite` }} />
           ))}
         </span>

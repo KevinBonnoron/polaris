@@ -114,9 +114,7 @@ function GradientIndicator({ accent }: { accent: boolean }) {
     <div
       className="mt-3 h-1 w-full rounded-full"
       style={{
-        backgroundImage: accent
-          ? 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary) 85%, transparent) 50%, transparent 100%)'
-          : 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--muted-foreground) 55%, transparent) 50%, transparent 100%)',
+        backgroundImage: accent ? 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary) 85%, transparent) 50%, transparent 100%)' : 'linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--muted-foreground) 55%, transparent) 50%, transparent 100%)',
         backgroundSize: '200% 100%',
         animation: 'thinking-gradient 2.5s ease-in-out infinite',
       }}
@@ -153,20 +151,35 @@ function FlickerIndicator({ accent }: { accent: boolean }) {
 export function ThinkingIndicator() {
   const { style, accent } = useThinkingStyle();
   switch (style) {
-    case 'spinner': return <SpinnerIndicator accent={accent} />;
-    case 'pill': return <PillIndicator accent={accent} />;
-    case 'bar': return <BarIndicator accent={accent} />;
-    case 'wave': return <WaveIndicator accent={accent} />;
-    case 'orbit': return <OrbitIndicator accent={accent} />;
-    case 'typing': return <TypingIndicator accent={accent} />;
-    case 'breathing': return <BreathingIndicator accent={accent} />;
-    case 'sine': return <SineIndicator accent={accent} />;
-    case 'ellipsis': return <EllipsisIndicator accent={accent} />;
-    case 'ring': return <RingIndicator accent={accent} />;
-    case 'cascade': return <CascadeIndicator accent={accent} />;
-    case 'gradient': return <GradientIndicator accent={accent} />;
-    case 'bounce': return <BounceIndicator accent={accent} />;
-    case 'flicker': return <FlickerIndicator accent={accent} />;
-    default: return <DotsIndicator accent={accent} />;
+    case 'spinner':
+      return <SpinnerIndicator accent={accent} />;
+    case 'pill':
+      return <PillIndicator accent={accent} />;
+    case 'bar':
+      return <BarIndicator accent={accent} />;
+    case 'wave':
+      return <WaveIndicator accent={accent} />;
+    case 'orbit':
+      return <OrbitIndicator accent={accent} />;
+    case 'typing':
+      return <TypingIndicator accent={accent} />;
+    case 'breathing':
+      return <BreathingIndicator accent={accent} />;
+    case 'sine':
+      return <SineIndicator accent={accent} />;
+    case 'ellipsis':
+      return <EllipsisIndicator accent={accent} />;
+    case 'ring':
+      return <RingIndicator accent={accent} />;
+    case 'cascade':
+      return <CascadeIndicator accent={accent} />;
+    case 'gradient':
+      return <GradientIndicator accent={accent} />;
+    case 'bounce':
+      return <BounceIndicator accent={accent} />;
+    case 'flicker':
+      return <FlickerIndicator accent={accent} />;
+    default:
+      return <DotsIndicator accent={accent} />;
   }
 }

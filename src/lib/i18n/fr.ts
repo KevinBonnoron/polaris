@@ -282,7 +282,7 @@ export const fr: Translation = {
       previous: 'Précédent',
       next: 'Suivant',
       submit: 'Envoyer',
-      failed: 'Impossible d\'envoyer la réponse',
+      failed: "Impossible d'envoyer la réponse",
     },
   },
   files: {
@@ -1059,7 +1059,7 @@ export const fr: Translation = {
       thinkingStyleNeutral: 'Neutre',
       thinkingStyleThemed: 'Thème',
       cardAnimation: 'Animation des cartes',
-      cardAnimationHint: 'Choisissez l\'animation affichée sur les cartes d\'agents actifs.',
+      cardAnimationHint: "Choisissez l'animation affichée sur les cartes d'agents actifs.",
       customThemes: 'Thèmes personnalisés',
       customThemesHint: 'Importez votre propre thème au format JSON. Collez ci-dessous ou chargez un fichier .json.',
       importTheme: 'Importer le thème',

@@ -36,7 +36,7 @@ export function AgentsPage() {
     return [...filtered].sort((a, b) => {
       const ra = rank[a.status] ?? 6;
       const rb = rank[b.status] ?? 6;
-      if (ra !== rb) return ra - rb;
+      if (ra !== rb) { return ra - rb; }
       return (b.updatedAt ?? b.startedAt) - (a.updatedAt ?? a.startedAt);
     });
   }, [list, projectId]);
@@ -46,7 +46,7 @@ export function AgentsPage() {
 
   const { data: notifications = [] } = useLiveQuery((q) => q.from({ n: notificationsCollection }));
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId) { return; }
     const unread = notifications.filter((n: Notification) => !n.read && n.type === 'agent' && n.payload.agentId === selectedId);
     for (const n of unread) {
       notificationsCollection.update(n.id, (draft) => {

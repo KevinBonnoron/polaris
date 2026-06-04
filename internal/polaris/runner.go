@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/KevinBonnoron/polaris/internal/providers/repository"
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
+	"github.com/KevinBonnoron/polaris/internal/providers/repository"
 	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
 

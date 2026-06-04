@@ -148,17 +148,17 @@ func matchDesktop(desktop string, installed map[string]string) string {
 	name := strings.TrimSuffix(desktop, ".desktop")
 	name = strings.ToLower(name)
 	knownPrefixes := map[string]string{
-		"com.mitchellh.ghostty": "ghostty",
-		"org.gnome.terminal":    "gnome-terminal",
-		"org.kde.konsole":       "konsole",
-		"kitty":                 "kitty",
-		"alacritty":             "alacritty",
+		"com.mitchellh.ghostty":  "ghostty",
+		"org.gnome.terminal":     "gnome-terminal",
+		"org.kde.konsole":        "konsole",
+		"kitty":                  "kitty",
+		"alacritty":              "alacritty",
 		"org.wezfurlong.wezterm": "wezterm",
-		"foot":                  "foot",
-		"xfce4-terminal":        "xfce4-terminal",
-		"tilix":                 "tilix",
-		"terminator":            "terminator",
-		"xterm":                 "xterm",
+		"foot":                   "foot",
+		"xfce4-terminal":         "xfce4-terminal",
+		"tilix":                  "tilix",
+		"terminator":             "terminator",
+		"xterm":                  "xterm",
 	}
 	for prefix, id := range knownPrefixes {
 		if strings.HasPrefix(name, prefix) {

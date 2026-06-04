@@ -63,7 +63,7 @@ func (d *Discord) Send(ctx context.Context, message Message) error {
 // buildPayload constructs a Discord webhook message from a Message.
 func (d *Discord) buildPayload(m Message) map[string]any {
 	payload := map[string]any{
-		"username": "Polaris",
+		"username":   "Polaris",
 		"avatar_url": "https://via.placeholder.com/256?text=P", // TODO: proper logo
 	}
 

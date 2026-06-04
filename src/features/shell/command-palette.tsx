@@ -91,8 +91,8 @@ export function CommandPalette({ open, onOpenChange }: Props) {
 
   const connected = getIntegrations(currentProject);
   const integrationNav = INTEGRATIONS.filter((i) => {
-    if (!INTEGRATION_ROUTES[i.id]) return false;
-    if (i.id === 'repository') return currentProject?.hasGit === true;
+    if (!INTEGRATION_ROUTES[i.id]) { return false; }
+    if (i.id === 'repository') { return currentProject?.hasGit === true; }
     return Object.hasOwn(connected, i.id);
   });
   const hasAutomatable = projects.some(projectHasAutomatable);

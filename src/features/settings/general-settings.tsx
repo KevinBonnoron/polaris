@@ -43,7 +43,12 @@ function IdeCard({ ide, selected, detected, onSelect }: IdeCardProps) {
   const { t } = useTranslation();
   const Icon = ide.icon;
   return (
-    <button type="button" onClick={() => onSelect(ide.id)} disabled={!detected && !selected} className={cn('flex items-center gap-2 rounded-md border p-2 text-left transition-colors', selected ? 'border-primary/60 bg-accent/40' : 'border-border hover:bg-accent/30', !detected && !selected && 'cursor-not-allowed opacity-40')}>
+    <button
+      type="button"
+      onClick={() => onSelect(ide.id)}
+      disabled={!detected && !selected}
+      className={cn('flex items-center gap-2 rounded-md border p-2 text-left transition-colors', selected ? 'border-primary/60 bg-accent/40' : 'border-border hover:bg-accent/30', !detected && !selected && 'cursor-not-allowed opacity-40')}
+    >
       <div className="flex size-7 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white" style={{ background: ide.color }}>
         {Icon ? <Icon className="size-3.5" /> : ide.glyph}
       </div>
@@ -68,7 +73,7 @@ export function GeneralSettings() {
     let cancelled = false;
     DetectIdes()
       .then((results) => {
-        if (cancelled) return;
+        if (cancelled) { return; }
         const map: Record<string, boolean> = {};
         for (const r of results) {
           map[r.id] = r.installed;
@@ -77,18 +82,18 @@ export function GeneralSettings() {
         setIdesLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setIdesLoading(false);
+        if (!cancelled) { setIdesLoading(false); }
       });
     GetGeneralSettings()
       .then((s) => {
-        if (cancelled) return;
+        if (cancelled) { return; }
         setAutoResume(s.autoResumeSessions);
-        if (s.ideId) setIdeId(s.ideId);
-        if (s.agentCloseAction) setAgentCloseAction(s.agentCloseAction);
+        if (s.ideId) { setIdeId(s.ideId); }
+        if (s.agentCloseAction) { setAgentCloseAction(s.agentCloseAction); }
         setSettingsLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setSettingsLoading(false);
+        if (!cancelled) { setSettingsLoading(false); }
       });
     return () => {
       cancelled = true;
@@ -139,11 +144,7 @@ export function GeneralSettings() {
             </Select>
           }
         />
-        <SettingsRow
-          label={t('settings.general.autoSave')}
-          description={t('settings.general.autoSaveDesc')}
-          control={settingsLoading ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch checked={autoResume} onCheckedChange={handleAutoResumeChange} />}
-        />
+        <SettingsRow label={t('settings.general.autoSave')} description={t('settings.general.autoSaveDesc')} control={settingsLoading ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch checked={autoResume} onCheckedChange={handleAutoResumeChange} />} />
         <SettingsRow
           label={t('settings.general.agentCloseAction')}
           description={t('settings.general.agentCloseActionDesc')}

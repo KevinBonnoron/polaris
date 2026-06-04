@@ -315,7 +315,7 @@ export function AddProjectModal({ children, ...modeProps }: PropsWithChildren<Di
 
 function deriveRepoName(url: string): string {
   const trimmed = url.trim();
-  if (!trimmed) return '';
+  if (!trimmed) { return ''; }
   const withoutGit = trimmed.replace(/\.git$/, '');
   const parts = withoutGit.replace(/[:@]/, '/').split('/');
   return parts[parts.length - 1] || '';
@@ -335,7 +335,7 @@ async function detectInitialIntegrations(path: string): Promise<ProjectIntegrati
 
       try {
         const result = await detect(path);
-        if (!result) return;
+        if (!result) { return; }
         if (multi && Array.isArray(result)) {
           integrations[id] = { _instances: result };
         } else if (multi && !Array.isArray(result)) {

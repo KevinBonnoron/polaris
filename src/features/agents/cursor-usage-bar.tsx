@@ -20,8 +20,8 @@ interface CursorUsageData {
 }
 
 function barColor(pct: number): string {
-  if (pct >= 90) return 'bg-red-500';
-  if (pct >= 70) return 'bg-amber-500';
+  if (pct >= 90) { return 'bg-red-500'; }
+  if (pct >= 70) { return 'bg-amber-500'; }
   return 'bg-emerald-500';
 }
 
@@ -35,7 +35,9 @@ function UsageRow({ label, value, total, locale }: { label: string; value: numbe
         <span className="text-muted-foreground">{label}</span>
         <span className="tabular-nums">
           {remaining.toLocaleString(locale)} {t('agents.cursorUsage.left')}
-          <span className="ml-1 text-muted-foreground">· {value.toLocaleString(locale)} / {total.toLocaleString(locale)}</span>
+          <span className="ml-1 text-muted-foreground">
+            · {value.toLocaleString(locale)} / {total.toLocaleString(locale)}
+          </span>
         </span>
       </div>
       <Progress value={pct} className="h-1.5" indicatorClassName={barColor(pct)} />
@@ -96,20 +98,9 @@ export function CursorUsageBar() {
         </Tooltip>
       </div>
 
-      {hasRequestBar && (
-        <UsageRow
-          label={t('agents.cursorUsage.requests')}
-          value={usage.numRequests}
-          total={usage.numRequestsTotal}
-          locale={locale}
-        />
-      )}
+      {hasRequestBar && <UsageRow label={t('agents.cursorUsage.requests')} value={usage.numRequests} total={usage.numRequestsTotal} locale={locale} />}
 
-      {!hasRequestBar && (
-        <div className="text-[10px] text-muted-foreground">
-          {t('agents.cursorUsage.requestsUnlimited', { count: usage.numRequests })}
-        </div>
-      )}
+      {!hasRequestBar && <div className="text-[10px] text-muted-foreground">{t('agents.cursorUsage.requestsUnlimited', { count: usage.numRequests })}</div>}
 
       {hasCost && (
         <div className="flex items-baseline justify-between text-[10px]">

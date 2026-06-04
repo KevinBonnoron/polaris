@@ -156,9 +156,9 @@ func doMessagesRequest(req *http.Request) (string, error) {
 }
 
 type openAIChatRequest struct {
-	Model     string           `json:"model"`
-	MaxTokens int              `json:"max_tokens"`
-	Messages  []openAIChatMsg  `json:"messages"`
+	Model     string          `json:"model"`
+	MaxTokens int             `json:"max_tokens"`
+	Messages  []openAIChatMsg `json:"messages"`
 }
 
 type openAIChatMsg struct {

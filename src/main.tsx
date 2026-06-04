@@ -23,7 +23,7 @@ if (!rootEl) {
 
 const hideSplash = () => {
   const splash = document.getElementById('polaris-splash');
-  if (!splash) return;
+  if (!splash) { return; }
   splash.classList.add('is-hidden');
   splash.addEventListener(
     'transitionend',
