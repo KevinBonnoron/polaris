@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import type { TFunction } from 'i18next';
-import { Check, GitBranch, Play, Square } from 'lucide-react';
+import { Check, GitBranch, GitBranchPlus, Play, Square } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
@@ -8,18 +8,21 @@ import { customProvidersCollection } from '@/collections/custom-providers.collec
 import { resolveProviderIcon } from '@/components/brand-icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { isSeparator, isUsageBlock, sepGlyph, usageMode } from '@/features/settings/status-bar-settings';
+import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { useStatusBarBlocks } from '@/providers/theme-accent';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
 import { useCurrentProject } from '@/state/projects';
-import { ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
+import { PromoteAgentToWorktree, ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
 import type { polaris } from '@/wailsjs/go/models';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
@@ -142,7 +145,17 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   }, [activeRun, devManifestPath]);
 
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [promoteBranch, setPromoteBranch] = useState('');
+  const [promoteLoading, setPromoteLoading] = useState(false);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
+
+  useEffect(() => {
+    setPromoteOpen(false);
+    setPromoteBranch('');
+    setPromoteLoading(false);
+  }, [agentId]);
+
   const [log, setLog] = useState<polaris.StreamEvent[]>([]);
   const [logLoading, setLogLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('logs');
@@ -212,6 +225,22 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const onSetActiveTab = useCallback((tab: string) => setActiveTab(tab), []);
 
   const onClearLog = useCallback(() => setLog([]), []);
+
+  const onPromoteConfirm = useCallback(async () => {
+    if (!agent?.id || !promoteBranch.trim() || promoteLoading) {
+      return;
+    }
+    setPromoteLoading(true);
+    try {
+      await PromoteAgentToWorktree(agent.id, promoteBranch.trim());
+      setPromoteOpen(false);
+      setPromoteBranch('');
+    } catch (err) {
+      toastError({ title: t('agents.detail.promoteWorktreeError'), err });
+    } finally {
+      setPromoteLoading(false);
+    }
+  }, [agent?.id, promoteBranch, promoteLoading, t]);
 
   const toolsUsed = useMemo(() => countToolsFromLog(log), [log]);
   const liveTokens = useLiveTokens(agentId, tokenTotal(agent?.tokens));
@@ -374,7 +403,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               </TabsTrigger>
             </TabsList>
           </div>
-          {agent?.worktree?.branch && (
+          {agent?.worktree?.branch ? (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <GitBranch className="size-3 shrink-0" />
               <span className="font-mono">{agent.worktree.branch}</span>
@@ -385,7 +414,12 @@ export function AgentConversation({ agentId }: { agentId: string }) {
                 </Button>
               )}
             </div>
-          )}
+          ) : agent && project?.hasGit && !isDraft ? (
+            <Button size="sm" variant="ghost" onClick={() => setPromoteOpen(true)} className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+              <GitBranchPlus className="size-3 shrink-0" />
+              {t('agents.detail.promoteWorktree')}
+            </Button>
+          ) : null}
         </div>
 
         <TabsContent forceMount value="logs" className={cn('m-0 flex min-h-0 flex-col gap-3', activeTab !== 'logs' && 'hidden')}>
@@ -398,6 +432,33 @@ export function AgentConversation({ agentId }: { agentId: string }) {
       </Tabs>
 
       <AgentInputArea agentId={agentId} agent={agent} inputRef={inputRef} onLogRefresh={onLogRefresh} onSetActiveTab={onSetActiveTab} onClearLog={onClearLog} allowedTools={allowedTools} onAllowedToolsChange={setAllowedTools} />
+
+      <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('agents.detail.promoteWorktreeTitle')}</DialogTitle>
+          </DialogHeader>
+          <Input
+            placeholder={t('agents.detail.promoteWorktreePlaceholder')}
+            value={promoteBranch}
+            onChange={(e) => setPromoteBranch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                void onPromoteConfirm();
+              }
+            }}
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPromoteOpen(false)} disabled={promoteLoading}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={() => void onPromoteConfirm()} disabled={!promoteBranch.trim() || promoteLoading}>
+              {t('agents.detail.promoteWorktreeConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {agent && (
         <div className="mt-2 flex shrink-0 flex-wrap items-center gap-1">

@@ -156,6 +156,15 @@ type Worktree struct {
 	IssueKey string `json:"issueKey,omitempty"`
 	// PRURL is set once CreatePRForAgent successfully opened a pull request.
 	PRURL string `json:"prUrl,omitempty"`
+	// BaseCommit is the HEAD SHA recorded at spawn time for non-isolated agents.
+	// Used by PromoteAgentToWorktree to scope the diff to only this agent's work.
+	BaseCommit string `json:"baseCommit,omitempty"`
+	// BaseTree is the tree SHA of the full working tree (tracked + untracked)
+	// captured at spawn time for non-isolated agents. The agent's changes are
+	// derived as the delta between this snapshot and the current working tree,
+	// which captures shell-driven edits the log never records. Empty for agents
+	// spawned before snapshots existed; callers then fall back to log scoping.
+	BaseTree string `json:"baseTree,omitempty"`
 }
 
 // PendingQuestion is an AskUserQuestion tool call awaiting the user's answer.

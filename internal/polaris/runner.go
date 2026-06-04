@@ -194,6 +194,16 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 		runDir = worktreePath
 	}
 
+	// For non-isolated agents running in the project root, record the current
+	// HEAD plus a snapshot of the working tree so PromoteAgentToWorktree can later
+	// derive exactly this agent's changes, including shell-driven edits the log
+	// never records.
+	var baseCommit, baseTree string
+	if worktreePath == "" && git.IsRepo(workDir) {
+		baseCommit, _ = git.HeadCommit(workDir)
+		baseTree, _ = git.SnapshotTree(workDir)
+	}
+
 	sessionID := newSessionUUID()
 	cleanupWorktree := func() {
 		if worktreePath != "" {
@@ -249,9 +259,11 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 		SessionID: sessionID,
 		Source:    source,
 		Worktree: Worktree{
-			Branch:   branch,
-			Path:     worktreePath,
-			IssueKey: in.IssueKey,
+			Branch:     branch,
+			Path:       worktreePath,
+			IssueKey:   in.IssueKey,
+			BaseCommit: baseCommit,
+			BaseTree:   baseTree,
 		},
 		Model:        in.Model,
 		ProviderID:   in.ProviderID,
@@ -340,6 +352,110 @@ func manualBranchName(project *Project, task string) string {
 		slug = strings.TrimRight(slug[:maxSlug], "-")
 	}
 	return prefix + slug + "-" + shortRand()[:6]
+}
+
+// PromoteWorktreeInput carries the parameters for PromoteAgentToWorktree.
+type PromoteWorktreeInput struct {
+	AgentID    string `json:"agentId"`
+	BranchName string `json:"branchName"`
+}
+
+// PromoteAgentToWorktree moves a non-isolated agent into a fresh worktree on
+// the given branch. It scopes the transfer to only the files the agent has
+// touched (derived from its log), so unrelated working-tree changes are left
+// in place. The agent's Worktree record is updated so subsequent turns run
+// inside the new worktree.
+func (service *Service) PromoteAgentToWorktree(in PromoteWorktreeInput) error {
+	if service.store == nil {
+		return errors.New("store not initialised")
+	}
+	branchName := strings.TrimSpace(in.BranchName)
+	if branchName == "" {
+		return errors.New("branch name is required")
+	}
+
+	agent, err := service.store.GetAgent(in.AgentID)
+	if err != nil {
+		return fmt.Errorf("find agent: %w", err)
+	}
+	if agent == nil {
+		return fmt.Errorf("agent %q not found", in.AgentID)
+	}
+	if agent.Worktree.Path != "" {
+		return errors.New("agent is already in a worktree")
+	}
+	if agent.PID != 0 && sysexec.ProcessAlive(agent.PID) {
+		return errors.New("cannot promote a running agent")
+	}
+
+	project, err := service.store.GetProject(agent.ProjectID)
+	if err != nil {
+		return fmt.Errorf("find project: %w", err)
+	}
+	if project == nil {
+		return errors.New("project not found")
+	}
+	if !git.IsRepo(project.Path) {
+		return errors.New("project is not a git repository")
+	}
+	if service.runner == nil || service.runner.worktreesRoot == "" {
+		return errors.New("worktrees root not configured")
+	}
+
+	baseRef := agent.Worktree.BaseCommit
+	if baseRef == "" {
+		baseRef = "HEAD"
+	}
+
+	// Derive the set of repo-relative paths this agent changed. The spawn snapshot
+	// captures every change (including shell-driven edits the log misses); fall
+	// back to log scoping for agents spawned before snapshots existed.
+	baseTree := agent.Worktree.BaseTree
+	var scopedPaths []string
+	if baseTree != "" {
+		scopedPaths, err = git.SnapshotScopedPaths(project.Path, baseTree)
+		if err != nil {
+			return fmt.Errorf("derive agent changes: %w", err)
+		}
+	} else {
+		logContent, logErr := service.ReadLog(in.AgentID)
+		if logErr != nil {
+			return fmt.Errorf("read agent log: %w", logErr)
+		}
+		scopedPaths = git.RepoRelativePaths(project.Path, git.ExtractLogFilePaths(logContent))
+	}
+
+	leaf := sanitizeLeaf(branchName) + "-" + shortRand()[:6]
+	worktreePath := filepath.Join(service.runner.worktreesRoot, agent.ProjectID, leaf)
+
+	if err := git.CreateWorktreeAt(project.Path, worktreePath, branchName, baseRef); err != nil {
+		return fmt.Errorf("create worktree: %w", err)
+	}
+
+	if err := git.ApplyScopedChanges(project.Path, worktreePath, baseRef, scopedPaths); err != nil {
+		_ = git.RemoveWorktree(project.Path, worktreePath)
+		return fmt.Errorf("apply changes: %w", err)
+	}
+
+	newWorktree := agent.Worktree
+	newWorktree.Branch = branchName
+	newWorktree.Path = worktreePath
+
+	if err := service.store.PatchAgent(agent.ID, map[string]any{"worktree": newWorktree}); err != nil {
+		_ = git.RemoveWorktree(project.Path, worktreePath)
+		return fmt.Errorf("persist worktree: %w", err)
+	}
+
+	// The changes now live in the worktree; rewind the project root to the spawn
+	// snapshot so the agent's work is moved rather than copied, leaving any
+	// pre-existing changes in the root untouched.
+	if baseTree != "" {
+		if err := git.RestorePathsToTree(project.Path, baseTree, scopedPaths); err != nil {
+			return fmt.Errorf("revert project root: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // sanitizeLeaf turns a branch name into a filesystem-safe leaf for the

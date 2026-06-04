@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 )
 
@@ -12,6 +13,16 @@ func (app *App) CreatePRForAgent(agentID string) (string, error) {
 		return "", fmt.Errorf("service not ready")
 	}
 	return app.svc.CreatePRForAgent(agentID)
+}
+
+func (app *App) PromoteAgentToWorktree(agentID, branchName string) error {
+	if app.svc == nil {
+		return fmt.Errorf("service not ready")
+	}
+	return app.svc.PromoteAgentToWorktree(polaris.PromoteWorktreeInput{
+		AgentID:    agentID,
+		BranchName: branchName,
+	})
 }
 
 func (app *App) GetAgentDiff(agentID string) (string, error) {
@@ -39,9 +50,12 @@ func (app *App) GetAgentDiff(agentID string) (string, error) {
 		}
 	}
 
-	if app.svc != nil {
-		proj, projErr := app.store.GetProject(agent.ProjectID)
-		if projErr == nil && proj != nil && proj.Path != "" {
+	proj, projErr := app.store.GetProject(agent.ProjectID)
+	if projErr == nil && proj != nil && proj.Path != "" {
+		if agent.Worktree.BaseTree != "" {
+			return git.SnapshotDiff(proj.Path, agent.Worktree.BaseTree)
+		}
+		if app.svc != nil {
 			logContent, logErr := app.svc.ReadLog(agentID)
 			if logErr == nil && logContent != "" {
 				return git.LogDiff(proj.Path, agent.StartedAt, logContent)
@@ -89,6 +103,15 @@ func (app *App) GetAgentFileStatuses(agentID string) ([]git.FileChangeStatus, er
 }
 
 func (app *App) agentScopedPaths(agentID string) []string {
+	if app.store != nil {
+		if agent, err := app.store.GetAgent(agentID); err == nil && agent != nil && agent.Worktree.BaseTree != "" {
+			if proj, projErr := app.store.GetProject(agent.ProjectID); projErr == nil && proj != nil && proj.Path != "" {
+				if paths, sErr := git.SnapshotScopedPaths(proj.Path, agent.Worktree.BaseTree); sErr == nil {
+					return paths
+				}
+			}
+		}
+	}
 	if app.svc == nil {
 		return nil
 	}
