@@ -1017,7 +1017,7 @@ export const fr: Translation = {
   },
   settings: {
     title: 'Paramètres',
-    subtitle: 'Gérez vos préférences et votre compte.',
+    subtitle: 'Gérez vos préférences.',
     nav: {
       general: 'Général',
       agents: 'Agents',
@@ -1025,7 +1025,6 @@ export const fr: Translation = {
       notifications: 'Notifications',
       shortcuts: 'Raccourcis',
       statusBar: 'Barre de statut',
-      account: 'Compte',
       about: 'À propos',
     },
     statusBar: {
@@ -1048,6 +1047,12 @@ export const fr: Translation = {
       agentCloseActionDesc: 'Ce qui se passe avec une session agent après avoir tout shipé',
       agentCloseActionArchive: 'Archiver',
       agentCloseActionDelete: 'Supprimer',
+      dangerZone: 'Zone de danger',
+      resetAllData: 'Supprimer toutes les données',
+      resetAllDataDesc: "Vide la base locale : projets, agents, notifications, automatisations, fournisseurs personnalisés et tous les logs d'agents. Cette action est irréversible.",
+      resetConfirmWord: 'SUPPRIMER',
+      resetConfirmDesc: 'Tapez {{word}} pour confirmer. Les agents en cours seront interrompus.',
+      resetting: 'Suppression…',
     },
     appearance: {
       title: 'Apparence',
@@ -1157,16 +1162,6 @@ export const fr: Translation = {
       download: 'Télécharger',
       lastCheckedAt: 'Dernière vérification {{when}}',
       neverChecked: 'Pas encore vérifié',
-    },
-    account: {
-      title: 'Compte',
-      signOut: 'Se déconnecter',
-      dangerZone: 'Zone de danger',
-      resetAllData: 'Supprimer toutes les données',
-      resetAllDataDesc: "Vide la base locale : projets, agents, notifications, automatisations, fournisseurs personnalisés et tous les logs d'agents. Cette action est irréversible.",
-      resetConfirmWord: 'SUPPRIMER',
-      resetConfirmDesc: 'Tapez {{word}} pour confirmer. Les agents en cours seront interrompus.',
-      resetting: 'Suppression…',
     },
     customProvider: {
       section: 'Fournisseurs personnalisés',

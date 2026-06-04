@@ -2,12 +2,16 @@ import type { LucideIcon } from 'lucide-react';
 import { Folder } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { SUPPORTED_LANGUAGES } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { DetectIdes, GetGeneralSettings, UpdateGeneralSettings } from '@/wailsjs/go/main/App';
+import { DetectIdes, GetGeneralSettings, ResetAllData, UpdateGeneralSettings } from '@/wailsjs/go/main/App';
 import { polaris } from '@/wailsjs/go/models';
 import { SettingsRow } from './settings-row';
 
@@ -43,7 +47,12 @@ function IdeCard({ ide, selected, detected, onSelect }: IdeCardProps) {
   const { t } = useTranslation();
   const Icon = ide.icon;
   return (
-    <button type="button" onClick={() => onSelect(ide.id)} disabled={!detected && !selected} className={cn('flex items-center gap-2 rounded-md border p-2 text-left transition-colors', selected ? 'border-primary/60 bg-accent/40' : 'border-border hover:bg-accent/30', !detected && !selected && 'cursor-not-allowed opacity-40')}>
+    <button
+      type="button"
+      onClick={() => onSelect(ide.id)}
+      disabled={!detected && !selected}
+      className={cn('flex items-center gap-2 rounded-md border p-2 text-left transition-colors', selected ? 'border-primary/60 bg-accent/40' : 'border-border hover:bg-accent/30', !detected && !selected && 'cursor-not-allowed opacity-40')}
+    >
       <div className="flex size-7 shrink-0 items-center justify-center rounded text-[10px] font-bold text-white" style={{ background: ide.color }}>
         {Icon ? <Icon className="size-3.5" /> : ide.glyph}
       </div>
@@ -63,6 +72,31 @@ export function GeneralSettings() {
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [autoResume, setAutoResume] = useState(false);
   const [agentCloseAction, setAgentCloseAction] = useState('archive');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  const confirmWord = t('settings.general.resetConfirmWord');
+  const canReset = confirmText.trim().toUpperCase() === confirmWord.toUpperCase();
+
+  const handleReset = async () => {
+    if (busy || !canReset) {
+      return;
+    }
+
+    setBusy(true);
+    setResetError(null);
+    try {
+      await ResetAllData();
+      setResetOpen(false);
+      setConfirmText('');
+    } catch (e) {
+      setResetError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -139,11 +173,7 @@ export function GeneralSettings() {
             </Select>
           }
         />
-        <SettingsRow
-          label={t('settings.general.autoSave')}
-          description={t('settings.general.autoSaveDesc')}
-          control={settingsLoading ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch checked={autoResume} onCheckedChange={handleAutoResumeChange} />}
-        />
+        <SettingsRow label={t('settings.general.autoSave')} description={t('settings.general.autoSaveDesc')} control={settingsLoading ? <Skeleton className="h-5 w-9 rounded-full" /> : <Switch checked={autoResume} onCheckedChange={handleAutoResumeChange} />} />
         <SettingsRow
           label={t('settings.general.agentCloseAction')}
           description={t('settings.general.agentCloseActionDesc')}
@@ -184,6 +214,53 @@ export function GeneralSettings() {
           </div>
         )}
       </div>
+
+      <div className="flex flex-col gap-2">
+        <h4 className="text-xs font-medium uppercase tracking-wide text-destructive">{t('settings.general.dangerZone')}</h4>
+        <Card className="border-destructive/40">
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-sm font-medium">{t('settings.general.resetAllData')}</div>
+              <p className="text-xs text-muted-foreground">{t('settings.general.resetAllDataDesc')}</p>
+            </div>
+            <Button variant="destructive" onClick={() => setResetOpen(true)}>
+              {t('settings.general.resetAllData')}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog
+        open={resetOpen}
+        onOpenChange={(open) => {
+          if (!busy) {
+            setResetOpen(open);
+            if (!open) {
+              setConfirmText('');
+              setResetError(null);
+            }
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('settings.general.resetAllData')}</DialogTitle>
+            <DialogDescription>{t('settings.general.resetConfirmDesc', { word: confirmWord })}</DialogDescription>
+          </DialogHeader>
+          <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} placeholder={confirmWord} autoFocus />
+          {resetError && <p className="text-xs text-destructive">{resetError}</p>}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={busy}>
+                {t('common.cancel')}
+              </Button>
+            </DialogClose>
+            <Button variant="destructive" onClick={handleReset} disabled={!canReset || busy}>
+              {busy ? t('settings.general.resetting') : t('settings.general.resetAllData')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
