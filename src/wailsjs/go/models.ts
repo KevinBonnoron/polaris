@@ -1153,6 +1153,103 @@ export namespace polaris {
 	    }
 	}
 	
+	export class ModelStat {
+	    model: string;
+	    sessions: number;
+	    tokens: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelStat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.model = source["model"];
+	        this.sessions = source["sessions"];
+	        this.tokens = source["tokens"];
+	    }
+	}
+	export class KindStat {
+	    kind: string;
+	    sessions: number;
+	    tokens: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new KindStat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.sessions = source["sessions"];
+	        this.tokens = source["tokens"];
+	    }
+	}
+	export class DayStat {
+	    date: string;
+	    sessions: number;
+	    tokens: number;
+	    costUsd: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DayStat(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.date = source["date"];
+	        this.sessions = source["sessions"];
+	        this.tokens = source["tokens"];
+	        this.costUsd = source["costUsd"];
+	    }
+	}
+	export class DashboardStats {
+	    totalSessions: number;
+	    avgTokensPerSession: number;
+	    totalTokens: number;
+	    avgCostUsd: number;
+	    totalCostUsd: number;
+	    avgDurationSec: number;
+	    byDay: DayStat[];
+	    byKind: KindStat[];
+	    byModel: ModelStat[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DashboardStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalSessions = source["totalSessions"];
+	        this.avgTokensPerSession = source["avgTokensPerSession"];
+	        this.totalTokens = source["totalTokens"];
+	        this.avgCostUsd = source["avgCostUsd"];
+	        this.totalCostUsd = source["totalCostUsd"];
+	        this.avgDurationSec = source["avgDurationSec"];
+	        this.byDay = this.convertValues(source["byDay"], DayStat);
+	        this.byKind = this.convertValues(source["byKind"], KindStat);
+	        this.byModel = this.convertValues(source["byModel"], ModelStat);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class GeneralSettings {
 	    autoResumeSessions: boolean;
 	    ideId?: string;
@@ -1171,6 +1268,8 @@ export namespace polaris {
 	        this.agentCloseAction = source["agentCloseAction"];
 	    }
 	}
+	
+	
 	
 	export class Notification {
 	    id: string;

@@ -125,6 +125,8 @@ export function GetAgentGitState(arg1:string):Promise<git.AgentState>;
 
 export function GetAppearanceSettings():Promise<polaris.AppearanceSettings>;
 
+export function GetDashboardStats(arg1:string,arg2:string):Promise<polaris.DashboardStats>;
+
 export function GetDokployDashboard(arg1:dokploy.Config,arg2:Array<string>):Promise<main.DokployDashboard>;
 
 export function GetDokployDeploymentLogs(arg1:dokploy.Config,arg2:string,arg3:number):Promise<string>;

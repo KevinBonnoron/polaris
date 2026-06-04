@@ -63,6 +63,7 @@ export const fr: Translation = {
     agents: 'Agents',
     files: 'Fichiers',
     automations: 'Automations',
+    dashboard: 'Tableau de bord',
     addIntegration: 'Ajouter une intégration',
     add: 'Ajouter',
     inbox: 'Boîte de réception',
@@ -464,6 +465,26 @@ export const fr: Translation = {
   dashboard: {
     title: 'Tableau de bord',
     description: "Vue d'ensemble de votre projet actuel.",
+    stats: {
+      totalSessions: 'Total sessions',
+      avgDuration: 'Durée moyenne',
+      avgTokensPerSession: 'Moy. tokens / session',
+      avgCost: 'Coût moy. / session',
+      totalCost: 'Coût total',
+    },
+    filters: {
+      kind: 'Type d\'agent',
+      allKinds: 'Tous les agents',
+      model: 'Modèle',
+      allModels: 'Tous les modèles',
+    },
+    charts: {
+      sessionsByDay: 'Sessions — 30 derniers jours',
+      byKind: 'Sessions par agent',
+      byModel: 'Sessions par modèle',
+      seriesLabel: 'Sessions',
+    },
+    noData: 'Pas de données',
   },
   integrations: {
     add: {

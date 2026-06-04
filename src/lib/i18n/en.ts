@@ -61,6 +61,7 @@ export const en = {
     agents: 'Agents',
     files: 'Files',
     automations: 'Automations',
+    dashboard: 'Dashboard',
     addIntegration: 'Add integration',
     add: 'Add',
     inbox: 'Inbox',
@@ -462,6 +463,26 @@ export const en = {
   dashboard: {
     title: 'Dashboard',
     description: 'Overview of your current project.',
+    stats: {
+      totalSessions: 'Total sessions',
+      avgDuration: 'Avg. duration',
+      avgTokensPerSession: 'Avg. tokens / session',
+      avgCost: 'Avg. cost / session',
+      totalCost: 'Total cost',
+    },
+    filters: {
+      kind: 'Agent type',
+      allKinds: 'All agents',
+      model: 'Model',
+      allModels: 'All models',
+    },
+    charts: {
+      sessionsByDay: 'Sessions — last 30 days',
+      byKind: 'Sessions by agent',
+      byModel: 'Sessions by model',
+      seriesLabel: 'Sessions',
+    },
+    noData: 'No data',
   },
   integrations: {
     add: {
