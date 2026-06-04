@@ -115,6 +115,37 @@ func (t TokenUsage) Add(o TokenUsage) TokenUsage {
 	}
 }
 
+type DayStat struct {
+	Date     string  `json:"date"`
+	Sessions int     `json:"sessions"`
+	Tokens   int64   `json:"tokens"`
+	CostUsd  float64 `json:"costUsd"`
+}
+
+type KindStat struct {
+	Kind     string  `json:"kind"`
+	Sessions int     `json:"sessions"`
+	Tokens   int64   `json:"tokens"`
+}
+
+type ModelStat struct {
+	Model    string  `json:"model"`
+	Sessions int     `json:"sessions"`
+	Tokens   int64   `json:"tokens"`
+}
+
+type DashboardStats struct {
+	TotalSessions       int         `json:"totalSessions"`
+	AvgTokensPerSession float64     `json:"avgTokensPerSession"`
+	TotalTokens         int64       `json:"totalTokens"`
+	AvgCostUsd          float64     `json:"avgCostUsd"`
+	TotalCostUsd        float64     `json:"totalCostUsd"`
+	AvgDurationSec      float64     `json:"avgDurationSec"`
+	ByDay               []DayStat   `json:"byDay"`
+	ByKind              []KindStat  `json:"byKind"`
+	ByModel             []ModelStat `json:"byModel"`
+}
+
 // Worktree groups the git-isolation fields of an Agent, populated when the
 // agent runs on a dedicated branch inside its own worktree.
 type Worktree struct {
@@ -553,6 +584,13 @@ func (s *Service) ArchiveAgent(id string) error {
 		return errors.New("store not initialised")
 	}
 	return s.store.PatchAgent(id, map[string]any{"status": "archived"})
+}
+
+func (s *Service) GetDashboardStats(kind, model string) (DashboardStats, error) {
+	if s.store == nil {
+		return DashboardStats{}, errors.New("store not initialised")
+	}
+	return s.store.GetDashboardStats(kind, model)
 }
 
 func (s *Service) ListNotifications() ([]Notification, error) {

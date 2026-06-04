@@ -226,6 +226,10 @@ export function GetAppearanceSettings() {
   return window['go']['main']['App']['GetAppearanceSettings']();
 }
 
+export function GetDashboardStats(arg1, arg2) {
+  return window['go']['main']['App']['GetDashboardStats'](arg1, arg2);
+}
+
 export function GetDokployDashboard(arg1, arg2) {
   return window['go']['main']['App']['GetDokployDashboard'](arg1, arg2);
 }

@@ -26,6 +26,10 @@ func (app *App) DeleteAgent(id string) error {
 	return app.svc.DeleteAgent(id)
 }
 
+func (app *App) GetDashboardStats(kind, model string) (polaris.DashboardStats, error) {
+	return app.svc.GetDashboardStats(kind, model)
+}
+
 func (app *App) ListNotifications() ([]polaris.Notification, error) {
 	return app.svc.ListNotifications()
 }

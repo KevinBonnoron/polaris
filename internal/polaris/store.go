@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -404,9 +405,9 @@ func (store *Store) ListAgents(projectID string) ([]Agent, error) {
 		err  error
 	)
 	if projectID == "" {
-		rows, err = store.db.Query(`SELECT ` + agentColumns + ` FROM agents ORDER BY startedAt DESC LIMIT 500`)
+		rows, err = store.db.Query(`SELECT ` + agentColumns + ` FROM agents WHERE status != 'deleted' ORDER BY startedAt DESC LIMIT 500`)
 	} else {
-		rows, err = store.db.Query(`SELECT `+agentColumns+` FROM agents WHERE projectId = ? ORDER BY startedAt DESC LIMIT 500`, projectID)
+		rows, err = store.db.Query(`SELECT `+agentColumns+` FROM agents WHERE projectId = ? AND status != 'deleted' ORDER BY startedAt DESC LIMIT 500`, projectID)
 	}
 	if err != nil {
 		return nil, err
@@ -609,12 +610,129 @@ func (store *Store) PatchAgent(id string, fields map[string]any) error {
 }
 
 func (store *Store) DeleteAgent(id string) error {
-	if _, err := store.db.Exec(`DELETE FROM agents WHERE id = ?`, id); err != nil {
+	if _, err := store.db.Exec(`UPDATE agents SET status = 'deleted' WHERE id = ?`, id); err != nil {
 		return err
 	}
 	_, _ = store.db.Exec(`DELETE FROM agent_decisions WHERE agentId = ?`, id)
 	store.emit("agents")
 	return nil
+}
+
+func (store *Store) GetDashboardStats(kind, model string) (DashboardStats, error) {
+	// Filtered scan: summary stats + byDay
+	q := `SELECT kind, model, status, startedAt, updatedAt, tokensJson, costUsd FROM agents WHERE status != 'deleted'`
+	args := []any{}
+	if kind != "" {
+		q += ` AND kind = ?`
+		args = append(args, kind)
+	}
+	if model != "" {
+		q += ` AND model = ?`
+		args = append(args, model)
+	}
+
+	rows, err := store.db.Query(q, args...)
+	if err != nil {
+		return DashboardStats{}, err
+	}
+	defer rows.Close()
+
+	// Build last-30-days date buckets (UTC).
+	now := time.Now().UTC()
+	const days = 30
+	dayIndex := make(map[string]int, days)
+	byDay := make([]DayStat, days)
+	for i := range days {
+		d := now.AddDate(0, 0, -(days - 1 - i)).Format("2006-01-02")
+		byDay[i] = DayStat{Date: d}
+		dayIndex[d] = i
+	}
+
+	kindMap := map[string]*KindStat{}
+	modelMap := map[string]*ModelStat{}
+	var stats DashboardStats
+	var totalDurationSec int64
+	var durationCount int
+	for rows.Next() {
+		var (
+			k, m, status string
+			startedAt    int64
+			updatedAt    int64
+			tokensJSON   string
+			costUsd      float64
+		)
+		if err := rows.Scan(&k, &m, &status, &startedAt, &updatedAt, &tokensJSON, &costUsd); err != nil {
+			return DashboardStats{}, err
+		}
+		stats.TotalSessions++
+		stats.TotalCostUsd += costUsd
+
+		var tokens TokenUsage
+		if tokensJSON != "" {
+			_ = json.Unmarshal([]byte(tokensJSON), &tokens)
+		}
+		t := int64(tokens.Total())
+		stats.TotalTokens += t
+
+		date := time.Unix(startedAt, 0).UTC().Format("2006-01-02")
+		if idx, ok := dayIndex[date]; ok {
+			byDay[idx].Sessions++
+			byDay[idx].Tokens += t
+			byDay[idx].CostUsd += costUsd
+		}
+
+		if (status == "completed" || status == "archived") && updatedAt > startedAt {
+			totalDurationSec += updatedAt - startedAt
+			durationCount++
+		}
+
+		if k != "" {
+			if kindMap[k] == nil {
+				kindMap[k] = &KindStat{Kind: k}
+			}
+			kindMap[k].Sessions++
+			kindMap[k].Tokens += t
+		}
+		if m != "" {
+			if modelMap[m] == nil {
+				modelMap[m] = &ModelStat{Model: m}
+			}
+			modelMap[m].Sessions++
+			modelMap[m].Tokens += t
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return DashboardStats{}, err
+	}
+	if stats.TotalSessions > 0 {
+		stats.AvgTokensPerSession = float64(stats.TotalTokens) / float64(stats.TotalSessions)
+		stats.AvgCostUsd = stats.TotalCostUsd / float64(stats.TotalSessions)
+	}
+	if durationCount > 0 {
+		stats.AvgDurationSec = float64(totalDurationSec) / float64(durationCount)
+	}
+	stats.ByDay = byDay
+
+	for _, v := range kindMap {
+		stats.ByKind = append(stats.ByKind, *v)
+	}
+	for _, v := range modelMap {
+		stats.ByModel = append(stats.ByModel, *v)
+	}
+	slices.SortFunc(stats.ByKind, func(a, b KindStat) int {
+		if a.Sessions != b.Sessions {
+			return b.Sessions - a.Sessions
+		}
+		return strings.Compare(a.Kind, b.Kind)
+	})
+	slices.SortFunc(stats.ByModel, func(a, b ModelStat) int {
+		if a.Sessions != b.Sessions {
+			return b.Sessions - a.Sessions
+		}
+		return strings.Compare(a.Model, b.Model)
+	})
+
+	return stats, nil
 }
 
 // RecordAgentDecision persists the user's answer (an option label, empty for

@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { ArrowDownAZ, ArrowUpDown, Bell, Bot, Check, ChevronsUpDown, Clock, Files, Plus, Settings, SquareTerminal, Workflow } from 'lucide-react';
+import { ArrowDownAZ, ArrowUpDown, Bell, Bot, Check, ChevronsUpDown, Clock, Files, LayoutDashboard, Plus, Settings, SquareTerminal, Workflow } from 'lucide-react';
 import { type ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
@@ -388,6 +388,14 @@ export function AppSidebar() {
                 <NotificationPopoverContent onClose={() => setNotifOpen(false)} />
               </PopoverContent>
             </Popover>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild isActive={route === '/dashboard'} tooltip={t('sidebar.dashboard')}>
+              <Link to="/dashboard" preload="intent">
+                <LayoutDashboard />
+                <span>{t('sidebar.dashboard')}</span>
+              </Link>
+            </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={route === '/settings'} tooltip={t('sidebar.settings')}>
