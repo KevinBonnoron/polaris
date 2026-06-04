@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/atoms/page-header';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { AboutSettings } from './about-settings';
-import { AccountSettings } from './account-settings';
 import { AgentsSettings } from './agents-settings';
 import { AppearanceSettings } from './appearance-settings';
 import { GeneralSettings } from './general-settings';
@@ -18,7 +17,6 @@ const SECTIONS: Record<SettingsSection, React.ComponentType> = {
   agents: AgentsSettings,
   notifications: NotificationsSettings,
   shortcuts: ShortcutsSettings,
-  account: AccountSettings,
   about: AboutSettings,
 };
 

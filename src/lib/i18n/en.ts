@@ -1015,7 +1015,7 @@ export const en = {
   },
   settings: {
     title: 'Settings',
-    subtitle: 'Manage your preferences and account.',
+    subtitle: 'Manage your preferences.',
     nav: {
       general: 'General',
       agents: 'Agents',
@@ -1023,7 +1023,6 @@ export const en = {
       notifications: 'Notifications',
       shortcuts: 'Shortcuts',
       statusBar: 'Status bar',
-      account: 'Account',
       about: 'About',
     },
     statusBar: {
@@ -1046,6 +1045,12 @@ export const en = {
       agentCloseActionDesc: 'What to do with an agent session after shipping all changes',
       agentCloseActionArchive: 'Archive',
       agentCloseActionDelete: 'Delete',
+      dangerZone: 'Danger zone',
+      resetAllData: 'Delete all data',
+      resetAllDataDesc: 'Wipes the local database: projects, agents, notifications, automations, custom providers, and all agent logs. This cannot be undone.',
+      resetConfirmWord: 'DELETE',
+      resetConfirmDesc: 'Type {{word}} to confirm. Running agents will be killed.',
+      resetting: 'Deleting…',
     },
     appearance: {
       title: 'Appearance',
@@ -1155,16 +1160,6 @@ export const en = {
       download: 'Download',
       lastCheckedAt: 'Last checked {{when}}',
       neverChecked: 'Not checked yet',
-    },
-    account: {
-      title: 'Account',
-      signOut: 'Sign out',
-      dangerZone: 'Danger zone',
-      resetAllData: 'Delete all data',
-      resetAllDataDesc: 'Wipes the local database: projects, agents, notifications, automations, custom providers, and all agent logs. This cannot be undone.',
-      resetConfirmWord: 'DELETE',
-      resetConfirmDesc: 'Type {{word}} to confirm. Running agents will be killed.',
-      resetting: 'Deleting…',
     },
     customProvider: {
       section: 'Custom providers',
