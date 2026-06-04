@@ -46,7 +46,7 @@ export function isUsageBlock(id: string) {
 }
 
 export function usageMode(id: string): UsageMode {
-  if (id === 'usage') return 'remaining';
+  if (id === 'usage') { return 'remaining'; }
   const v = id.split(':')[1] as UsageMode;
   return USAGE_MODES.includes(v) ? v : 'remaining';
 }
@@ -112,7 +112,7 @@ export function StatusBarConfigurator({ blocks, onChange }: { blocks: string[]; 
     },
     onDragEnd: clearDrag,
     onDragOver: (e: DragEvent) => {
-      if (!draggingId || draggingId === id || !blocks.includes(draggingId)) return;
+      if (!draggingId || draggingId === id || !blocks.includes(draggingId)) { return; }
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move' as const;
       const from = blocks.indexOf(draggingId);
@@ -127,20 +127,19 @@ export function StatusBarConfigurator({ blocks, onChange }: { blocks: string[]; 
     onDrop: (e: DragEvent) => e.preventDefault(),
   });
 
-  const badgeClass = (id: string) =>
-    cn('cursor-grab select-none text-muted-foreground transition-opacity', draggingId === id && 'opacity-40');
+  const badgeClass = (id: string) => cn('cursor-grab select-none text-muted-foreground transition-opacity', draggingId === id && 'opacity-40');
 
   return (
     <div className="flex flex-col gap-3">
       <div
         onDragOver={(e) => {
-          if (!draggingId) return;
+          if (!draggingId) { return; }
           e.preventDefault();
           e.dataTransfer.dropEffect = 'move';
-          if (!blocks.includes(draggingId)) setDropTarget('__preview__');
+          if (!blocks.includes(draggingId)) { setDropTarget('__preview__'); }
         }}
         onDragLeave={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          if (e.currentTarget.contains(e.relatedTarget as Node)) { return; }
           setDropTarget(null);
         }}
         onDrop={(e) => {
@@ -181,19 +180,18 @@ export function StatusBarConfigurator({ blocks, onChange }: { blocks: string[]; 
               {dummyFor(id)}
             </Badge>
           );
-
         })}
       </div>
 
       <div
         onDragOver={(e) => {
-          if (!draggingId || !blocks.includes(draggingId)) return;
+          if (!draggingId || !blocks.includes(draggingId)) { return; }
           e.preventDefault();
           e.dataTransfer.dropEffect = 'move';
           setDropTarget('__pool__');
         }}
         onDragLeave={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+          if (e.currentTarget.contains(e.relatedTarget as Node)) { return; }
           setDropTarget(null);
         }}
         onDrop={(e) => {

@@ -174,10 +174,13 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
     [save],
   );
 
-  const setThinkingStyleAccent = useCallback((accent: boolean) => {
-    setThinkingStyleAccentState(accent);
-    save();
-  }, [save]);
+  const setThinkingStyleAccent = useCallback(
+    (accent: boolean) => {
+      setThinkingStyleAccentState(accent);
+      save();
+    },
+    [save],
+  );
 
   const setCardAnimationStyle = useCallback(
     (key: CardAnimationStyleKey) => {

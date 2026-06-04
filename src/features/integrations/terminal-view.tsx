@@ -24,18 +24,18 @@ export function TerminalView({ runId, lines }: TerminalViewProps) {
   // Replay on first resize (correct terminal dimensions)
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once on resized
   useEffect(() => {
-    if (!resized) return;
+    if (!resized) { return; }
     const initial = linesRef.current;
-    for (const ln of initial) emitLine(write, ln);
+    for (const ln of initial) { emitLine(write, ln); }
     countRef.current = initial.length;
   }, [resized]);
 
   const lineCount = lines.length;
   // biome-ignore lint/correctness/useExhaustiveDependencies: lineCount is the trigger
   useEffect(() => {
-    if (!resized) return;
+    if (!resized) { return; }
     const slice = lines.slice(countRef.current);
-    for (const ln of slice) emitLine(write, ln);
+    for (const ln of slice) { emitLine(write, ln); }
     countRef.current = lines.length;
   }, [lineCount, resized]);
 

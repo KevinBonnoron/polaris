@@ -22,13 +22,13 @@ const (
 )
 
 type UpdateInfo struct {
-	Current       string `json:"current"`
-	Latest        string `json:"latest"`
-	HasUpdate     bool   `json:"hasUpdate"`
-	HTMLURL       string `json:"htmlUrl"`
-	ReleaseNotes  string `json:"releaseNotes,omitempty"`
-	PublishedAt   string `json:"publishedAt,omitempty"`
-	CheckedAt     string `json:"checkedAt"`
+	Current      string `json:"current"`
+	Latest       string `json:"latest"`
+	HasUpdate    bool   `json:"hasUpdate"`
+	HTMLURL      string `json:"htmlUrl"`
+	ReleaseNotes string `json:"releaseNotes,omitempty"`
+	PublishedAt  string `json:"publishedAt,omitempty"`
+	CheckedAt    string `json:"checkedAt"`
 }
 
 type releaseResponse struct {

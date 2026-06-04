@@ -49,13 +49,7 @@ export function AgentDetailLogsTab({ log, isWorking, isLoading, logRef, onLogScr
       </ScrollArea>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn('absolute right-2 top-2 size-6 opacity-40 hover:opacity-100', showTimestamps && 'opacity-80')}
-            onClick={() => setShowTimestamps((v) => !v)}
-          >
+          <Button type="button" variant="ghost" size="icon" className={cn('absolute right-2 top-2 size-6 opacity-40 hover:opacity-100', showTimestamps && 'opacity-80')} onClick={() => setShowTimestamps((v) => !v)}>
             <Clock className="size-3.5" />
           </Button>
         </TooltipTrigger>

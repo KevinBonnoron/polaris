@@ -85,8 +85,8 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
       const text = (events ?? [])
         .filter((e) => e.content)
         .map((e) => {
-          if (e.type === 'tool_call') return `→ ${e.name ?? 'Tool'}${e.content ? ' · ' + e.content : ''}`;
-          if (e.type === 'tool_result') return `← ${e.content}`;
+          if (e.type === 'tool_call') { return `→ ${e.name ?? 'Tool'}${e.content ? ' · ' + e.content : ''}`; }
+          if (e.type === 'tool_result') { return `← ${e.content}`; }
           return e.content ?? '';
         })
         .join('\n');
@@ -164,17 +164,18 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
             onSelect();
           }
         }}
-        className={cn('relative overflow-hidden flex w-full cursor-pointer flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors', selected ? 'border-border/60 bg-accent' : 'border-border/30 hover:border-border/50 hover:bg-accent/50', isEditing && 'cursor-default', statusKey === 'archived' && 'opacity-50')}
+        className={cn(
+          'relative overflow-hidden flex w-full cursor-pointer flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors',
+          selected ? 'border-border/60 bg-accent' : 'border-border/30 hover:border-border/50 hover:bg-accent/50',
+          isEditing && 'cursor-default',
+          statusKey === 'archived' && 'opacity-50',
+        )}
       >
         {isWorking && cardAnimation === 'shimmer' && <span className="pointer-events-none absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-foreground/8 to-transparent" style={{ animation: 'card-shimmer 2.4s ease-in-out infinite' }} aria-hidden />}
         {isWorking && cardAnimation === 'progress' && <span className="pointer-events-none absolute top-0 left-0 h-0.5 w-1/3 rounded-full bg-primary/70" style={{ animation: 'card-progress 1.8s ease-in-out infinite' }} aria-hidden />}
         {KindIcon && <KindIcon className="pointer-events-none absolute inset-y-0 right-1 my-auto h-[90%] w-auto opacity-[0.06] text-foreground" aria-hidden />}
         <div className="flex items-center gap-2">
-          {statusKey === 'archived' ? (
-            <Archive className="size-3 shrink-0 text-muted-foreground/60" aria-hidden />
-          ) : (
-            <span className={cn('size-2 shrink-0 rounded-full', SEVERITY_DOT[agentStatusSeverity(statusKey)], statusKey === 'working' && 'animate-pulse')} aria-hidden />
-          )}
+          {statusKey === 'archived' ? <Archive className="size-3 shrink-0 text-muted-foreground/60" aria-hidden /> : <span className={cn('size-2 shrink-0 rounded-full', SEVERITY_DOT[agentStatusSeverity(statusKey)], statusKey === 'working' && 'animate-pulse')} aria-hidden />}
           <span className="shrink-0 text-[11px] text-muted-foreground">{statusLabel}</span>
           {!isEditing && (
             <div className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>

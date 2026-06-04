@@ -341,4 +341,3 @@ func writtenPlanContent(toolInputs map[string]toolInputSnapshot) string {
 	}
 	return fallback
 }
-

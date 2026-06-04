@@ -60,8 +60,8 @@ type Issue struct {
 // Column statuses are Jira status IDs (the agile board config only exposes
 // IDs, not names — the frontend matches issues by Issue.StatusID).
 type Column struct {
-	Name       string   `json:"name"`
-	StatusIDs  []string `json:"statusIds"`
+	Name      string   `json:"name"`
+	StatusIDs []string `json:"statusIds"`
 }
 
 type Sprint struct {
@@ -258,8 +258,8 @@ func fetchIssues(endpoint string, cfg Config, base string) ([]Issue, error) {
 		Issues []struct {
 			Key    string `json:"key"`
 			Fields struct {
-				Summary   string `json:"summary"`
-				Updated   string `json:"updated"`
+				Summary   string   `json:"summary"`
+				Updated   string   `json:"updated"`
 				Labels    []string `json:"labels"`
 				IssueType struct {
 					Name string `json:"name"`

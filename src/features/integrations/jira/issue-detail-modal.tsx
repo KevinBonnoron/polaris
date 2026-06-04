@@ -55,33 +55,51 @@ export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, .
     setHistoryErr(null);
     FetchTicketsIssueDetail(cfg, issueKey)
       .then((d) => {
-        if (!cancelled) { setDetail(d); }
+        if (!cancelled) {
+          setDetail(d);
+        }
       })
       .catch((err) => {
-        if (!cancelled) { setDetailErr(err instanceof Error ? err.message : String(err)); }
+        if (!cancelled) {
+          setDetailErr(err instanceof Error ? err.message : String(err));
+        }
       })
       .finally(() => {
-        if (!cancelled) { setDetailLoading(false); }
+        if (!cancelled) {
+          setDetailLoading(false);
+        }
       });
     ListTicketsIssueComments(cfg, issueKey)
       .then((list) => {
-        if (!cancelled) { setComments(list ?? []); }
+        if (!cancelled) {
+          setComments(list ?? []);
+        }
       })
       .catch((err) => {
-        if (!cancelled) { setCommentsErr(err instanceof Error ? err.message : String(err)); }
+        if (!cancelled) {
+          setCommentsErr(err instanceof Error ? err.message : String(err));
+        }
       })
       .finally(() => {
-        if (!cancelled) { setCommentsLoading(false); }
+        if (!cancelled) {
+          setCommentsLoading(false);
+        }
       });
     ListTicketsIssueHistory(cfg, issueKey)
       .then((list) => {
-        if (!cancelled) { setHistory(list ?? []); }
+        if (!cancelled) {
+          setHistory(list ?? []);
+        }
       })
       .catch((err) => {
-        if (!cancelled) { setHistoryErr(err instanceof Error ? err.message : String(err)); }
+        if (!cancelled) {
+          setHistoryErr(err instanceof Error ? err.message : String(err));
+        }
       })
       .finally(() => {
-        if (!cancelled) { setHistoryLoading(false); }
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -284,7 +302,9 @@ function MetaField({ label, children }: { label: string; children: ReactNode }) 
 }
 
 function StatusBadge({ status, category }: { status: string; category: string }) {
-  if (!status) { return <span className="text-sm text-muted-foreground">—</span>; }
+  if (!status) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
   const variant = category === 'done' ? 'success' : category === 'indeterminate' ? 'info' : 'secondary';
   return <StatusChip label={status} variant={variant} />;
 }
@@ -295,7 +315,9 @@ function StatusChip({ label, variant }: { label: string; variant: 'success' | 'i
 }
 
 function PriorityBadge({ priority }: { priority: string }) {
-  if (!priority) { return <span className="text-sm text-muted-foreground">—</span>; }
+  if (!priority) {
+    return <span className="text-sm text-muted-foreground">—</span>;
+  }
   const p = priority.toLowerCase();
   const cls =
     p === 'highest' || p === 'critical'

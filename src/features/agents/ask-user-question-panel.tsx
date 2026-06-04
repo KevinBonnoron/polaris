@@ -82,8 +82,8 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
   const toggleMulti = (label: string) => {
     setMulti((prev) => {
       const next = new Set(prev[step] ?? []);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (next.has(label)) { next.delete(label); }
+      else { next.add(label); }
       return { ...prev, [step]: next };
     });
   };

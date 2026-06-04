@@ -24,7 +24,7 @@ export function ShellPane() {
       setActiveKind('nodejs');
       setPaneOpen(true);
     }
-    if (!nodejsRun) prevNodejsRunId.current = undefined;
+    if (!nodejsRun) { prevNodejsRunId.current = undefined; }
   }, [nodejsRun, setActiveKind, setPaneOpen]);
 
   const prevPythonRunId = useRef<string | undefined>(pythonRun?.runId);
@@ -34,7 +34,7 @@ export function ShellPane() {
       setActiveKind('python');
       setPaneOpen(true);
     }
-    if (!pythonRun) prevPythonRunId.current = undefined;
+    if (!pythonRun) { prevPythonRunId.current = undefined; }
   }, [pythonRun, setActiveKind, setPaneOpen]);
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function ShellPane() {
 
   const activeShellSession = activeKind === 'shell' ? (sessions.find((s) => s.sessionId === activeSessionId) ?? sessions[0] ?? null) : null;
 
-  if (!visible) return null;
+  if (!visible) { return null; }
 
   return (
     <div className="flex shrink-0 flex-col border-t border-border" style={{ height }}>
@@ -214,7 +214,7 @@ function SessionItem({ label, active, running, exited, onSelect, onDelete }: { l
       tabIndex={0}
       onClick={onSelect}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onSelect();
+        if (e.key === 'Enter') { onSelect(); }
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -253,28 +253,28 @@ function ShellTerminal({ session }: { session: ShellSession }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once on ready
   useEffect(() => {
-    if (!ready) return;
-    for (const chunk of chunksRef.current) write(cleanChunk(chunk));
+    if (!ready) { return; }
+    for (const chunk of chunksRef.current) { write(cleanChunk(chunk)); }
     countRef.current = chunksRef.current.length;
     requestAnimationFrame(() => {
       const inst = ref.current?.instance;
-      if (inst) inst.element.scrollTop = inst.element.scrollHeight;
+      if (inst) { inst.element.scrollTop = inst.element.scrollHeight; }
     });
   }, [ready]);
 
   const chunkCount = session.chunks.length;
   // biome-ignore lint/correctness/useExhaustiveDependencies: chunkCount is the trigger
   useEffect(() => {
-    if (!ready) return;
+    if (!ready) { return; }
     const slice = session.chunks.slice(countRef.current);
-    for (const chunk of slice) write(cleanChunk(chunk));
+    for (const chunk of slice) { write(cleanChunk(chunk)); }
     countRef.current = session.chunks.length;
   }, [chunkCount, ready]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: stable refs
   useEffect(() => {
     const el = outerRef.current;
-    if (!el) return;
+    if (!el) { return; }
     const ro = new ResizeObserver(() => {
       const inst = ref.current?.instance as { cols?: number; rows?: number } | null;
       if (inst?.cols && inst?.rows) {
@@ -289,7 +289,7 @@ function ShellTerminal({ session }: { session: ShellSession }) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: stable refs
   useEffect(() => {
     const el = outerRef.current;
-    if (!el || !ready) return;
+    if (!el || !ready) { return; }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') {
         e.preventDefault();

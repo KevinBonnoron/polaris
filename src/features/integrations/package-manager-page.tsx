@@ -178,7 +178,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, projectPath, t]);
 
   const checkForUpdates = useCallback(async () => {
-    if (!manifestPath) return;
+    if (!manifestPath) { return; }
     try {
       const result = await adapter.checkOutdated(manifestPath, packageManager, config?.runEnv ?? '');
       setOutdated(result ?? []);
@@ -188,7 +188,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, packageManager, config?.runEnv, t]);
 
   const checkForUnused = useCallback(async () => {
-    if (!manifestPath) return;
+    if (!manifestPath) { return; }
     try {
       const result = await adapter.checkUnused(projectPath, manifestPath, packageManager, config?.runEnv ?? '');
       setUnused(new Set((result ?? []).map((u) => `${u.workspace}::${u.name}`)));
@@ -198,7 +198,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [projectPath, manifestPath, packageManager, config?.runEnv, t]);
 
   const checkForVulns = useCallback(async () => {
-    if (!manifestPath) return;
+    if (!manifestPath) { return; }
     try {
       const result = await adapter.checkVulnerabilities(manifestPath, packageManager, config?.runEnv ?? '');
       setVulns(result ?? []);
@@ -208,7 +208,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, packageManager, config?.runEnv, t]);
 
   const checkInstalled = useCallback(async () => {
-    if (!manifestPath) return;
+    if (!manifestPath) { return; }
     try {
       setInstalled(await adapter.checkInstalled(projectPath, manifestPath));
     } catch {
@@ -226,7 +226,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const wasRunningRef = useRef(false);
   useEffect(() => {
-    if (wasRunningRef.current && !isRunning) void refreshEverything();
+    if (wasRunningRef.current && !isRunning) { void refreshEverything(); }
     wasRunningRef.current = isRunning;
   }, [isRunning, refreshEverything]);
 
@@ -236,7 +236,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   const groupByType = (deps: Dep[]) => {
     const groups: Record<string, Dep[]> = {};
     for (const pkg of deps) {
-      if (!groups[pkg.type]) groups[pkg.type] = [];
+      if (!groups[pkg.type]) { groups[pkg.type] = []; }
       groups[pkg.type].push(pkg);
     }
     return Object.entries(groups).sort(([a], [b]) => {
@@ -247,14 +247,14 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const outdatedByName = useMemo(() => {
     const map = new Map<string, OutdatedPkg>();
-    for (const o of outdated) map.set(o.name, o);
+    for (const o of outdated) { map.set(o.name, o); }
     return map;
   }, [outdated]);
 
   const outdatedByWorkspace = useMemo(() => {
     const map = new Map<string, OutdatedPkg>();
     for (const o of outdated) {
-      if (o.workspace) map.set(`${o.workspace}::${o.name}`, o);
+      if (o.workspace) { map.set(`${o.workspace}::${o.name}`, o); }
     }
     return map;
   }, [outdated]);
@@ -271,7 +271,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const depUnused = useCallback(
     (dep: Dep, workspace?: string): boolean => {
-      if (workspace) return unused.has(`${workspace}::${dep.name}`);
+      if (workspace) { return unused.has(`${workspace}::${dep.name}`); }
       const locations = (dep.locations ?? []).filter((l) => l.type !== adapter.skipDepType);
       return locations.length > 0 && locations.every((l) => unused.has(`${l.workspace}::${dep.name}`));
     },
@@ -280,7 +280,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const updateInfo = useCallback(
     (name: string, workspace?: string): OutdatedPkg | undefined => {
-      if (isMonorepo) return workspace ? outdatedByWorkspace.get(`${workspace}::${name}`) : undefined;
+      if (isMonorepo) { return workspace ? outdatedByWorkspace.get(`${workspace}::${name}`) : undefined; }
       return outdatedByName.get(name);
     },
     [isMonorepo, outdatedByWorkspace, outdatedByName],
@@ -296,7 +296,11 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   const toggleGroup = (type: string) => {
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(type)) { next.delete(type); } else { next.add(type); }
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
       return next;
     });
   };
@@ -308,7 +312,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const conflictVersions = (dep: Dep): string[] | null => {
     const locs = dep.locations ?? [];
-    if (locs.length < 2) return null;
+    if (locs.length < 2) { return null; }
     const versions = [...new Set(locs.map((l) => l.version))];
     return versions.length > 1 ? versions : null;
   };
@@ -325,13 +329,20 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
     }
   };
 
-  const openAdd = (manifest?: string) => { setAddManifest(manifest); setAddInput(''); setAddAsDev(false); setAddDialogOpen(true); };
+  const openAdd = (manifest?: string) => {
+    setAddManifest(manifest);
+    setAddInput('');
+    setAddAsDev(false);
+    setAddDialogOpen(true);
+  };
 
   const addPackage = () => {
     const name = addInput.trim();
-    if (!name) return;
+    if (!name) { return; }
     void runCommand(adapter.addArgs(packageManager, name, addAsDev), `add ${name}`, addManifest);
-    setAddInput(''); setAddAsDev(false); setAddDialogOpen(false);
+    setAddInput('');
+    setAddAsDev(false);
+    setAddDialogOpen(false);
   };
 
   const removeDep = (name: string, manifests: string[]) => {
@@ -352,21 +363,21 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
     };
     if (activeWorkspace) {
       for (const dep of activeWorkspace.dependencies ?? []) {
-        if (dep.type === adapter.skipDepType || depUnused(dep, activeWorkspace.name)) continue;
+        if (dep.type === adapter.skipDepType || depUnused(dep, activeWorkspace.name)) { continue; }
         const hit = updateInfo(dep.name, activeWorkspace.name);
-        if (hit) queue(dep.name, hit.latest, activeWorkspace.manifest);
+        if (hit) { queue(dep.name, hit.latest, activeWorkspace.manifest); }
       }
     } else {
       for (const dep of packages) {
         for (const loc of dep.locations ?? []) {
-          if (loc.type === adapter.skipDepType || unused.has(`${loc.workspace}::${dep.name}`)) continue;
+          if (loc.type === adapter.skipDepType || unused.has(`${loc.workspace}::${dep.name}`)) { continue; }
           const hit = updateInfo(dep.name, loc.workspace);
-          if (hit) queue(dep.name, hit.latest, loc.manifest);
+          if (hit) { queue(dep.name, hit.latest, loc.manifest); }
         }
       }
     }
     const commands = [...byManifest].map(([manifest, specs]) => ({ args: adapter.updateAllArgs(packageManager, specs), label: t(`${adapter.i18nKey}.updateAll`), manifest }));
-    if (commands.length > 0) void runInWorkspaces(commands);
+    if (commands.length > 0) { void runInWorkspaces(commands); }
   };
 
   const openResolve = (dep: Dep) => {
@@ -376,7 +387,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   };
 
   const applyResolve = async () => {
-    if (!resolveDep || !resolveTarget) return;
+    if (!resolveDep || !resolveTarget) { return; }
     const manifests = [...new Set((resolveDep.locations ?? []).map((l) => l.manifest))];
     const name = resolveDep.name;
     setResolveDep(null);
@@ -390,7 +401,7 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   };
 
   const resolveOptions = useMemo(() => {
-    if (!resolveDep) return [];
+    if (!resolveDep) { return []; }
     const declared = [...new Set((resolveDep.locations ?? []).map((l) => l.version))];
     const latest = outdatedByName.get(resolveDep.name)?.latest;
     return latest && !declared.includes(latest) ? [latest, ...declared] : declared;
@@ -411,14 +422,18 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
                   {conflict.length}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" className="font-mono text-xs">{t(`${adapter.i18nKey}.versionMismatch`, { versions: conflict.join(', ') })}</TooltipContent>
+              <TooltipContent side="top" className="font-mono text-xs">
+                {t(`${adapter.i18nKey}.versionMismatch`, { versions: conflict.join(', ') })}
+              </TooltipContent>
             </Tooltip>
           ) : update && isTagSpec(dep.version) ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="cursor-help underline decoration-dotted underline-offset-2">{update.current}</span>
               </TooltipTrigger>
-              <TooltipContent side="top" className="font-mono text-xs">{t(`${adapter.i18nKey}.declaredSpec`, { spec: dep.version })}</TooltipContent>
+              <TooltipContent side="top" className="font-mono text-xs">
+                {t(`${adapter.i18nKey}.declaredSpec`, { spec: dep.version })}
+              </TooltipContent>
             </Tooltip>
           ) : (
             dep.version
@@ -437,7 +452,10 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
                 <TooltipContent side="top" className="max-w-xs">
                   <span className="flex flex-col gap-0.5">
                     {(rowVulns ?? []).slice(0, 8).map((v) => (
-                      <span key={`${v.url}|${v.title}`}>{v.severity ? `${v.severity}: ` : ''}{v.title}</span>
+                      <span key={`${v.url}|${v.title}`}>
+                        {v.severity ? `${v.severity}: ` : ''}
+                        {v.title}
+                      </span>
                     ))}
                     {(rowVulns?.length ?? 0) > 8 && <span>+{(rowVulns?.length ?? 0) - 8}…</span>}
                   </span>
@@ -447,7 +465,12 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
             {isUnused ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" disabled={isRunning} onClick={() => removeDep(dep.name, manifests)} className="inline-flex cursor-pointer items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:pointer-events-none disabled:opacity-50">
+                  <button
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => removeDep(dep.name, manifests)}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:pointer-events-none disabled:opacity-50"
+                  >
                     <Unplug className="size-2.5" />
                     {t(`${adapter.i18nKey}.unused`)}
                   </button>
@@ -457,7 +480,12 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
             ) : update ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" disabled={isRunning} onClick={() => updateDep(dep.name, update.latest, manifests)} className="inline-flex cursor-pointer items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-50">
+                  <button
+                    type="button"
+                    disabled={isRunning}
+                    onClick={() => updateDep(dep.name, update.latest, manifests)}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:pointer-events-none disabled:opacity-50"
+                  >
                     <ArrowUpCircle className="size-2.5" />
                     {update.latest}
                   </button>
@@ -554,7 +582,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
         <section>
           <div className="mb-3 flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-muted-foreground">{t(`${adapter.i18nKey}.tabPackages`)} ({packages.length})</h2>
+            <h2 className="text-sm font-medium text-muted-foreground">
+              {t(`${adapter.i18nKey}.tabPackages`)} ({packages.length})
+            </h2>
             <div className="flex items-center gap-3">
               <div className="flex-1" />
               <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => void copyDiagnostic()}>
@@ -622,7 +652,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
               </div>
             </div>
             <DialogFooter>
-              <Button disabled={!addInput.trim()} onClick={addPackage}>{t(`${adapter.i18nKey}.installAll`)}</Button>
+              <Button disabled={!addInput.trim()} onClick={addPackage}>
+                {t(`${adapter.i18nKey}.installAll`)}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -646,10 +678,14 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
                 <div className="flex items-center gap-2">
                   <span className="whitespace-nowrap text-sm text-muted-foreground">{t(`${adapter.i18nKey}.resolveTarget`)}</span>
                   <Select value={resolveTarget} onValueChange={setResolveTarget}>
-                    <SelectTrigger className="h-8 flex-1 font-mono text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-8 flex-1 font-mono text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
                     <SelectContent>
                       {resolveOptions.map((v) => (
-                        <SelectItem key={v} value={v} className="font-mono text-xs">{v}</SelectItem>
+                        <SelectItem key={v} value={v} className="font-mono text-xs">
+                          {v}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -657,7 +693,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
               </div>
             )}
             <DialogFooter>
-              <Button disabled={!resolveTarget || isRunning} onClick={applyResolve}>{t(`${adapter.i18nKey}.resolveApply`)}</Button>
+              <Button disabled={!resolveTarget || isRunning} onClick={applyResolve}>
+                {t(`${adapter.i18nKey}.resolveApply`)}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

@@ -30,9 +30,9 @@ export function ActionsStep({ form, agentKinds, statuses, hasJiraIntegration, ha
   const { t } = useTranslation();
 
   const availableKinds = ACTION_KINDS.filter((k) => {
-    if (k === 'jira_transition') return hasJiraIntegration;
-    if (k === 'send_email') return hasResendIntegration;
-    if (k === 'send_message') return hasMessagingIntegration;
+    if (k === 'jira_transition') { return hasJiraIntegration; }
+    if (k === 'send_email') { return hasResendIntegration; }
+    if (k === 'send_message') { return hasMessagingIntegration; }
     return true;
   });
 

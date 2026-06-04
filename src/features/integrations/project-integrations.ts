@@ -23,9 +23,9 @@ export function withoutIntegration(project: Project, id: string): ProjectIntegra
 
 export function getInstances(project: Project | null | undefined, id: string): IntegrationConfig[] {
   const raw = getIntegrations(project)[id];
-  if (!raw) return [];
+  if (!raw) { return []; }
   const arr = raw[INSTANCES_KEY];
-  if (Array.isArray(arr)) return arr as IntegrationConfig[];
+  if (Array.isArray(arr)) { return arr as IntegrationConfig[]; }
   return [raw];
 }
 
@@ -45,6 +45,6 @@ export function withInstanceUpdate(project: Project, id: string, index: number, 
 
 export function withInstanceRemoved(project: Project, id: string, index: number): ProjectIntegrations {
   const instances = getInstances(project, id).filter((_, i) => i !== index);
-  if (instances.length === 0) return withoutIntegration(project, id);
+  if (instances.length === 0) { return withoutIntegration(project, id); }
   return withInstances(project, id, instances);
 }

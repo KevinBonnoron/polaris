@@ -96,6 +96,6 @@ export const PROVIDER_ICON_REGISTRY: { key: string; label: string; icon: IconCom
 const REGISTRY_MAP = new Map(PROVIDER_ICON_REGISTRY.map((e) => [e.key, e.icon]));
 
 export function resolveProviderIcon(key: string | undefined): IconComponent | undefined {
-  if (!key) return undefined;
+  if (!key) { return undefined; }
   return REGISTRY_MAP.get(key);
 }

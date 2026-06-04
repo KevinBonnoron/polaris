@@ -33,11 +33,11 @@ const PRESET_I18N: Record<string, string> = {
 };
 
 function resolveToolsInfo(tools: string[], t: TFunction): { label: string; tooltip: string } | null {
-  if (tools.length === 0) return null;
-  if (tools[0] === NO_TOOLS_SENTINEL) return { label: t('agents.detail.toolsNone'), tooltip: t('agents.detail.toolsNoneDesc') };
+  if (tools.length === 0) { return null; }
+  if (tools[0] === NO_TOOLS_SENTINEL) { return { label: t('agents.detail.toolsNone'), tooltip: t('agents.detail.toolsNoneDesc') }; }
   const toolSet = new Set(tools);
   for (const [key, preset] of Object.entries(TOOL_PRESETS)) {
-    if (key === 'all' || key === 'no-tools') continue;
+    if (key === 'all' || key === 'no-tools') { continue; }
     if (preset.length === tools.length && preset.every((p) => toolSet.has(p))) {
       const i18nKey = PRESET_I18N[key];
       return { label: t(`agents.detail.${i18nKey}`), tooltip: tools.join(', ') };
@@ -48,10 +48,10 @@ function resolveToolsInfo(tools: string[], t: TFunction): { label: string; toolt
 
 function formatDuration(ms: number): string {
   const secs = Math.floor(ms / 1000);
-  if (secs < 60) return `${secs}s`;
+  if (secs < 60) { return `${secs}s`; }
   const mins = Math.floor(secs / 60);
   const rem = secs % 60;
-  if (mins < 60) return `${mins}m${rem > 0 ? ` ${rem}s` : ''}`;
+  if (mins < 60) { return `${mins}m${rem > 0 ? ` ${rem}s` : ''}`; }
   const hrs = Math.floor(mins / 60);
   return `${hrs}h ${mins % 60}m`;
 }
@@ -68,7 +68,9 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const isDraft = status === 'draft';
   const isWorking = status === 'working';
   const [liveFileCount, setLiveFileCount] = useState<number | null>(null);
-  useEffect(() => { setLiveFileCount(null); }, [agentId]);
+  useEffect(() => {
+    setLiveFileCount(null);
+  }, [agentId]);
   const filesModified = liveFileCount ?? agent?.filesModified ?? 0;
 
   const provider = providers.find((p) => p.id === agent?.providerId) ?? undefined;
@@ -80,10 +82,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const activeModelValue = (isDraft ? (agent?.model ?? spawnModel) : agent?.model) ?? '';
   const activeModelLabel = models.find((m) => m.value === activeModelValue)?.label ?? activeModelValue;
   const KindIcon = useMemo(() => {
-    if (!agent) return undefined;
+    if (!agent) { return undefined; }
     if (agent.providerId) {
       const resolved = resolveProviderIcon(provider?.icon);
-      if (resolved) return resolved;
+      if (resolved) { return resolved; }
     }
     const kindCfg = findAgentKind(agent.kind) ?? (agent.kind === 'opencode' ? OPENCODE_DESCRIPTOR : undefined);
     return kindCfg?.icon;
@@ -110,11 +112,11 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         .then((evts) => {
           if (active) {
             setLog(evts ?? []);
-            if (first) setLogLoading(false);
+            if (first) { setLogLoading(false); }
           }
         })
         .catch(() => {
-          if (active && first) setLogLoading(false);
+          if (active && first) { setLogLoading(false); }
         });
     };
     setLogLoading(true);
@@ -176,7 +178,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const blockRenderers: Record<string, () => ReactNode> = useMemo(
     () => ({
       model: () => {
-        if (!activeModelLabel) return null;
+        if (!activeModelLabel) { return null; }
         if (models.length > 1) {
           return (
             <Popover key="model" open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
@@ -218,9 +220,9 @@ export function AgentConversation({ agentId }: { agentId: string }) {
       },
       tools: () => {
         const tools = isDraft ? allowedTools : (agent?.allowedTools ?? []);
-        if (cliCfg?.id !== 'claude-code') return null;
+        if (cliCfg?.id !== 'claude-code') { return null; }
         const info = resolveToolsInfo(tools, t);
-        if (!info) return null;
+        if (!info) { return null; }
         return (
           <Tooltip key="tools">
             <TooltipTrigger asChild>
@@ -243,7 +245,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         </Badge>
       ),
       cost: () => {
-        if (displayCost <= 0) return null;
+        if (displayCost <= 0) { return null; }
         return (
           <Badge key="cost" variant="outline" className="tabular-nums text-muted-foreground">
             ${displayCost.toFixed(4)}
@@ -251,7 +253,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       provider: () => {
-        if (!providerLabel) return null;
+        if (!providerLabel) { return null; }
         return (
           <Badge key="provider" variant="outline" className="text-muted-foreground">
             {providerLabel}
@@ -259,7 +261,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       files: () => {
-        if (filesModified <= 0) return null;
+        if (filesModified <= 0) { return null; }
         return (
           <Badge key="files" variant="outline" className="tabular-nums text-muted-foreground">
             {t('agents.detail.files')} {filesModified}
@@ -267,7 +269,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       duration: () => {
-        if (duration <= 0) return null;
+        if (duration <= 0) { return null; }
         return (
           <Badge key="duration" variant="outline" className="tabular-nums text-muted-foreground">
             {formatDuration(duration)}
@@ -327,7 +329,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               );
             }
             if (isUsageBlock(blockId)) {
-              if (!claudeUsage || cliCfg?.id !== 'claude-code') return null;
+              if (!claudeUsage || cliCfg?.id !== 'claude-code') { return null; }
               const pct = claudeUsage.sessionPercentUsed;
               const mode = usageMode(blockId);
               const display = mode === 'remaining' ? 100 - pct : pct;

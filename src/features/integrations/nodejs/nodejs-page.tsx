@@ -96,7 +96,10 @@ const nodejsAdapter: PackageManagerAdapter = {
   checkInstalled: (_, mp) => CheckPackagesInstalled(mp),
   setDependencyVersion: SetNodeDependencyVersion,
 
-  addArgs: (pm, name, dev) => { const sub = pm === 'npm' ? 'install' : 'add'; return dev ? [sub, '-D', name] : [sub, name]; },
+  addArgs: (pm, name, dev) => {
+    const sub = pm === 'npm' ? 'install' : 'add';
+    return dev ? [sub, '-D', name] : [sub, name];
+  },
   removeArgs: (pm, name) => [pm === 'npm' ? 'uninstall' : 'remove', name],
   installArgs: () => ['install'],
   formatSpec: (name, version) => `${name}@${version || 'latest'}`,

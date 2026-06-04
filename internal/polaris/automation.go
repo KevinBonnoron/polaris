@@ -14,13 +14,13 @@ import (
 	"github.com/KevinBonnoron/polaris/internal/providers/dokploy"
 	"github.com/KevinBonnoron/polaris/internal/providers/messaging"
 	"github.com/KevinBonnoron/polaris/internal/providers/repository"
-	"github.com/KevinBonnoron/polaris/internal/providers/tickets"
 	"github.com/KevinBonnoron/polaris/internal/providers/resend"
 	"github.com/KevinBonnoron/polaris/internal/providers/sentry"
+	"github.com/KevinBonnoron/polaris/internal/providers/tickets"
 	"github.com/KevinBonnoron/polaris/internal/store/dokploystore"
 	"github.com/KevinBonnoron/polaris/internal/store/repositorystore"
-	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
 	"github.com/KevinBonnoron/polaris/internal/store/sentrystore"
+	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
 )
 
 // jiraKeyPattern matches typical Jira issue keys (e.g. PROJ-123).

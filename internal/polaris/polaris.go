@@ -8,8 +8,8 @@ import (
 
 	"github.com/KevinBonnoron/polaris/internal/store/dokploystore"
 	"github.com/KevinBonnoron/polaris/internal/store/repositorystore"
-	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
 	"github.com/KevinBonnoron/polaris/internal/store/sentrystore"
+	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
 )
 
 // IntegrationConfig holds the per-plugin settings for a single integration
@@ -264,13 +264,13 @@ type CustomTheme struct {
 }
 
 type AppearanceSettings struct {
-	Theme                string        `json:"theme"`
-	ThinkingStyle        string        `json:"thinkingStyle"`
-	ThinkingStyleAccent  bool          `json:"thinkingStyleAccent"`
-	CardAnimationStyle   string        `json:"cardAnimationStyle"`
-	CustomThemes         []CustomTheme `json:"customThemes"`
-	StatusBarBlocks      []string      `json:"statusBarBlocks"`
-	GitChangesViewMode   string        `json:"gitChangesViewMode"`
+	Theme               string        `json:"theme"`
+	ThinkingStyle       string        `json:"thinkingStyle"`
+	ThinkingStyleAccent bool          `json:"thinkingStyleAccent"`
+	CardAnimationStyle  string        `json:"cardAnimationStyle"`
+	CustomThemes        []CustomTheme `json:"customThemes"`
+	StatusBarBlocks     []string      `json:"statusBarBlocks"`
+	GitChangesViewMode  string        `json:"gitChangesViewMode"`
 }
 
 func DefaultAppearanceSettings() AppearanceSettings {
