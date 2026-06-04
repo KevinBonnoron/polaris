@@ -271,6 +271,8 @@ export const fr: Translation = {
       stopAgent: "Arrêter l'agent",
       couldNotStop: "Impossible d'arrêter l'agent",
       couldNotCopy: 'Impossible de copier le journal',
+      runServer: 'Lancer',
+      stopServer: 'Arrêter',
     },
     askUserQuestion: {
       title: 'L’agent pose une question',

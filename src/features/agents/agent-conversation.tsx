@@ -1,27 +1,31 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import type { TFunction } from 'i18next';
-import { Check, GitBranch } from 'lucide-react';
+import { Check, GitBranch, Play, Square } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
 import { resolveProviderIcon } from '@/components/brand-icons';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { cn } from '@/lib/utils';
+import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
+import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { isSeparator, isUsageBlock, sepGlyph, usageMode } from '@/features/settings/status-bar-settings';
+import { cn } from '@/lib/utils';
 import { useStatusBarBlocks } from '@/providers/theme-accent';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
-import type { polaris } from '@/wailsjs/go/models';
+import { useCurrentProject } from '@/state/projects';
 import { ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
+import type { polaris } from '@/wailsjs/go/models';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
+import { AgentInputArea, NO_TOOLS_SENTINEL, TOOL_PRESETS } from './agent-input-area';
 import { findAgentKind, OPENCODE_DESCRIPTOR } from './agent-kinds';
 import { countToolsFromLog } from './agent-log-files';
-import { AgentInputArea, NO_TOOLS_SENTINEL, TOOL_PRESETS } from './agent-input-area';
 import { useClaudeUsage } from './claude-usage-bar';
 import { TokenStat } from './token-stat';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
@@ -33,11 +37,17 @@ const PRESET_I18N: Record<string, string> = {
 };
 
 function resolveToolsInfo(tools: string[], t: TFunction): { label: string; tooltip: string } | null {
-  if (tools.length === 0) { return null; }
-  if (tools[0] === NO_TOOLS_SENTINEL) { return { label: t('agents.detail.toolsNone'), tooltip: t('agents.detail.toolsNoneDesc') }; }
+  if (tools.length === 0) {
+    return null;
+  }
+  if (tools[0] === NO_TOOLS_SENTINEL) {
+    return { label: t('agents.detail.toolsNone'), tooltip: t('agents.detail.toolsNoneDesc') };
+  }
   const toolSet = new Set(tools);
   for (const [key, preset] of Object.entries(TOOL_PRESETS)) {
-    if (key === 'all' || key === 'no-tools') { continue; }
+    if (key === 'all' || key === 'no-tools') {
+      continue;
+    }
     if (preset.length === tools.length && preset.every((p) => toolSet.has(p))) {
       const i18nKey = PRESET_I18N[key];
       return { label: t(`agents.detail.${i18nKey}`), tooltip: tools.join(', ') };
@@ -48,10 +58,14 @@ function resolveToolsInfo(tools: string[], t: TFunction): { label: string; toolt
 
 function formatDuration(ms: number): string {
   const secs = Math.floor(ms / 1000);
-  if (secs < 60) { return `${secs}s`; }
+  if (secs < 60) {
+    return `${secs}s`;
+  }
   const mins = Math.floor(secs / 60);
   const rem = secs % 60;
-  if (mins < 60) { return `${mins}m${rem > 0 ? ` ${rem}s` : ''}`; }
+  if (mins < 60) {
+    return `${mins}m${rem > 0 ? ` ${rem}s` : ''}`;
+  }
   const hrs = Math.floor(mins / 60);
   return `${hrs}h ${mins % 60}m`;
 }
@@ -61,6 +75,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const { kinds: cliKinds, opencode } = useAgentClis();
   const { data: providers = [] } = useLiveQuery((q) => q.from({ p: customProvidersCollection }));
   const { blocks: visibleBlocks } = useStatusBarBlocks();
+  const { project } = useCurrentProject();
 
   const { data = [] } = useLiveQuery((q) => q.from({ a: agentsCollection }));
   const agent = data.find(({ id }) => id === agentId) ?? null;
@@ -82,14 +97,49 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const activeModelValue = (isDraft ? (agent?.model ?? spawnModel) : agent?.model) ?? '';
   const activeModelLabel = models.find((m) => m.value === activeModelValue)?.label ?? activeModelValue;
   const KindIcon = useMemo(() => {
-    if (!agent) { return undefined; }
+    if (!agent) {
+      return undefined;
+    }
     if (agent.providerId) {
       const resolved = resolveProviderIcon(provider?.icon);
-      if (resolved) { return resolved; }
+      if (resolved) {
+        return resolved;
+      }
     }
     const kindCfg = findAgentKind(agent.kind) ?? (agent.kind === 'opencode' ? OPENCODE_DESCRIPTOR : undefined);
     return kindCfg?.icon;
   }, [agent, provider]);
+
+  const nodejs = useNodejsRun();
+  const python = usePythonRun();
+  const activeRun = nodejs.isRunning ? nodejs : python.isRunning ? python : nodejs.config?.startScript ? nodejs : python.config?.startScript ? python : null;
+
+  const devManifestPath = useMemo(() => {
+    const manifest = activeRun?.config?.manifestPath;
+    const worktreePath = agent?.worktree?.path;
+    const projectPath = project?.path;
+    if (!manifest || !worktreePath || !projectPath) {
+      return undefined;
+    }
+
+    if (!manifest.startsWith(projectPath)) {
+      return undefined;
+    }
+
+    return worktreePath + manifest.slice(projectPath.length);
+  }, [activeRun?.config?.manifestPath, agent?.worktree?.path, project?.path]);
+
+  const onDevRun = useCallback(() => {
+    if (!activeRun) {
+      return;
+    }
+
+    if (activeRun.isRunning) {
+      void activeRun.stop();
+    } else if (activeRun.config?.startScript && devManifestPath) {
+      void activeRun.startScript(activeRun.config.startScript, devManifestPath);
+    }
+  }, [activeRun, devManifestPath]);
 
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
   const [allowedTools, setAllowedTools] = useState<string[]>([]);
@@ -112,11 +162,15 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         .then((evts) => {
           if (active) {
             setLog(evts ?? []);
-            if (first) { setLogLoading(false); }
+            if (first) {
+              setLogLoading(false);
+            }
           }
         })
         .catch(() => {
-          if (active && first) { setLogLoading(false); }
+          if (active && first) {
+            setLogLoading(false);
+          }
         });
     };
     setLogLoading(true);
@@ -178,7 +232,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const blockRenderers: Record<string, () => ReactNode> = useMemo(
     () => ({
       model: () => {
-        if (!activeModelLabel) { return null; }
+        if (!activeModelLabel) {
+          return null;
+        }
+
         if (models.length > 1) {
           return (
             <Popover key="model" open={modelPopoverOpen} onOpenChange={setModelPopoverOpen}>
@@ -220,9 +277,15 @@ export function AgentConversation({ agentId }: { agentId: string }) {
       },
       tools: () => {
         const tools = isDraft ? allowedTools : (agent?.allowedTools ?? []);
-        if (cliCfg?.id !== 'claude-code') { return null; }
+        if (cliCfg?.id !== 'claude-code') {
+          return null;
+        }
+
         const info = resolveToolsInfo(tools, t);
-        if (!info) { return null; }
+        if (!info) {
+          return null;
+        }
+
         return (
           <Tooltip key="tools">
             <TooltipTrigger asChild>
@@ -245,7 +308,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         </Badge>
       ),
       cost: () => {
-        if (displayCost <= 0) { return null; }
+        if (displayCost <= 0) {
+          return null;
+        }
+
         return (
           <Badge key="cost" variant="outline" className="tabular-nums text-muted-foreground">
             ${displayCost.toFixed(4)}
@@ -253,7 +319,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       provider: () => {
-        if (!providerLabel) { return null; }
+        if (!providerLabel) {
+          return null;
+        }
+
         return (
           <Badge key="provider" variant="outline" className="text-muted-foreground">
             {providerLabel}
@@ -261,7 +330,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       files: () => {
-        if (filesModified <= 0) { return null; }
+        if (filesModified <= 0) {
+          return null;
+        }
+
         return (
           <Badge key="files" variant="outline" className="tabular-nums text-muted-foreground">
             {t('agents.detail.files')} {filesModified}
@@ -269,7 +341,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         );
       },
       duration: () => {
-        if (duration <= 0) { return null; }
+        if (duration <= 0) {
+          return null;
+        }
+
         return (
           <Badge key="duration" variant="outline" className="tabular-nums text-muted-foreground">
             {formatDuration(duration)}
@@ -302,7 +377,13 @@ export function AgentConversation({ agentId }: { agentId: string }) {
           {agent?.worktree?.branch && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <GitBranch className="size-3 shrink-0" />
-              <span className="max-w-40 truncate font-mono">{agent.worktree.branch}</span>
+              <span className="font-mono">{agent.worktree.branch}</span>
+              {activeRun && (activeRun.isRunning || devManifestPath) && (
+                <Button size="sm" variant={activeRun.isRunning ? 'destructive' : 'secondary'} onClick={onDevRun} className="ml-1 h-6 px-2 text-xs">
+                  {activeRun.isRunning ? <Square className="mr-1 size-3 fill-current" /> : <Play className="mr-1 size-3 fill-current" />}
+                  {activeRun.isRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -329,7 +410,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               );
             }
             if (isUsageBlock(blockId)) {
-              if (!claudeUsage || cliCfg?.id !== 'claude-code') { return null; }
+              if (!claudeUsage || cliCfg?.id !== 'claude-code') {
+                return null;
+              }
+
               const pct = claudeUsage.sessionPercentUsed;
               const mode = usageMode(blockId);
               const display = mode === 'remaining' ? 100 - pct : pct;
