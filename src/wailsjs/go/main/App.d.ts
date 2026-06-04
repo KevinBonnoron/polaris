@@ -113,6 +113,8 @@ export function FireAutomation(arg1:string):Promise<void>;
 
 export function GenerateCommitMessageForAgent(arg1:string):Promise<string>;
 
+export function GenerateCommitMessageForProject(arg1:string):Promise<string>;
+
 export function GetAgentDefaultModels():Promise<Record<string, string>>;
 
 export function GetAgentDiff(arg1:string):Promise<string>;

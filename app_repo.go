@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 )
 
@@ -26,6 +27,18 @@ func (app *App) GetProjectDiff(projectID string) (string, error) {
 		return "", err
 	}
 	return git.AgentDiff(dir)
+}
+
+func (app *App) GenerateCommitMessageForProject(projectID string) (string, error) {
+	dir, err := app.projectGitDir(projectID)
+	if err != nil {
+		return "", err
+	}
+	diff, err := git.AgentDiff(dir)
+	if err != nil {
+		return "", fmt.Errorf("get diff: %w", err)
+	}
+	return polaris.GenerateCommitMessage(diff)
 }
 
 func (app *App) GetProjectFileStatuses(projectID string) ([]git.FileChangeStatus, error) {

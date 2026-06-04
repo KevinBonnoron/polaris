@@ -8,7 +8,7 @@ import { type GitChangesOps, GitChangesPanel } from '@/features/git/git-changes-
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { useCurrentProject } from '@/state/projects';
-import { CommitProject, GetProjectDiff, GetProjectFileStatuses, GetProjectGitState, ListProjectBranches, OpenInIde, PushProject, StageProjectChanges, StageProjectFile, StageProjectFiles, SwitchProjectBranch, SyncProject, UnstageProjectChanges, UnstageProjectFile, UnstageProjectFiles } from '@/wailsjs/go/main/App';
+import { CommitProject, GenerateCommitMessageForProject, GetProjectDiff, GetProjectFileStatuses, GetProjectGitState, ListProjectBranches, OpenInIde, PushProject, StageProjectChanges, StageProjectFile, StageProjectFiles, SwitchProjectBranch, SyncProject, UnstageProjectChanges, UnstageProjectFile, UnstageProjectFiles } from '@/wailsjs/go/main/App';
 import type { git as gitModels } from '@/wailsjs/go/models';
 
 type Branch = gitModels.BranchInfo;
@@ -74,6 +74,7 @@ export function ChangesTab({ projectId }: Props) {
       commit: (message, amend) => CommitProject(projectId, message, amend),
       push: (force) => PushProject(projectId, force),
       sync: (force) => SyncProject(projectId, force),
+      generateCommitMessage: () => GenerateCommitMessageForProject(projectId),
     }),
     [projectId],
   );
