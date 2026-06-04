@@ -229,6 +229,8 @@ export function PickFiles(arg1:string):Promise<Array<string>>;
 
 export function Ping():Promise<string>;
 
+export function PromoteAgentToWorktree(arg1:string,arg2:string):Promise<void>;
+
 export function PushAgent(arg1:string,arg2:boolean):Promise<void>;
 
 export function PushProject(arg1:string,arg2:boolean):Promise<void>;

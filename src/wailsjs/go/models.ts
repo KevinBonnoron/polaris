@@ -695,6 +695,8 @@ export namespace polaris {
 	    path?: string;
 	    issueKey?: string;
 	    prUrl?: string;
+	    baseCommit?: string;
+	    baseTree?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Worktree(source);
@@ -706,6 +708,8 @@ export namespace polaris {
 	        this.path = source["path"];
 	        this.issueKey = source["issueKey"];
 	        this.prUrl = source["prUrl"];
+	        this.baseCommit = source["baseCommit"];
+	        this.baseTree = source["baseTree"];
 	    }
 	}
 	export class TokenUsage {

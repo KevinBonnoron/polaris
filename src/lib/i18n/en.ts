@@ -271,6 +271,11 @@ export const en = {
       couldNotCopy: 'Could not copy log',
       runServer: 'Run',
       stopServer: 'Stop',
+      promoteWorktree: 'Move to branch',
+      promoteWorktreeTitle: 'Move to branch',
+      promoteWorktreePlaceholder: 'feat/my-feature',
+      promoteWorktreeConfirm: 'Create branch',
+      promoteWorktreeError: 'Failed to move agent to branch',
     },
     askUserQuestion: {
       title: 'Agent is asking a question',

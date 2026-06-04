@@ -273,6 +273,11 @@ export const fr: Translation = {
       couldNotCopy: 'Impossible de copier le journal',
       runServer: 'Lancer',
       stopServer: 'Arrêter',
+      promoteWorktree: 'Déplacer sur une branche',
+      promoteWorktreeTitle: 'Déplacer sur une branche',
+      promoteWorktreePlaceholder: 'feat/ma-feature',
+      promoteWorktreeConfirm: 'Créer la branche',
+      promoteWorktreeError: 'Échec du déplacement de l’agent sur la branche',
     },
     askUserQuestion: {
       title: 'L’agent pose une question',
