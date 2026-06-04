@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 )
 
@@ -195,7 +194,7 @@ func (app *App) GenerateCommitMessageForAgent(agentID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get diff: %w", err)
 	}
-	return polaris.GenerateCommitMessage(diff)
+	return app.svc.GenerateCommitMessage(diff)
 }
 
 func (app *App) ArchiveAgent(agentID string) error {
