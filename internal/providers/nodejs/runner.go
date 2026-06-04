@@ -36,7 +36,8 @@ type Runner struct {
 type runHandle struct {
 	cmd                *exec.Cmd
 	cancel             context.CancelFunc
-	containerID        string // non-empty for devcontainer runs
+	done               chan struct{} // closed once the process has exited and been reaped
+	containerID        string        // non-empty for devcontainer runs
 	weStartedContainer bool   // true if we started the container (must stop it on exit)
 	cmdName            string // command name, for pkill when container was pre-existing
 }
@@ -81,7 +82,7 @@ func (runner *Runner) launch(manifestPath, packageManager, runEnv string, args [
 	ctx, cancel := context.WithCancel(context.Background())
 
 	runner.mu.Lock()
-	runner.runs[runID] = &runHandle{cancel: cancel}
+	runner.runs[runID] = &runHandle{cancel: cancel, done: make(chan struct{})}
 	runner.mu.Unlock()
 
 	go func() {
@@ -107,6 +108,7 @@ func (runner *Runner) launch(manifestPath, packageManager, runEnv string, args [
 		cmd := BuildCommand(ctx, workDir, pm, runEnv, args)
 		cmd.Env = os.Environ()
 		sysexec.Hide(cmd)
+		sysexec.SetProcessGroup(cmd)
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -151,6 +153,9 @@ func (runner *Runner) launch(manifestPath, packageManager, runEnv string, args [
 			wg.Wait()
 
 			runner.mu.Lock()
+			if h := runner.runs[runID]; h != nil {
+				close(h.done)
+			}
 			delete(runner.runs, runID)
 			runner.mu.Unlock()
 
@@ -196,11 +201,22 @@ func (runner *Runner) Stop(runID string) error {
 		}()
 	}
 	if h.cmd != nil && h.cmd.Process != nil {
-		_ = h.cmd.Process.Signal(os.Interrupt)
-		go func() {
-			time.Sleep(3 * time.Second)
+		select {
+		case <-h.done:
 			h.cancel()
-		}()
+			return nil
+		default:
+		}
+		_ = sysexec.InterruptGroup(h.cmd)
+		go func(cmd *exec.Cmd, done <-chan struct{}, cancel context.CancelFunc) {
+			time.Sleep(3 * time.Second)
+			select {
+			case <-done:
+			default:
+				_ = sysexec.KillGroup(cmd)
+			}
+			cancel()
+		}(h.cmd, h.done, h.cancel)
 		return nil
 	}
 	h.cancel()
