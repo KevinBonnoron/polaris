@@ -6,6 +6,7 @@ import { tickets } from '@/wailsjs/go/models';
 type SprintMeta = {
   name: string;
   boardId: number;
+  boardUrl: string;
   columns: tickets.Column[];
 };
 
@@ -177,7 +178,7 @@ export function getTicketsEntry(cfg: ConnectedTicketsConfig): Entry {
     inflight = (async () => {
       try {
         const sprint = await FetchTicketsSprint(tickets.Config.createFrom(cfg));
-        entry.meta = { name: sprint.name, boardId: sprint.boardId, columns: sprint.columns ?? [] };
+        entry.meta = { name: sprint.name, boardId: sprint.boardId, boardUrl: sprint.boardUrl ?? '', columns: sprint.columns ?? [] };
         syncIssues(sprint);
         syncStatuses(sprint);
       } catch (err) {

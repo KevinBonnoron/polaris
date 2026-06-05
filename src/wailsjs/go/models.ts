@@ -2346,6 +2346,7 @@ export namespace tickets {
 	    }
 	}
 	export class Config {
+	    provider?: string;
 	    baseUrl: string;
 	    email: string;
 	    token: string;
@@ -2358,6 +2359,7 @@ export namespace tickets {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
 	        this.baseUrl = source["baseUrl"];
 	        this.email = source["email"];
 	        this.token = source["token"];
@@ -2519,26 +2521,11 @@ export namespace tickets {
 	        this.name = source["name"];
 	    }
 	}
-	export class JiraUser {
-	    accountId: string;
-	    displayName: string;
-	    emailAddress: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new JiraUser(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.accountId = source["accountId"];
-	        this.displayName = source["displayName"];
-	        this.emailAddress = source["emailAddress"];
-	    }
-	}
 	export class Sprint {
 	    id: number;
 	    name: string;
 	    boardId: number;
+	    boardUrl?: string;
 	    columns: Column[];
 	    issues: Issue[];
 	
@@ -2551,6 +2538,7 @@ export namespace tickets {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.boardId = source["boardId"];
+	        this.boardUrl = source["boardUrl"];
 	        this.columns = this.convertValues(source["columns"], Column);
 	        this.issues = this.convertValues(source["issues"], Issue);
 	    }
@@ -2572,6 +2560,22 @@ export namespace tickets {
 		    }
 		    return a;
 		}
+	}
+	export class User {
+	    accountId: string;
+	    displayName: string;
+	    emailAddress: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new User(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.accountId = source["accountId"];
+	        this.displayName = source["displayName"];
+	        this.emailAddress = source["emailAddress"];
+	    }
 	}
 
 }

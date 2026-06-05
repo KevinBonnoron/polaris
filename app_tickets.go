@@ -54,7 +54,7 @@ func (app *App) ListTicketsIssueHistory(cfg tickets.Config, issueKey string) ([]
 	return tickets.ListIssueHistory(cfg, issueKey)
 }
 
-func (app *App) GetTicketsCurrentUser(cfg tickets.Config) (*tickets.JiraUser, error) {
+func (app *App) GetTicketsCurrentUser(cfg tickets.Config) (*tickets.User, error) {
 	return tickets.GetCurrentUser(cfg)
 }
 

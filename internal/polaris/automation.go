@@ -446,6 +446,7 @@ func (automationManager *AutomationManager) ticketsConfigFor(projectID string) (
 		return tickets.Config{}, false
 	}
 	cfg := tickets.Config{
+		Provider:   stringField(raw, "provider"),
 		BaseURL:    stringField(raw, "baseUrl"),
 		Email:      stringField(raw, "email"),
 		Token:      stringField(raw, "token"),
