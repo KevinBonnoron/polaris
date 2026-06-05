@@ -1,7 +1,7 @@
 // Package sentrystore caches the unresolved-issue list for a Sentry
 // (org, projects) tuple and emits diffs when issues enter or leave that set.
 // Multiple polaris projects watching the same org share a single poll loop,
-// mirroring ghstore / jirastore.
+// mirroring ghstore / ticketsstore.
 package sentrystore
 
 import (

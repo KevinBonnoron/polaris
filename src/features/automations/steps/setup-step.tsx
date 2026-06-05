@@ -10,10 +10,10 @@ import type { AutomationForm } from './types';
 interface Props {
   form: AutomationForm;
   availableSources: AutomationSource[];
-  hasJira: boolean;
+  hasTickets: boolean;
 }
 
-export function SetupStep({ form, availableSources, hasJira }: Props) {
+export function SetupStep({ form, availableSources, hasTickets }: Props) {
   const { t } = useTranslation();
 
   const switchSource = (source: AutomationSource) => {
@@ -71,7 +71,7 @@ export function SetupStep({ form, availableSources, hasJira }: Props) {
             )}
           </div>
 
-          {values.source === 'jira' && !hasJira && <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{t('automations.jiraRequired')}</p>}
+          {values.source === 'tickets' && !hasTickets && <p className="rounded-md border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">{t('automations.ticketsRequired')}</p>}
         </div>
       )}
     </form.Subscribe>

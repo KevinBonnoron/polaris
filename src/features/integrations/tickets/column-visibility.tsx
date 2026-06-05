@@ -18,7 +18,7 @@ export function ColumnVisibilityMenu({ columns, hidden, onToggle }: Props) {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm">
           <Columns3 className="size-3.5" />
-          {t('integrations.jira.columns', { visible: visibleCount, total: columns.length })}
+          {t('integrations.tickets.columns', { visible: visibleCount, total: columns.length })}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">

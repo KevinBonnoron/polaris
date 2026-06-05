@@ -50,7 +50,7 @@ func (store *Store) Close() error {
 	return store.db.Close()
 }
 
-// DB exposes the underlying sql.DB so peripheral stores (ghstore, jirastore)
+// DB exposes the underlying sql.DB so peripheral stores (ghstore, ticketsstore)
 // can share the same connection and migrations stay in this file.
 func (store *Store) DB() *sql.DB {
 	return store.db
@@ -211,6 +211,19 @@ func (store *Store) migrate() error {
 		`ALTER TABLE custom_providers ADD COLUMN icon TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE projects ADD COLUMN isolatedDefault INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE projects ADD COLUMN branchPrefix TEXT NOT NULL DEFAULT 'polaris/'`,
+		// The Jira automation source was generalized to "tickets"; migrate the
+		// source value and the discriminated trigger kind on existing rows.
+		`UPDATE automations SET source = 'tickets' WHERE source = 'jira'`,
+		`UPDATE automations SET triggerJson = json_set(triggerJson, '$.kind', 'tickets.transition') WHERE json_extract(triggerJson, '$.kind') = 'jira.transition'`,
+		// The Jira integration config key was likewise generalized to "tickets";
+		// rename it within each project's integrations JSON blob.
+		`UPDATE projects SET integrations = json_set(json_remove(integrations, '$.jira'), '$.tickets', json_extract(integrations, '$.jira')) WHERE json_extract(integrations, '$.jira') IS NOT NULL`,
+		// The jira_transition action kind and its field names were generalized to
+		// the tickets_* namespace. actionsJson is a compact JSON array, so a token
+		// replace is the simplest idempotent migration.
+		`UPDATE automations SET actionsJson = replace(actionsJson, '"kind":"jira_transition"', '"kind":"tickets_transition"') WHERE actionsJson LIKE '%jira_transition%'`,
+		`UPDATE automations SET actionsJson = replace(actionsJson, '"jiraToStatusId"', '"ticketsToStatusId"') WHERE actionsJson LIKE '%jiraToStatusId%'`,
+		`UPDATE automations SET actionsJson = replace(actionsJson, '"jiraIssueKey"', '"ticketsIssueKey"') WHERE actionsJson LIKE '%jiraIssueKey%'`,
 	}
 	for _, q := range additiveCurrent {
 		if _, err := store.db.ExecContext(ctx, q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {

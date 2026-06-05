@@ -40,7 +40,7 @@ type SpawnAgentInput struct {
 	IssueKey     string `json:"issueKey,omitempty"`
 	IssueSummary string `json:"issueSummary,omitempty"`
 	IssueType    string `json:"issueType,omitempty"`
-	// Isolated opts the spawn into the worktree workflow even without a Jira
+	// Isolated opts the spawn into the worktree workflow even without a ticket
 	// ticket. When true (manual spawn with project IsolatedDefault on, or
 	// explicit override), a fresh branch is created off project HEAD with
 	// BranchName if provided, else `{project.BranchPrefix}{slug(task)}-{id}`.
@@ -175,7 +175,7 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 		source = "manual"
 	}
 
-	// If the spawn carries a Jira ticket and the project is a git repo, run the
+	// If the spawn carries a ticket and the project is a git repo, run the
 	// agent inside a fresh worktree on a dedicated branch. Failures here are
 	// non-fatal: the agent still runs in the project root so a misconfigured
 	// repo doesn't block automations.
@@ -282,7 +282,7 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 // prepareWorktree creates an isolated git worktree for a spawn that opts into
 // isolation. Two flows trigger it:
 //
-//   - Jira-style (IssueKey != ""): branch name derived from issue type/key/summary.
+//   - Ticket-style (IssueKey != ""): branch name derived from issue type/key/summary.
 //   - Manual isolated (Isolated == true): branch name from BranchName if
 //     provided, else `{project.BranchPrefix}{slug(task)}-{shortid}`.
 //
@@ -699,7 +699,7 @@ func (service *Service) CreatePRForAgent(agentID string) (string, error) {
 }
 
 // agentPRMessage builds the title and body for `gh pr create` from the agent
-// record. Title prefers the Jira key + summary; falls back to the task line
+// record. Title prefers the ticket key + summary; falls back to the task line
 // when the spawn wasn't ticket-driven.
 func agentPRMessage(agent *Agent) (title, body string) {
 	summary := strings.TrimSpace(agent.Summary)

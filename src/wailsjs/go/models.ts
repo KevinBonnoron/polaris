@@ -855,8 +855,8 @@ export namespace polaris {
 	    agentKind?: string;
 	    model?: string;
 	    taskTemplate?: string;
-	    jiraIssueKey?: string;
-	    jiraToStatusId?: string;
+	    ticketsIssueKey?: string;
+	    ticketsToStatusId?: string;
 	    notifyTitle?: string;
 	    notifyKind?: string;
 	    emailTo?: string;
@@ -876,8 +876,8 @@ export namespace polaris {
 	        this.agentKind = source["agentKind"];
 	        this.model = source["model"];
 	        this.taskTemplate = source["taskTemplate"];
-	        this.jiraIssueKey = source["jiraIssueKey"];
-	        this.jiraToStatusId = source["jiraToStatusId"];
+	        this.ticketsIssueKey = source["ticketsIssueKey"];
+	        this.ticketsToStatusId = source["ticketsToStatusId"];
 	        this.notifyTitle = source["notifyTitle"];
 	        this.notifyKind = source["notifyKind"];
 	        this.emailTo = source["emailTo"];
@@ -893,7 +893,6 @@ export namespace polaris {
 	    fromStatusIds?: string[];
 	    toStatusId?: string;
 	    assignee?: string;
-	    alsoOnReassignment?: boolean;
 	    includeDrafts?: boolean;
 	    authorFilter?: string;
 	    excludeOwnComments?: boolean;
@@ -910,7 +909,6 @@ export namespace polaris {
 	        this.fromStatusIds = source["fromStatusIds"];
 	        this.toStatusId = source["toStatusId"];
 	        this.assignee = source["assignee"];
-	        this.alsoOnReassignment = source["alsoOnReassignment"];
 	        this.includeDrafts = source["includeDrafts"];
 	        this.authorFilter = source["authorFilter"];
 	        this.excludeOwnComments = source["excludeOwnComments"];
