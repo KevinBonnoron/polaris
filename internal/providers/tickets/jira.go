@@ -1,7 +1,3 @@
-// Package tickets provides integrations with issue tracking platforms
-// like Jira, Linear, and Azure Boards. We translate each platform's verbose
-// schema into small DTOs so the frontend doesn't depend on any single
-// platform's full payloads.
 package tickets
 
 import (
@@ -17,66 +13,13 @@ import (
 	"time"
 )
 
-var (
-	// ErrMissingConfig is returned when required credentials are absent.
-	ErrMissingConfig = errors.New("tickets: missing baseUrl, email, token or projectKey")
-	// ErrNoBoard means no agile board was found for the given project.
-	ErrNoBoard = errors.New("tickets: no agile board found for project")
-	// ErrNoSprint means the project's board has no active sprint.
-	ErrNoSprint = errors.New("tickets: no active sprint on board")
-)
-
 const apiTimeout = 15 * time.Second
-
-type Config struct {
-	BaseURL    string `json:"baseUrl"`
-	Email      string `json:"email"`
-	Token      string `json:"token"`
-	ProjectKey string `json:"projectKey"`
-	BoardID    int64  `json:"boardId,omitempty"`
-}
-
-type BoardInfo struct {
-	ID   int64  `json:"id"`
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-type Issue struct {
-	Key            string   `json:"key"`
-	Summary        string   `json:"summary"`
-	IssueType      string   `json:"issueType"`
-	Priority       string   `json:"priority"`
-	Status         string   `json:"status"`
-	StatusID       string   `json:"statusId"`
-	StatusCategory string   `json:"statusCategory"`
-	Assignee       string   `json:"assignee"`
-	AssigneeEmail  string   `json:"assigneeEmail"`
-	Labels         []string `json:"labels"`
-	URL            string   `json:"url"`
-	UpdatedAt      int64    `json:"updatedAt"`
-}
-
-// Column statuses are Jira status IDs (the agile board config only exposes
-// IDs, not names — the frontend matches issues by Issue.StatusID).
-type Column struct {
-	Name      string   `json:"name"`
-	StatusIDs []string `json:"statusIds"`
-}
-
-type Sprint struct {
-	ID      int64    `json:"id"`
-	Name    string   `json:"name"`
-	BoardID int64    `json:"boardId"`
-	Columns []Column `json:"columns"`
-	Issues  []Issue  `json:"issues"`
-}
 
 // FetchActiveSprint resolves the project's first scrum board, picks its
 // active sprint, and returns every issue in that sprint along with the
 // board's column-to-status mapping. Falls back to the board itself (no
 // sprint) when the board is Kanban-style and ErrNoSprint is hit.
-func FetchActiveSprint(cfg Config) (*Sprint, error) {
+func (jiraProvider) FetchActiveSprint(cfg Config) (*Sprint, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" || cfg.ProjectKey == "" {
 		return nil, ErrMissingConfig
 	}
@@ -124,11 +67,12 @@ func FetchActiveSprint(cfg Config) (*Sprint, error) {
 	}
 
 	return &Sprint{
-		ID:      sprintID,
-		Name:    sprintName,
-		BoardID: board.ID,
-		Columns: columns,
-		Issues:  issues,
+		ID:       sprintID,
+		Name:     sprintName,
+		BoardID:  board.ID,
+		BoardURL: fmt.Sprintf("%s/secure/RapidBoard.jspa?rapidView=%d", base, board.ID),
+		Columns:  columns,
+		Issues:   issues,
 	}, nil
 }
 
@@ -140,7 +84,7 @@ type boardInfo struct {
 
 // ListBoards returns every agile board visible for the project, so the user
 // can pick which one the sprint view & automations should target.
-func ListBoards(cfg Config) ([]BoardInfo, error) {
+func (jiraProvider) ListBoards(cfg Config) ([]BoardInfo, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" || cfg.ProjectKey == "" {
 		return nil, ErrMissingConfig
 	}
@@ -323,14 +267,9 @@ func isClientError(err error) bool {
 }
 
 // IssueType is one of a project's allowed issue types (Task, Bug, ...).
-type IssueType struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
 // ListProjectIssueTypes returns the issue types available for the configured
 // project. Used to populate the "Create issue" modal.
-func ListProjectIssueTypes(cfg Config) ([]IssueType, error) {
+func (jiraProvider) ListProjectIssueTypes(cfg Config) ([]IssueType, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" || cfg.ProjectKey == "" {
 		return nil, ErrMissingConfig
 	}
@@ -351,15 +290,9 @@ func ListProjectIssueTypes(cfg Config) ([]IssueType, error) {
 	return raw.Projects[0].IssueTypes, nil
 }
 
-// CreateIssueInput is the payload accepted by CreateIssue.
-type CreateIssueInput struct {
-	Summary     string `json:"summary"`
-	IssueTypeID string `json:"issueTypeId"`
-}
-
 // CreateIssue creates a new issue in the configured project and returns its
 // key (e.g. AUTH-128).
-func CreateIssue(cfg Config, in CreateIssueInput) (string, error) {
+func (jiraProvider) CreateIssue(cfg Config, in CreateIssueInput) (string, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" || cfg.ProjectKey == "" {
 		return "", ErrMissingConfig
 	}
@@ -387,7 +320,7 @@ func CreateIssue(cfg Config, in CreateIssueInput) (string, error) {
 // statuses mapped to the dropped board column). Picks the first workflow
 // transition whose destination status matches one of the targets. Returns
 // ErrNoTransition when no available transition lands on any of those statuses.
-func TransitionIssue(cfg Config, issueKey string, targetStatusIDs []string) error {
+func (jiraProvider) TransitionIssue(cfg Config, issueKey string, targetStatusIDs []string) error {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return ErrMissingConfig
 	}
@@ -433,24 +366,13 @@ func TransitionIssue(cfg Config, issueKey string, targetStatusIDs []string) erro
 	return sendJSON(http.MethodPost, fmt.Sprintf("%s/rest/api/3/issue/%s/transitions", base, issueKey), cfg, payload, nil)
 }
 
-// ErrNoTransition is returned when the target status isn't reachable from
-// the issue's current state via any available workflow transition.
-var ErrNoTransition = errors.New("tickets: no available transition to that status")
-
-// JiraUser is the authenticated Jira user returned by /rest/api/3/myself.
-type JiraUser struct {
-	AccountID    string `json:"accountId"`
-	DisplayName  string `json:"displayName"`
-	EmailAddress string `json:"emailAddress"`
-}
-
 // GetCurrentUser returns the account information of the authenticated user.
-func GetCurrentUser(cfg Config) (*JiraUser, error) {
+func (jiraProvider) GetCurrentUser(cfg Config) (*User, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return nil, ErrMissingConfig
 	}
 	base := strings.TrimRight(cfg.BaseURL, "/")
-	var user JiraUser
+	var user User
 	if err := getJSON(base+"/rest/api/3/myself", cfg, &user); err != nil {
 		return nil, err
 	}
@@ -459,7 +381,7 @@ func GetCurrentUser(cfg Config) (*JiraUser, error) {
 
 // AssignIssue assigns the given issue to the user identified by accountID.
 // Pass an empty string to unassign the issue.
-func AssignIssue(cfg Config, issueKey, accountID string) error {
+func (jiraProvider) AssignIssue(cfg Config, issueKey, accountID string) error {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return ErrMissingConfig
 	}
@@ -479,7 +401,7 @@ func AssignIssue(cfg Config, issueKey, accountID string) error {
 // FetchLastComment returns the plain-text body of the most recent comment on
 // an issue, or "" if there are none. Used by the automation manager to feed
 // the {{lastComment}} placeholder when an agent gets spawned on a QA bounce.
-func FetchLastComment(cfg Config, issueKey string) (string, error) {
+func (jiraProvider) FetchLastComment(cfg Config, issueKey string) (string, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return "", ErrMissingConfig
 	}
@@ -503,38 +425,8 @@ func FetchLastComment(cfg Config, issueKey string) (string, error) {
 	return adfToPlainText(raw.Comments[0].Body), nil
 }
 
-// IssueDetail is the full payload for the issue-detail modal: extends the
-// board-card Issue with description, reporter, and creation timestamp.
-type IssueDetail struct {
-	Key            string   `json:"key"`
-	Summary        string   `json:"summary"`
-	Description    string   `json:"description"`
-	IssueType      string   `json:"issueType"`
-	Priority       string   `json:"priority"`
-	Status         string   `json:"status"`
-	StatusCategory string   `json:"statusCategory"`
-	Assignee       string   `json:"assignee"`
-	AssigneeEmail  string   `json:"assigneeEmail"`
-	Reporter       string   `json:"reporter"`
-	ReporterEmail  string   `json:"reporterEmail"`
-	Labels         []string `json:"labels"`
-	URL            string   `json:"url"`
-	CreatedAt      int64    `json:"createdAt"`
-	UpdatedAt      int64    `json:"updatedAt"`
-}
-
-// Comment is one entry from the issue comment thread, with ADF body flattened
-// to plain text.
-type Comment struct {
-	ID        string `json:"id"`
-	Author    string `json:"author"`
-	Body      string `json:"body"`
-	CreatedAt int64  `json:"createdAt"`
-	UpdatedAt int64  `json:"updatedAt"`
-}
-
 // FetchIssueDetail returns the full detail for one issue.
-func FetchIssueDetail(cfg Config, issueKey string) (*IssueDetail, error) {
+func (jiraProvider) FetchIssueDetail(cfg Config, issueKey string) (*IssueDetail, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return nil, ErrMissingConfig
 	}
@@ -604,7 +496,7 @@ func FetchIssueDetail(cfg Config, issueKey string) (*IssueDetail, error) {
 
 // ListIssueComments returns the issue comment thread (oldest to newest), with
 // ADF bodies converted to Markdown.
-func ListIssueComments(cfg Config, issueKey string) ([]Comment, error) {
+func (jiraProvider) ListIssueComments(cfg Config, issueKey string) ([]Comment, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return nil, ErrMissingConfig
 	}
@@ -642,24 +534,9 @@ func ListIssueComments(cfg Config, issueKey string) ([]Comment, error) {
 	return out, nil
 }
 
-// HistoryChange is one field-level change inside a HistoryEntry.
-type HistoryChange struct {
-	Field string `json:"field"`
-	From  string `json:"from"`
-	To    string `json:"to"`
-}
-
-// HistoryEntry is a single changelog event: who changed what at when.
-type HistoryEntry struct {
-	ID        string          `json:"id"`
-	Author    string          `json:"author"`
-	CreatedAt int64           `json:"createdAt"`
-	Changes   []HistoryChange `json:"changes"`
-}
-
 // ListIssueHistory returns the issue changelog (newest first), one entry per
 // changeset, with per-field from/to strings.
-func ListIssueHistory(cfg Config, issueKey string) ([]HistoryEntry, error) {
+func (jiraProvider) ListIssueHistory(cfg Config, issueKey string) ([]HistoryEntry, error) {
 	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return nil, ErrMissingConfig
 	}

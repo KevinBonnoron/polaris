@@ -151,7 +151,7 @@ export function GetShortcutsSettings():Promise<polaris.ShortcutsSettings>;
 
 export function GetSlackConfig(arg1:string):Promise<Record<string, any>>;
 
-export function GetTicketsCurrentUser(arg1:tickets.Config):Promise<tickets.JiraUser>;
+export function GetTicketsCurrentUser(arg1:tickets.Config):Promise<tickets.User>;
 
 export function LintDockerfile(arg1:string):Promise<Array<docker.Finding>>;
 

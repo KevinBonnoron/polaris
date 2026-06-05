@@ -78,8 +78,7 @@ export function ConnectedTicketsBoard({ project, config }: { project: Project; c
     };
   }, [issues, meta, filters, hiddenColumns, config.email]);
 
-  const baseUrl = config.baseUrl.replace(/\/$/, '');
-  const boardUrl = meta?.boardId ? `${baseUrl}/secure/RapidBoard.jspa?rapidView=${meta.boardId}` : null;
+  const boardUrl = meta?.boardUrl ?? null;
 
   const toggleColumn = (name: string) => {
     if (selectedBoardId == null) {

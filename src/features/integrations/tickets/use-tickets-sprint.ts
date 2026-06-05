@@ -8,7 +8,7 @@ import type { ConnectedTicketsConfig, Issue, Sprint } from './types';
 
 export type SprintView = {
   issues: Issue[];
-  meta: { name: string; boardId: number; columns: Sprint['columns'] } | null;
+  meta: { name: string; boardId: number; boardUrl: string; columns: Sprint['columns'] } | null;
   loading: boolean;
   error: string | null;
   pendingKeys: Set<string>;
