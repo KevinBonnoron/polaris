@@ -152,7 +152,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
 
     const runCommand = useCallback(
       async (args: string[], label: string, manifestPath?: string) => {
-        if (!config?.manifestPath || isRunning) {
+        if (!(manifestPath ?? config?.manifestPath) || isRunning) {
           return;
         }
         try {
@@ -166,7 +166,8 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
 
     const runInWorkspaces = useCallback(
       async (commands: WorkspaceCommand[]) => {
-        if (!config?.manifestPath || isRunning) {
+        const hasManifest = commands.some((c) => Boolean(c.manifest)) || Boolean(config?.manifestPath);
+        if (!hasManifest || isRunning) {
           return;
         }
         for (const command of commands) {
