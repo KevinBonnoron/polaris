@@ -74,11 +74,9 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
   const messagingProviders = (['slack', 'discord', 'telegram'] as const).filter((p) => Boolean(project?.integrations?.[p]));
   const hasMessaging = messagingProviders.length > 0;
 
-  const currentSource = useStore(form.store, (state) => state.values.source);
-
   const statusesCfg = useMemo(
     () =>
-      hasTickets && currentSource === 'tickets' && ticketsConfig
+      hasTickets && ticketsConfig
         ? {
             baseUrl: String(ticketsConfig.baseUrl ?? ''),
             email: String(ticketsConfig.email ?? ''),
@@ -86,7 +84,7 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
             projectKey: String(ticketsConfig.projectKey ?? ''),
           }
         : null,
-    [hasTickets, currentSource, ticketsConfig],
+    [hasTickets, ticketsConfig],
   );
   const { statuses, loading: statusesLoading, error: statusError } = useTicketsStatuses(statusesCfg);
 

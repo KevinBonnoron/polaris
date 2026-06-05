@@ -166,21 +166,29 @@ export function getTicketsEntry(cfg: ConnectedTicketsConfig): Entry {
     statusesCommit();
   };
 
-  const refresh = async () => {
+  let inflight: Promise<void> | null = null;
+  const refresh = () => {
+    if (inflight) {
+      return inflight;
+    }
     entry.loading = true;
     entry.error = null;
     notify();
-    try {
-      const sprint = await FetchTicketsSprint(tickets.Config.createFrom(cfg));
-      entry.meta = { name: sprint.name, boardId: sprint.boardId, columns: sprint.columns ?? [] };
-      syncIssues(sprint);
-      syncStatuses(sprint);
-    } catch (err) {
-      entry.error = err instanceof Error ? err.message : String(err);
-    } finally {
-      entry.loading = false;
-      notify();
-    }
+    inflight = (async () => {
+      try {
+        const sprint = await FetchTicketsSprint(tickets.Config.createFrom(cfg));
+        entry.meta = { name: sprint.name, boardId: sprint.boardId, columns: sprint.columns ?? [] };
+        syncIssues(sprint);
+        syncStatuses(sprint);
+      } catch (err) {
+        entry.error = err instanceof Error ? err.message : String(err);
+      } finally {
+        entry.loading = false;
+        inflight = null;
+        notify();
+      }
+    })();
+    return inflight;
   };
   entry.reload = refresh;
 
@@ -245,7 +253,7 @@ export function getTicketsEntry(cfg: ConnectedTicketsConfig): Entry {
         statusesWrite = write as typeof statusesWrite;
         statusesCommit = commit;
         currentStatuses.clear();
-        markReady();
+        refresh().finally(() => markReady());
         return () => {
           statusesBegin = null;
           statusesWrite = null;
