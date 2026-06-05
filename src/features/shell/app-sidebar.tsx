@@ -10,12 +10,12 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
-import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
-import { usePythonRun } from '@/features/integrations/python/python-run-context';
-import { useShellRun } from '@/features/integrations/shell/shell-context';
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
 import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
+import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { getIntegrations } from '@/features/integrations/project-integrations';
+import { usePythonRun } from '@/features/integrations/python/python-run-context';
+import { useShellRun } from '@/features/integrations/shell/shell-context';
 import { AddProjectModal } from '@/features/projects/add-project-modal';
 import { ProjectAvatar } from '@/features/projects/project-avatar';
 import { ProjectSettingsModal } from '@/features/projects/project-settings-modal';
@@ -24,7 +24,7 @@ import { useCurrentProject, useProjects } from '@/state/projects';
 import { NotificationPopoverContent } from './notification-popover';
 
 const NAV_ROUTES: Record<string, string> = {
-  jira: '/jira',
+  tickets: '/tickets',
   repository: '/repository',
   nodejs: '/nodejs',
   python: '/python',

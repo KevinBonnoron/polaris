@@ -1,6 +1,6 @@
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { JiraStatus } from '@/collections/jira.issues.collection';
+import type { TicketsStatus } from '@/collections/tickets.issues.collection';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { useAgentClis } from '@/state/agent-clis';
-import type { ActionKind, AutomationAction, JiraTransitionAction, NotificationAction, SendEmailAction, SendMessageAction, SpawnAgentAction } from '@/types';
+import type { ActionKind, AutomationAction, NotificationAction, SendEmailAction, SendMessageAction, SpawnAgentAction, TicketsTransitionAction } from '@/types';
 import { defaultActionForKind, TRIGGERS } from './triggers';
 import type { AutomationForm } from './types';
 
@@ -17,22 +17,28 @@ type AgentKindInfo = ReturnType<typeof useAgentClis>['kinds'][number];
 interface Props {
   form: AutomationForm;
   agentKinds: AgentKindInfo[];
-  statuses: JiraStatus[];
-  hasJiraIntegration: boolean;
+  statuses: TicketsStatus[];
+  hasTicketsIntegration: boolean;
   hasResendIntegration: boolean;
   hasMessagingIntegration: boolean;
   messagingProviders: string[];
 }
 
-const ACTION_KINDS: ActionKind[] = ['spawn_agent', 'jira_transition', 'notification', 'send_email', 'send_message'];
+const ACTION_KINDS: ActionKind[] = ['spawn_agent', 'tickets_transition', 'notification', 'send_email', 'send_message'];
 
-export function ActionsStep({ form, agentKinds, statuses, hasJiraIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders }: Props) {
+export function ActionsStep({ form, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders }: Props) {
   const { t } = useTranslation();
 
   const availableKinds = ACTION_KINDS.filter((k) => {
-    if (k === 'jira_transition') { return hasJiraIntegration; }
-    if (k === 'send_email') { return hasResendIntegration; }
-    if (k === 'send_message') { return hasMessagingIntegration; }
+    if (k === 'tickets_transition') {
+      return hasTicketsIntegration;
+    }
+    if (k === 'send_email') {
+      return hasResendIntegration;
+    }
+    if (k === 'send_message') {
+      return hasMessagingIntegration;
+    }
     return true;
   });
 
@@ -72,7 +78,7 @@ export function ActionsStep({ form, agentKinds, statuses, hasJiraIntegration, ha
                   action={action}
                   agentKinds={agentKinds}
                   statuses={statuses}
-                  hasJiraIntegration={hasJiraIntegration}
+                  hasTicketsIntegration={hasTicketsIntegration}
                   hasResendIntegration={hasResendIntegration}
                   hasMessagingIntegration={hasMessagingIntegration}
                   messagingProviders={messagingProviders}
@@ -108,8 +114,8 @@ interface ActionCardProps {
   index: number;
   action: AutomationAction;
   agentKinds: AgentKindInfo[];
-  statuses: JiraStatus[];
-  hasJiraIntegration: boolean;
+  statuses: TicketsStatus[];
+  hasTicketsIntegration: boolean;
   hasResendIntegration: boolean;
   hasMessagingIntegration: boolean;
   messagingProviders: string[];
@@ -117,7 +123,7 @@ interface ActionCardProps {
   onRemove: () => void;
 }
 
-function ActionCard({ index, action, agentKinds, statuses, hasJiraIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders, onChange, onRemove }: ActionCardProps) {
+function ActionCard({ index, action, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders, onChange, onRemove }: ActionCardProps) {
   const { t } = useTranslation();
 
   return (
@@ -134,7 +140,7 @@ function ActionCard({ index, action, agentKinds, statuses, hasJiraIntegration, h
       </div>
 
       {action.kind === 'spawn_agent' && <SpawnAgentEditor action={action} agentKinds={agentKinds} onChange={onChange} />}
-      {action.kind === 'jira_transition' && <JiraTransitionEditor action={action} statuses={statuses} hasJiraIntegration={hasJiraIntegration} onChange={onChange} />}
+      {action.kind === 'tickets_transition' && <TicketsTransitionEditor action={action} statuses={statuses} hasTicketsIntegration={hasTicketsIntegration} onChange={onChange} />}
       {action.kind === 'notification' && <NotificationEditor action={action} onChange={onChange} />}
       {action.kind === 'send_email' && <SendEmailEditor action={action} hasResendIntegration={hasResendIntegration} onChange={onChange} />}
       {action.kind === 'send_message' && <SendMessageEditor action={action} hasMessagingIntegration={hasMessagingIntegration} messagingProviders={messagingProviders} onChange={onChange} />}
@@ -188,17 +194,17 @@ function SpawnAgentEditor({ action, agentKinds, onChange }: { action: SpawnAgent
   );
 }
 
-function JiraTransitionEditor({ action, statuses, hasJiraIntegration, onChange }: { action: JiraTransitionAction; statuses: JiraStatus[]; hasJiraIntegration: boolean; onChange: (patch: Partial<AutomationAction>) => void }) {
+function TicketsTransitionEditor({ action, statuses, hasTicketsIntegration, onChange }: { action: TicketsTransitionAction; statuses: TicketsStatus[]; hasTicketsIntegration: boolean; onChange: (patch: Partial<AutomationAction>) => void }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3">
-      {!hasJiraIntegration && <p className="text-xs text-amber-500">{t('automations.actions.noJiraIntegration')}</p>}
+      {!hasTicketsIntegration && <p className="text-xs text-amber-500">{t('automations.actions.noTicketsIntegration')}</p>}
 
       <div className="flex flex-col gap-1.5">
-        <Label>{t('automations.actions.jiraToStatus')}</Label>
-        <Select value={action.jiraToStatusId} onValueChange={(v) => onChange({ jiraToStatusId: v })}>
+        <Label>{t('automations.actions.ticketsToStatus')}</Label>
+        <Select value={action.ticketsToStatusId} onValueChange={(v) => onChange({ ticketsToStatusId: v })}>
           <SelectTrigger>
-            <SelectValue placeholder={t('automations.actions.jiraToStatusPlaceholder')} />
+            <SelectValue placeholder={t('automations.actions.ticketsToStatusPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
             {statuses.flatMap((s) =>
@@ -213,9 +219,9 @@ function JiraTransitionEditor({ action, statuses, hasJiraIntegration, onChange }
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label>{t('automations.actions.jiraIssueKey')}</Label>
-        <Input value={action.jiraIssueKey ?? ''} onChange={(e) => onChange({ jiraIssueKey: e.target.value })} placeholder={t('automations.actions.jiraIssueKeyPlaceholder')} className="font-mono text-xs" />
-        <p className="text-xs text-muted-foreground">{t('automations.actions.jiraIssueKeyHint')}</p>
+        <Label>{t('automations.actions.ticketsIssueKey')}</Label>
+        <Input value={action.ticketsIssueKey ?? ''} onChange={(e) => onChange({ ticketsIssueKey: e.target.value })} placeholder={t('automations.actions.ticketsIssueKeyPlaceholder')} className="font-mono text-xs" />
+        <p className="text-xs text-muted-foreground">{t('automations.actions.ticketsIssueKeyHint')}</p>
       </div>
     </div>
   );

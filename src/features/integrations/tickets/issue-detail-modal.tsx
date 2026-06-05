@@ -8,20 +8,20 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { type DialogModeProps, useDialogMode } from '@/lib/use-dialog-mode';
 import { toastError } from '@/lib/toast-error';
+import { type DialogModeProps, useDialogMode } from '@/lib/use-dialog-mode';
 import { AssignTicketsIssue, FetchTicketsIssueDetail, GetTicketsCurrentUser, ListTicketsIssueComments, ListTicketsIssueHistory } from '@/wailsjs/go/main/App';
 import { tickets } from '@/wailsjs/go/models';
 import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
-import type { ConnectedJiraConfig } from './types';
+import type { ConnectedTicketsConfig } from './types';
 
 interface Props extends DialogModeProps {
-  config: ConnectedJiraConfig;
+  config: ConnectedTicketsConfig;
   issueKey: string;
   onAssigned?: () => void;
 }
 
-export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, ...modeProps }: PropsWithChildren<Props>) {
+export function TicketsIssueDetailModal({ config, issueKey, children, onAssigned, ...modeProps }: PropsWithChildren<Props>) {
   const { t, i18n } = useTranslation();
   const { open, setOpen } = useDialogMode(modeProps);
 
@@ -118,7 +118,7 @@ export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, .
       setDetail(updated);
       onAssigned?.();
     } catch (err) {
-      toastError({ title: t('integrations.jira.detail.assignFailed'), err });
+      toastError({ title: t('integrations.tickets.detail.assignFailed'), err });
     } finally {
       setAssigning(false);
     }
@@ -133,31 +133,31 @@ export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, .
         <DialogHeader>
           <div className="flex items-start justify-between gap-3 pr-8">
             <div className="flex min-w-0 flex-col gap-1">
-              <DialogTitle className="text-base">{t('integrations.jira.detail.title', { key: issueKey })}</DialogTitle>
+              <DialogTitle className="text-base">{t('integrations.tickets.detail.title', { key: issueKey })}</DialogTitle>
               {detail && <p className="text-sm text-muted-foreground">{detail.summary}</p>}
             </div>
             <Button variant="outline" size="sm" onClick={() => BrowserOpenURL(url)}>
-              {t('integrations.jira.openBoard')} <ExternalLink className="size-3.5" />
+              {t('integrations.tickets.openBoard')} <ExternalLink className="size-3.5" />
             </Button>
           </div>
         </DialogHeader>
 
         <Tabs defaultValue="details" className="flex min-h-0 flex-1 flex-col">
           <TabsList>
-            <TabsTrigger value="details">{t('integrations.jira.detail.tabDetails')}</TabsTrigger>
+            <TabsTrigger value="details">{t('integrations.tickets.detail.tabDetails')}</TabsTrigger>
             <TabsTrigger value="comments">
-              {t('integrations.jira.detail.tabComments')}
+              {t('integrations.tickets.detail.tabComments')}
               {comments && comments.length > 0 && <span className="ml-1 text-muted-foreground">({comments.length})</span>}
             </TabsTrigger>
             <TabsTrigger value="history">
-              {t('integrations.jira.detail.tabHistory')}
+              {t('integrations.tickets.detail.tabHistory')}
               {history && history.length > 0 && <span className="ml-1 text-muted-foreground">({history.length})</span>}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="details" className="min-h-0">
             <ScrollArea className="h-[60vh] pr-3">
-              {detailLoading && <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.loading')}</p>}
+              {detailLoading && <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.loading')}</p>}
               {detailErr && <p className="text-sm text-destructive">{detailErr}</p>}
               {detail && <DetailBody detail={detail} formatDate={formatDate} isAssignedToMe={isAssignedToMe} assigning={assigning} onAssignToMe={config.email ? handleAssignToMe : undefined} />}
             </ScrollArea>
@@ -165,9 +165,9 @@ export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, .
 
           <TabsContent value="comments" className="min-h-0">
             <ScrollArea className="h-[60vh] pr-3">
-              {commentsLoading && <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.loadingComments')}</p>}
+              {commentsLoading && <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.loadingComments')}</p>}
               {commentsErr && <p className="text-sm text-destructive">{commentsErr}</p>}
-              {comments && comments.length === 0 && !commentsLoading && <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.noComments')}</p>}
+              {comments && comments.length === 0 && !commentsLoading && <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.noComments')}</p>}
               {comments && comments.length > 0 && (
                 <ul className="flex flex-col gap-3">
                   {comments.map((c) => (
@@ -186,9 +186,9 @@ export function JiraIssueDetailModal({ config, issueKey, children, onAssigned, .
 
           <TabsContent value="history" className="min-h-0">
             <ScrollArea className="h-[60vh] pr-3">
-              {historyLoading && <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.loadingHistory')}</p>}
+              {historyLoading && <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.loadingHistory')}</p>}
               {historyErr && <p className="text-sm text-destructive">{historyErr}</p>}
-              {history && history.length === 0 && !historyLoading && <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.noHistory')}</p>}
+              {history && history.length === 0 && !historyLoading && <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.noHistory')}</p>}
               {history && history.length > 0 && (
                 <ul className="flex flex-col gap-3">
                   {history.map((entry) => (
@@ -242,42 +242,42 @@ function DetailBody({ detail, formatDate, isAssignedToMe, assigning, onAssignToM
   return (
     <div className="flex gap-6">
       <section className="flex min-w-0 flex-1 flex-col gap-2">
-        <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('integrations.jira.detail.description')}</span>
-        {detail.description ? <Markdown source={detail.description} /> : <p className="text-sm text-muted-foreground">{t('integrations.jira.detail.noDescription')}</p>}
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{t('integrations.tickets.detail.description')}</span>
+        {detail.description ? <Markdown source={detail.description} /> : <p className="text-sm text-muted-foreground">{t('integrations.tickets.detail.noDescription')}</p>}
       </section>
 
       <aside className="flex w-52 shrink-0 flex-col gap-3 border-l border-border/50 pl-6 text-sm">
-        <MetaField label={t('integrations.jira.detail.status')}>
+        <MetaField label={t('integrations.tickets.detail.status')}>
           <StatusBadge status={detail.status} category={detail.statusCategory} />
         </MetaField>
-        <MetaField label={t('integrations.jira.detail.priority')}>
+        <MetaField label={t('integrations.tickets.detail.priority')}>
           <PriorityBadge priority={detail.priority} />
         </MetaField>
-        <MetaField label={t('integrations.jira.issueType')}>
+        <MetaField label={t('integrations.tickets.issueType')}>
           <span className="text-sm text-foreground">{detail.issueType || '—'}</span>
         </MetaField>
-        <MetaField label={t('integrations.jira.detail.assignee')}>
+        <MetaField label={t('integrations.tickets.detail.assignee')}>
           <div className="flex flex-col gap-1">
-            <span className="text-sm text-foreground">{detail.assignee || t('integrations.jira.unassigned')}</span>
+            <span className="text-sm text-foreground">{detail.assignee || t('integrations.tickets.unassigned')}</span>
             {onAssignToMe && !isAssignedToMe && (
               <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={onAssignToMe} disabled={assigning}>
                 <UserPlus className="size-3" />
-                {assigning ? t('integrations.jira.detail.assigning') : t('integrations.jira.detail.assignToMe')}
+                {assigning ? t('integrations.tickets.detail.assigning') : t('integrations.tickets.detail.assignToMe')}
               </Button>
             )}
           </div>
         </MetaField>
-        <MetaField label={t('integrations.jira.detail.reporter')}>
+        <MetaField label={t('integrations.tickets.detail.reporter')}>
           <span className="text-sm text-foreground">{detail.reporter || '—'}</span>
         </MetaField>
-        <MetaField label={t('integrations.jira.detail.created')}>
+        <MetaField label={t('integrations.tickets.detail.created')}>
           <span className="text-sm text-foreground">{formatDate(detail.createdAt)}</span>
         </MetaField>
-        <MetaField label={t('integrations.jira.detail.updated')}>
+        <MetaField label={t('integrations.tickets.detail.updated')}>
           <span className="text-sm text-foreground">{formatDate(detail.updatedAt)}</span>
         </MetaField>
         {detail.labels && detail.labels.length > 0 && (
-          <MetaField label={t('integrations.jira.detail.labels')}>
+          <MetaField label={t('integrations.tickets.detail.labels')}>
             <div className="flex flex-wrap gap-1">
               {detail.labels.map((l) => (
                 <span key={l} className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">

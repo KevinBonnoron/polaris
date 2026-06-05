@@ -23,15 +23,15 @@ import (
 	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
 )
 
-// jiraKeyPattern matches typical Jira issue keys (e.g. PROJ-123).
-var jiraKeyPattern = regexp.MustCompile(`[A-Z][A-Z0-9_]+-\d+`)
+// ticketKeyPattern matches typical Ticket issue keys (e.g. PROJ-123).
+var ticketKeyPattern = regexp.MustCompile(`[A-Z][A-Z0-9_]+-\d+`)
 
-func extractJiraKey(candidates ...string) string {
+func extractTicketKey(candidates ...string) string {
 	for _, s := range candidates {
 		if s == "" {
 			continue
 		}
-		if m := jiraKeyPattern.FindString(strings.ToUpper(s)); m != "" {
+		if m := ticketKeyPattern.FindString(strings.ToUpper(s)); m != "" {
 			return m
 		}
 	}
@@ -45,9 +45,9 @@ type fireContext struct {
 	Vars       map[string]string
 
 	// Optional context payloads (set depending on trigger source/kind).
-	JiraIssueKey string
-	JiraIssue    *tickets.Issue
-	JiraCfg      *tickets.Config
+	TicketIssueKey string
+	TicketIssue    *tickets.Issue
+	TicketCfg      *tickets.Config
 
 	PR  *repository.PullRequest
 	Run *repository.WorkflowRun
@@ -74,16 +74,16 @@ func (automationManager *AutomationManager) FireManual(id string) error {
 		Vars:       map[string]string{},
 		NotifLabel: "manual test",
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 	return nil
 }
 
-// AutomationManager subscribes to the shared gh and jira stores and fires
+// AutomationManager subscribes to the shared gh and ticket stores and fires
 // automation actions when the diff carries a trigger-matching change. It no
 // longer owns its own tickers: cadence is set per-integration on the store,
 // and a single poll services every automation and every UI screen watching
-// the same (owner, repo) or (jira board) key.
+// the same (owner, repo) or (ticket board) key.
 type AutomationManager struct {
 	svc *Service
 
@@ -260,28 +260,29 @@ func (automationManager *AutomationManager) intervalFor(a Automation) time.Durat
 	if err != nil || project == nil {
 		return fallback
 	}
+
 	cfg := project.Integrations[a.Source]
-	if cfg == nil && a.Source == "repository" {
-		cfg = project.Integrations["repository"]
-	}
 	if cfg == nil {
 		return fallback
 	}
+
 	secs := int64Field(cfg, "pollIntervalSec")
 	if secs <= 0 {
 		return fallback
 	}
+
 	d := time.Duration(secs) * time.Second
 	if d < 10*time.Second {
 		d = 10 * time.Second
 	}
+
 	return d
 }
 
 func (automationManager *AutomationManager) registerWithStores(ctx context.Context, a Automation, interval time.Duration) {
 	switch a.Source {
-	case "jira":
-		cfg, ok := automationManager.jiraConfigFor(a.ProjectID)
+	case "tickets":
+		cfg, ok := automationManager.ticketsConfigFor(a.ProjectID)
 		if !ok {
 			return
 		}
@@ -318,9 +319,9 @@ func (automationManager *AutomationManager) registerWithStores(ctx context.Conte
 
 func (automationManager *AutomationManager) unregisterFromStores(a Automation) {
 	switch a.Source {
-	case "jira":
+	case "tickets":
 		if s := automationManager.svc.ticketsStore; s != nil {
-			if cfg, ok := automationManager.jiraConfigFor(a.ProjectID); ok {
+			if cfg, ok := automationManager.ticketsConfigFor(a.ProjectID); ok {
 				k := ticketsstore.Key{BaseURL: strings.TrimRight(cfg.BaseURL, "/"), ProjectKey: cfg.ProjectKey, BoardID: cfg.BoardID}
 				s.Unregister(k, "automation:"+a.ID)
 			}
@@ -413,10 +414,10 @@ func (automationManager *AutomationManager) onTicketsDiff(diff ticketsstore.Diff
 	}
 
 	for _, a := range automations {
-		if !a.Enabled || a.Source != "jira" || a.Trigger.Kind != "tickets.transition" {
+		if !a.Enabled || a.Source != "tickets" || (a.Trigger.Kind != "tickets.transition" && a.Trigger.Kind != "tickets.assigned") {
 			continue
 		}
-		cfg, ok := automationManager.jiraConfigFor(a.ProjectID)
+		cfg, ok := automationManager.ticketsConfigFor(a.ProjectID)
 		if !ok {
 			continue
 		}
@@ -435,12 +436,12 @@ func (automationManager *AutomationManager) onTicketsDiff(diff ticketsstore.Diff
 	}
 }
 
-func (automationManager *AutomationManager) jiraConfigFor(projectID string) (tickets.Config, bool) {
+func (automationManager *AutomationManager) ticketsConfigFor(projectID string) (tickets.Config, bool) {
 	project, err := automationManager.svc.store.GetProject(projectID)
 	if err != nil || project == nil {
 		return tickets.Config{}, false
 	}
-	raw, ok := project.Integrations["jira"]
+	raw, ok := project.Integrations["tickets"]
 	if !ok {
 		return tickets.Config{}, false
 	}
@@ -451,7 +452,7 @@ func (automationManager *AutomationManager) jiraConfigFor(projectID string) (tic
 		ProjectKey: stringField(raw, "projectKey"),
 		BoardID:    int64Field(raw, "boardId"),
 	}
-	if cfg.BaseURL == "" || cfg.Token == "" {
+	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
 		return tickets.Config{}, false
 	}
 	return cfg, true
@@ -482,19 +483,29 @@ func int64Field(m map[string]any, key string) int64 {
 	return 0
 }
 
-// matchesTrigger returns true when the issue's transition matches every
-// constraint of the rule. It assumes only tickets.transition triggers for now.
+// matchesTrigger returns true when the issue matches every constraint of the
+// rule. It dispatches on the trigger kind: "tickets.transition" fires on a
+// column change, "tickets.assigned" fires when the issue becomes assigned to
+// the configured person.
 func matchesTrigger(t AutomationTrigger, myEmail string, issue tickets.Issue, prev issueState, hadPrev bool) bool {
-	if t.Kind != "tickets.transition" {
-		return false
-	}
-	if t.ToStatusID != "" && issue.StatusID != t.ToStatusID {
-		return false
-	}
-
 	assigneeKey := issue.AssigneeEmail
 	if assigneeKey == "" {
 		assigneeKey = issue.Assignee
+	}
+
+	switch t.Kind {
+	case "tickets.transition":
+		return matchesTransitionTrigger(t, myEmail, issue, assigneeKey, prev, hadPrev)
+	case "tickets.assigned":
+		return matchesAssignedTrigger(t, myEmail, assigneeKey, issue.Assignee, prev, hadPrev)
+	default:
+		return false
+	}
+}
+
+func matchesTransitionTrigger(t AutomationTrigger, myEmail string, issue tickets.Issue, assigneeKey string, prev issueState, hadPrev bool) bool {
+	if t.ToStatusID != "" && issue.StatusID != t.ToStatusID {
+		return false
 	}
 	if !matchesAssignee(t.Assignee, myEmail, assigneeKey, issue.Assignee) {
 		return false
@@ -506,22 +517,28 @@ func matchesTrigger(t AutomationTrigger, myEmail string, issue tickets.Issue, pr
 		return len(t.FromStatusIDs) == 0
 	}
 
-	statusChanged := prev.StatusID != issue.StatusID
-	assigneeChanged := prev.Assignee != assigneeKey
+	if prev.StatusID == issue.StatusID {
+		return false
+	}
+	if len(t.FromStatusIDs) > 0 && !contains(t.FromStatusIDs, prev.StatusID) {
+		return false
+	}
+	return true
+}
 
-	if statusChanged {
-		if len(t.FromStatusIDs) > 0 && !contains(t.FromStatusIDs, prev.StatusID) {
-			return false
-		}
+func matchesAssignedTrigger(t AutomationTrigger, myEmail, assigneeKey, displayName string, prev issueState, hadPrev bool) bool {
+	if assigneeKey == "" {
+		return false
+	}
+	if !matchesAssignee(t.Assignee, myEmail, assigneeKey, displayName) {
+		return false
+	}
+	// Fire only when the assignment is new: either the issue just appeared
+	// already assigned to the target, or its assignee just changed.
+	if !hadPrev {
 		return true
 	}
-
-	// Status unchanged: only fires when the rule explicitly accepts reassignments
-	// AND the assignee just became the configured one.
-	if assigneeChanged && t.AlsoOnReassignment {
-		return true
-	}
-	return false
+	return prev.Assignee != assigneeKey
 }
 
 func matchesAssignee(filter, myEmail, assigneeKey, displayName string) bool {
@@ -555,11 +572,11 @@ func (automationManager *AutomationManager) fire(a Automation, cfg tickets.Confi
 	}
 
 	fc := fireContext{
-		Automation:   a,
-		JiraIssueKey: issue.Key,
-		JiraIssue:    &issue,
-		JiraCfg:      &cfg,
-		NotifLabel:   issue.Key,
+		Automation:     a,
+		TicketIssueKey: issue.Key,
+		TicketIssue:    &issue,
+		TicketCfg:      &cfg,
+		NotifLabel:     issue.Key,
 		Vars: map[string]string{
 			"key":         issue.Key,
 			"summary":     issue.Summary,
@@ -803,10 +820,10 @@ func (automationManager *AutomationManager) dispatchPRComments(a Automation, cfg
 
 func (automationManager *AutomationManager) firePRComment(a Automation, _ repoConfig, pr repository.PullRequest, c repository.IssueComment) {
 	fc := fireContext{
-		Automation:   a,
-		PR:           &pr,
-		JiraIssueKey: extractJiraKey(pr.Title),
-		NotifLabel:   fmt.Sprintf("PR #%d comment by @%s", pr.Number, c.Author),
+		Automation:     a,
+		PR:             &pr,
+		TicketIssueKey: extractTicketKey(pr.Title),
+		NotifLabel:     fmt.Sprintf("PR #%d comment by @%s", pr.Number, c.Author),
 		Vars: map[string]string{
 			"number":        fmt.Sprintf("%d", pr.Number),
 			"title":         pr.Title,
@@ -816,7 +833,7 @@ func (automationManager *AutomationManager) firePRComment(a Automation, _ repoCo
 			"url":           c.URL,
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 
@@ -838,10 +855,10 @@ func matchesRepoTrigger(t AutomationTrigger, pr repository.PullRequest) bool {
 
 func (automationManager *AutomationManager) firePR(a Automation, _ repoConfig, pr repository.PullRequest) {
 	fc := fireContext{
-		Automation:   a,
-		PR:           &pr,
-		JiraIssueKey: extractJiraKey(pr.Title),
-		NotifLabel:   fmt.Sprintf("PR #%d", pr.Number),
+		Automation:     a,
+		PR:             &pr,
+		TicketIssueKey: extractTicketKey(pr.Title),
+		NotifLabel:     fmt.Sprintf("PR #%d", pr.Number),
 		Vars: map[string]string{
 			"number": fmt.Sprintf("%d", pr.Number),
 			"title":  pr.Title,
@@ -851,15 +868,15 @@ func (automationManager *AutomationManager) firePR(a Automation, _ repoConfig, p
 			"base":   "",
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 
 func (automationManager *AutomationManager) fireIssueAssigned(a Automation, _ repoConfig, issue repository.Issue, assignee string) {
 	fc := fireContext{
-		Automation:   a,
-		JiraIssueKey: extractJiraKey(issue.Title),
-		NotifLabel:   fmt.Sprintf("Issue #%d assigned to @%s", issue.Number, assignee),
+		Automation:     a,
+		TicketIssueKey: extractTicketKey(issue.Title),
+		NotifLabel:     fmt.Sprintf("Issue #%d assigned to @%s", issue.Number, assignee),
 		Vars: map[string]string{
 			"number":   fmt.Sprintf("%d", issue.Number),
 			"title":    issue.Title,
@@ -868,17 +885,17 @@ func (automationManager *AutomationManager) fireIssueAssigned(a Automation, _ re
 			"url":      issue.URL,
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 
 func (automationManager *AutomationManager) firePRBuildResult(a Automation, _ repoConfig, pr repository.PullRequest, run repository.WorkflowRun) {
 	fc := fireContext{
-		Automation:   a,
-		PR:           &pr,
-		Run:          &run,
-		JiraIssueKey: extractJiraKey(run.Branch, pr.Title),
-		NotifLabel:   fmt.Sprintf("PR #%d build %q %s", pr.Number, run.Name, run.Conclusion),
+		Automation:     a,
+		PR:             &pr,
+		Run:            &run,
+		TicketIssueKey: extractTicketKey(run.Branch, pr.Title),
+		NotifLabel:     fmt.Sprintf("PR #%d build %q %s", pr.Number, run.Name, run.Conclusion),
 		Vars: map[string]string{
 			"number":     fmt.Sprintf("%d", pr.Number),
 			"title":      pr.Title,
@@ -889,17 +906,17 @@ func (automationManager *AutomationManager) firePRBuildResult(a Automation, _ re
 			"runUrl":     run.URL,
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 
-// attachJiraCfg looks up the project's Jira config so jira_transition actions
-// can run on repository-source triggers. Missing config leaves JiraCfg nil;
-// jira actions will then short-circuit with a clear log line.
-func (automationManager *AutomationManager) attachJiraCfg(fc *fireContext) {
-	cfg, ok := automationManager.jiraConfigFor(fc.Automation.ProjectID)
+// attachTicketCfg looks up the project's Ticket config so tickets_transition actions
+// can run on repository-source triggers. Missing config leaves TicketCfg nil;
+// ticket actions will then short-circuit with a clear log line.
+func (automationManager *AutomationManager) attachTicketCfg(fc *fireContext) {
+	cfg, ok := automationManager.ticketsConfigFor(fc.Automation.ProjectID)
 	if ok {
-		fc.JiraCfg = &cfg
+		fc.TicketCfg = &cfg
 	}
 }
 
@@ -927,8 +944,8 @@ func (automationManager *AutomationManager) runActions(fc fireContext) {
 		switch action.Kind {
 		case "spawn_agent":
 			results = append(results, automationManager.runSpawnAgent(fc, action, i))
-		case "jira_transition":
-			results = append(results, automationManager.runJiraTransition(fc, action, i))
+		case "tickets_transition":
+			results = append(results, automationManager.runTicketsTransition(fc, action, i))
 		case "notification":
 			results = append(results, automationManager.runNotification(fc, action, i))
 		case "send_email":
@@ -968,10 +985,10 @@ func (automationManager *AutomationManager) runSpawnAgent(fc fireContext, action
 		Task:      task,
 		Source:    "automation",
 	}
-	if fc.JiraIssue != nil {
-		input.IssueKey = fc.JiraIssue.Key
-		input.IssueSummary = fc.JiraIssue.Summary
-		input.IssueType = fc.JiraIssue.IssueType
+	if fc.TicketIssue != nil {
+		input.IssueKey = fc.TicketIssue.Key
+		input.IssueSummary = fc.TicketIssue.Summary
+		input.IssueType = fc.TicketIssue.IssueType
 	}
 	agent, err := automationManager.svc.Spawn(input)
 	if err != nil {
@@ -995,53 +1012,53 @@ func (automationManager *AutomationManager) runSpawnAgent(fc fireContext, action
 	return ActionResult{Kind: "spawn_agent", Status: "ok", Detail: agent.ID}
 }
 
-func (automationManager *AutomationManager) runJiraTransition(fc fireContext, action AutomationAction, idx int) ActionResult {
+func (automationManager *AutomationManager) runTicketsTransition(fc fireContext, action AutomationAction, idx int) ActionResult {
 	a := fc.Automation
-	if action.JiraToStatusID == "" {
-		log.Printf("automation %s action[%d] jira_transition: missing toStatusId", a.ID, idx)
-		return ActionResult{Kind: "jira_transition", Status: "skipped", Detail: "missing toStatusId"}
+	if action.TicketToStatusID == "" {
+		log.Printf("automation %s action[%d] ticket_transition: missing toStatusId", a.ID, idx)
+		return ActionResult{Kind: "tickets_transition", Status: "skipped", Detail: "missing toStatusId"}
 	}
-	issueKey := fc.JiraIssueKey
-	if action.JiraIssueKey != "" {
-		issueKey = renderTemplate(action.JiraIssueKey, fc.Vars)
+	issueKey := fc.TicketIssueKey
+	if action.TicketIssueKey != "" {
+		issueKey = renderTemplate(action.TicketIssueKey, fc.Vars)
 	}
 	if issueKey == "" {
-		log.Printf("automation %s action[%d] jira_transition: no Jira key resolvable from context", a.ID, idx)
+		log.Printf("automation %s action[%d] ticket_transition: no Ticket key resolvable from context", a.ID, idx)
 		_, _ = automationManager.svc.Notify(NotifyInput{
 			ProjectID:     a.ProjectID,
 			Type:          NotifTypeAutomation,
 			Severity:      SeverityWarning,
-			TitleTemplate: fmt.Sprintf("Automation %q · %s · jira transition skipped (no key)", a.Name, fc.NotifLabel),
+			TitleTemplate: fmt.Sprintf("Automation %q · %s · ticket transition skipped (no key)", a.Name, fc.NotifLabel),
 			Payload:       map[string]any{"automationId": a.ID},
 		})
-		return ActionResult{Kind: "jira_transition", Status: "skipped", Detail: "no Jira key"}
+		return ActionResult{Kind: "tickets_transition", Status: "skipped", Detail: "no Ticket key"}
 	}
-	if fc.JiraCfg == nil {
-		log.Printf("automation %s action[%d] jira_transition: project has no Jira integration configured", a.ID, idx)
+	if fc.TicketCfg == nil {
+		log.Printf("automation %s action[%d] ticket_transition: project has no Ticket integration configured", a.ID, idx)
 		_, _ = automationManager.svc.Notify(NotifyInput{
 			ProjectID:     a.ProjectID,
 			Type:          NotifTypeAutomation,
 			Severity:      SeverityError,
-			TitleTemplate: fmt.Sprintf("Automation %q · %s · jira transition failed (no Jira config)", a.Name, fc.NotifLabel),
+			TitleTemplate: fmt.Sprintf("Automation %q · %s · ticket transition failed (no Ticket config)", a.Name, fc.NotifLabel),
 			Payload:       map[string]any{"automationId": a.ID},
 		})
-		return ActionResult{Kind: "jira_transition", Status: "error", Detail: "no Jira config"}
+		return ActionResult{Kind: "tickets_transition", Status: "error", Detail: "no Ticket config"}
 	}
-	err := tickets.TransitionIssue(*fc.JiraCfg, issueKey, []string{action.JiraToStatusID})
+	err := tickets.TransitionIssue(*fc.TicketCfg, issueKey, []string{action.TicketToStatusID})
 	if err != nil {
 		severity := SeverityError
 		if errors.Is(err, tickets.ErrNoTransition) {
 			severity = SeverityWarning
 		}
-		log.Printf("automation %s action[%d] jira_transition %s: %v", a.ID, idx, issueKey, err)
+		log.Printf("automation %s action[%d] ticket_transition %s: %v", a.ID, idx, issueKey, err)
 		_, _ = automationManager.svc.Notify(NotifyInput{
 			ProjectID:     a.ProjectID,
 			Type:          NotifTypeAutomation,
 			Severity:      severity,
-			TitleTemplate: fmt.Sprintf("Automation %q · %s · jira %s transition failed: %v", a.Name, fc.NotifLabel, issueKey, err),
+			TitleTemplate: fmt.Sprintf("Automation %q · %s · ticket %s transition failed: %v", a.Name, fc.NotifLabel, issueKey, err),
 			Payload:       map[string]any{"automationId": a.ID},
 		})
-		return ActionResult{Kind: "jira_transition", Status: "error", Detail: err.Error()}
+		return ActionResult{Kind: "tickets_transition", Status: "error", Detail: err.Error()}
 	}
 	_, _ = automationManager.svc.Notify(NotifyInput{
 		ProjectID:     a.ProjectID,
@@ -1050,7 +1067,7 @@ func (automationManager *AutomationManager) runJiraTransition(fc fireContext, ac
 		TitleTemplate: fmt.Sprintf("%s · %s · transitioned %s", fc.NotifLabel, a.Name, issueKey),
 		Payload:       map[string]any{"automationId": a.ID},
 	})
-	return ActionResult{Kind: "jira_transition", Status: "ok", Detail: issueKey}
+	return ActionResult{Kind: "tickets_transition", Status: "ok", Detail: issueKey}
 }
 
 func (automationManager *AutomationManager) runNotification(fc fireContext, action AutomationAction, _ int) ActionResult {
@@ -1177,9 +1194,9 @@ func (automationManager *AutomationManager) onSentryDiff(diff sentrystore.Diff) 
 
 func (automationManager *AutomationManager) fireSentryIssue(a Automation, issue sentry.Issue) {
 	fc := fireContext{
-		Automation:   a,
-		JiraIssueKey: extractJiraKey(issue.Title, issue.Culprit),
-		NotifLabel:   fmt.Sprintf("Sentry %s", firstNonEmpty(issue.ShortID, issue.ID)),
+		Automation:     a,
+		TicketIssueKey: extractTicketKey(issue.Title, issue.Culprit),
+		NotifLabel:     fmt.Sprintf("Sentry %s", firstNonEmpty(issue.ShortID, issue.ID)),
 		Vars: map[string]string{
 			"shortId":   issue.ShortID,
 			"title":     issue.Title,
@@ -1189,7 +1206,7 @@ func (automationManager *AutomationManager) fireSentryIssue(a Automation, issue 
 			"permalink": issue.Permalink,
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 
@@ -1257,10 +1274,10 @@ func (automationManager *AutomationManager) onDokployDiff(diff dokploystore.Diff
 
 func (automationManager *AutomationManager) fireDokployDeployment(a Automation, d dokploy.Deployment) {
 	fc := fireContext{
-		Automation:   a,
-		Deployment:   &d,
-		JiraIssueKey: extractJiraKey(d.Title, d.Description),
-		NotifLabel:   fmt.Sprintf("Dokploy %s/%s %s", d.Project, d.Service, d.Status),
+		Automation:     a,
+		Deployment:     &d,
+		TicketIssueKey: extractTicketKey(d.Title, d.Description),
+		NotifLabel:     fmt.Sprintf("Dokploy %s/%s %s", d.Project, d.Service, d.Status),
 		Vars: map[string]string{
 			"project":      d.Project,
 			"service":      d.Service,
@@ -1269,7 +1286,7 @@ func (automationManager *AutomationManager) fireDokployDeployment(a Automation, 
 			"errorMessage": d.ErrorMessage,
 		},
 	}
-	automationManager.attachJiraCfg(&fc)
+	automationManager.attachTicketCfg(&fc)
 	automationManager.runActions(fc)
 }
 

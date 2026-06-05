@@ -1,5 +1,5 @@
 import { type Collection, createCollection } from '@tanstack/db';
-import type { ConnectedJiraConfig } from '@/features/integrations/jira/types';
+import type { ConnectedTicketsConfig } from '@/features/integrations/tickets/types';
 import { FetchTicketsSprint, TransitionTicketsIssue } from '@/wailsjs/go/main/App';
 import { tickets } from '@/wailsjs/go/models';
 
@@ -9,7 +9,7 @@ type SprintMeta = {
   columns: tickets.Column[];
 };
 
-export type JiraStatus = {
+export type TicketsStatus = {
   name: string;
   id: string;
   statusIds: string[];
@@ -19,7 +19,7 @@ type Listener = () => void;
 
 type Entry = {
   collection: Collection<tickets.Issue, string>;
-  statusesCollection: Collection<JiraStatus, string>;
+  statusesCollection: Collection<TicketsStatus, string>;
   meta: SprintMeta | null;
   loading: boolean;
   error: string | null;
@@ -30,12 +30,12 @@ type Entry = {
   subscribe: (l: Listener) => () => void;
 };
 
-function configKey(cfg: ConnectedJiraConfig): string {
+function configKey(cfg: ConnectedTicketsConfig): string {
   return `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}|${cfg.boardId ?? ''}`;
 }
 
-function computeStatuses(sprint: tickets.Sprint): JiraStatus[] {
-  const byName = new Map<string, JiraStatus>();
+function computeStatuses(sprint: tickets.Sprint): TicketsStatus[] {
+  const byName = new Map<string, TicketsStatus>();
   const knownIds = new Set<string>();
 
   for (const issue of sprint.issues ?? []) {
@@ -71,7 +71,7 @@ function computeStatuses(sprint: tickets.Sprint): JiraStatus[] {
 
 const entries = new Map<string, Entry>();
 
-export function getJiraEntry(cfg: ConnectedJiraConfig): Entry {
+export function getTicketsEntry(cfg: ConnectedTicketsConfig): Entry {
   const key = configKey(cfg);
   const existing = entries.get(key);
   if (existing) {
@@ -85,19 +85,19 @@ export function getJiraEntry(cfg: ConnectedJiraConfig): Entry {
     });
   };
   const currentIssues = new Map<string, tickets.Issue>();
-  const currentStatuses = new Map<string, JiraStatus>();
+  const currentStatuses = new Map<string, TicketsStatus>();
 
   let issuesBegin: (() => void) | null = null;
   let issuesWrite: ((op: { type: 'insert' | 'update' | 'delete'; value: tickets.Issue }) => void) | null = null;
   let issuesCommit: (() => void) | null = null;
 
   let statusesBegin: (() => void) | null = null;
-  let statusesWrite: ((op: { type: 'insert' | 'update' | 'delete'; value: JiraStatus }) => void) | null = null;
+  let statusesWrite: ((op: { type: 'insert' | 'update' | 'delete'; value: TicketsStatus }) => void) | null = null;
   let statusesCommit: (() => void) | null = null;
 
   const entry: Entry = {
     collection: null as unknown as Collection<tickets.Issue, string>,
-    statusesCollection: null as unknown as Collection<JiraStatus, string>,
+    statusesCollection: null as unknown as Collection<TicketsStatus, string>,
     meta: null,
     loading: false,
     error: null,
@@ -238,7 +238,7 @@ export function getJiraEntry(cfg: ConnectedJiraConfig): Entry {
   }) as unknown as Collection<tickets.Issue, string>;
 
   entry.statusesCollection = createCollection({
-    getKey: (s: JiraStatus) => s.name,
+    getKey: (s: TicketsStatus) => s.name,
     sync: {
       sync: ({ begin, write, commit, markReady }) => {
         statusesBegin = begin;
@@ -253,7 +253,7 @@ export function getJiraEntry(cfg: ConnectedJiraConfig): Entry {
         };
       },
     },
-  }) as unknown as Collection<JiraStatus, string>;
+  }) as unknown as Collection<TicketsStatus, string>;
 
   entries.set(key, entry);
   return entry;

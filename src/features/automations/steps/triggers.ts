@@ -2,10 +2,10 @@ import { Bug, GitBranch, KanbanSquare, Rocket } from 'lucide-react';
 import type { Automation, AutomationAction, AutomationSource, AutomationTrigger, Project, TriggerKind } from '@/types';
 import type { AutomationForm } from './types';
 
-const AUTOMATABLE_SOURCES: AutomationSource[] = ['jira', 'repository', 'sentry', 'dokploy'];
+const AUTOMATABLE_SOURCES: AutomationSource[] = ['tickets', 'repository', 'sentry', 'dokploy'];
 
 export const SOURCE_ICONS: Record<AutomationSource, typeof GitBranch> = {
-  jira: KanbanSquare,
+  tickets: KanbanSquare,
   repository: GitBranch,
   sentry: Bug,
   dokploy: Rocket,
@@ -19,11 +19,17 @@ type TriggerDef = {
 };
 
 export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
-  'jira.transition': {
-    source: 'jira',
-    defaultTrigger: () => ({ kind: 'jira.transition', fromStatusIds: [], toStatusId: '', assignee: 'me', alsoOnReassignment: false }),
+  'tickets.transition': {
+    source: 'tickets',
+    defaultTrigger: () => ({ kind: 'tickets.transition', fromStatusIds: [], toStatusId: '', assignee: 'me' }),
     defaultTemplate: 'Work on {{key}}: {{summary}}\n\n{{url}}',
     placeholders: ['{{key}}', '{{summary}}', '{{fromStatus}}', '{{toStatus}}', '{{assignee}}', '{{url}}', '{{lastComment}}'],
+  },
+  'tickets.assigned': {
+    source: 'tickets',
+    defaultTrigger: () => ({ kind: 'tickets.assigned', assignee: 'me' }),
+    defaultTemplate: 'Work on {{key}}: {{summary}}\n\n{{url}}',
+    placeholders: ['{{key}}', '{{summary}}', '{{toStatus}}', '{{assignee}}', '{{url}}', '{{lastComment}}'],
   },
   'repository.pr_opened': {
     source: 'repository',
@@ -98,6 +104,9 @@ export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
   },
 };
 
+export const TICKETS_TRIGGER_KINDS = (Object.keys(TRIGGERS) as TriggerKind[]).filter((k) => TRIGGERS[k].source === 'tickets');
+export type TicketsTriggerKind = (typeof TICKETS_TRIGGER_KINDS)[number];
+
 export const REPO_TRIGGER_KINDS = (Object.keys(TRIGGERS) as TriggerKind[]).filter((k) => TRIGGERS[k].source === 'repository');
 export type RepoTriggerKind = (typeof REPO_TRIGGER_KINDS)[number];
 
@@ -105,7 +114,7 @@ export const DOKPLOY_TRIGGER_KINDS = (Object.keys(TRIGGERS) as TriggerKind[]).fi
 export type DokployTriggerKind = (typeof DOKPLOY_TRIGGER_KINDS)[number];
 
 export const DEFAULT_KIND_FOR_SOURCE: Record<AutomationSource, TriggerKind> = {
-  jira: 'jira.transition',
+  tickets: 'tickets.transition',
   repository: 'repository.pr_opened',
   sentry: 'sentry.new_issue',
   dokploy: 'dokploy.deployment_failed',
@@ -129,8 +138,8 @@ export function defaultActionForKind(actionKind: AutomationAction['kind'], taskT
   switch (actionKind) {
     case 'spawn_agent':
       return { kind: 'spawn_agent', agentKind: 'claude-code', model: '', taskTemplate };
-    case 'jira_transition':
-      return { kind: 'jira_transition', jiraToStatusId: '', jiraIssueKey: '' };
+    case 'tickets_transition':
+      return { kind: 'tickets_transition', ticketsToStatusId: '', ticketsIssueKey: '' };
     case 'notification':
       return { kind: 'notification', notifyTitle: '', notifyKind: 'info' };
     case 'send_email':

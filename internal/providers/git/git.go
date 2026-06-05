@@ -1210,7 +1210,7 @@ func PushBranch(worktreePath, branchName string) error {
 	return nil
 }
 
-// BranchNameForIssue produces a stable branch name from a Jira (or generic)
+// BranchNameForIssue produces a stable branch name from a ticket (or generic)
 // ticket. Prefix is derived from issueType so bug/chore/feat are all routed
 // to their conventional buckets. Summary is slugified and capped so the
 // resulting name stays under git's practical 250-char ref limit.

@@ -33,16 +33,16 @@ export function BoardFilters({ filters, assignees, currentUserEmail, onChange, b
       {boardSelector}
       <div className="relative min-w-0 flex-1">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={filters.query} onChange={(e) => onChange({ ...filters, query: e.target.value })} placeholder={t('integrations.jira.searchPlaceholder')} className="pl-9" />
+        <Input value={filters.query} onChange={(e) => onChange({ ...filters, query: e.target.value })} placeholder={t('integrations.tickets.searchPlaceholder')} className="pl-9" />
       </div>
       <Select value={filters.assignee} onValueChange={(value) => onChange({ ...filters, assignee: value })}>
         <SelectTrigger className="w-48">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ASSIGNEE_ALL}>{t('integrations.jira.allAssignees')}</SelectItem>
-          {currentUserEmail && <SelectItem value={ASSIGNEE_ME}>{t('integrations.jira.me')}</SelectItem>}
-          <SelectItem value={ASSIGNEE_UNASSIGNED}>{t('integrations.jira.unassigned')}</SelectItem>
+          <SelectItem value={ASSIGNEE_ALL}>{t('integrations.tickets.allAssignees')}</SelectItem>
+          {currentUserEmail && <SelectItem value={ASSIGNEE_ME}>{t('integrations.tickets.me')}</SelectItem>}
+          <SelectItem value={ASSIGNEE_UNASSIGNED}>{t('integrations.tickets.unassigned')}</SelectItem>
           {assignees.map((a) => (
             <SelectItem key={a} value={a}>
               {a}
@@ -53,7 +53,7 @@ export function BoardFilters({ filters, assignees, currentUserEmail, onChange, b
       {active && (
         <Button variant="ghost" size="sm" onClick={() => onChange({ query: '', assignee: defaultAssignee })}>
           <X className="size-3.5" />
-          {t('integrations.jira.clearFilters')}
+          {t('integrations.tickets.clearFilters')}
         </Button>
       )}
       {columnsMenu}

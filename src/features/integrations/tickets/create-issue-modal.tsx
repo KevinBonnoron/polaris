@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FieldError, isInvalid, validators } from '@/lib/form';
 import { CreateTicketsIssue, ListTicketsIssueTypes } from '@/wailsjs/go/main/App';
 import { tickets } from '@/wailsjs/go/models';
-import type { ConnectedJiraConfig } from './types';
+import type { ConnectedTicketsConfig } from './types';
 
 interface Props {
-  config: ConnectedJiraConfig;
+  config: ConnectedTicketsConfig;
   onCreated: () => void;
 }
 
@@ -22,7 +22,7 @@ interface FormValues {
   typeId: string;
 }
 
-export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithChildren<Props>) {
+export function CreateTicketsIssueModal({ config, onCreated, children }: PropsWithChildren<Props>) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
@@ -36,7 +36,7 @@ export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithC
         const cfg = tickets.Config.createFrom(config);
         const input = tickets.CreateIssueInput.createFrom({ summary: value.summary.trim(), issueTypeId: value.typeId });
         const key = await CreateTicketsIssue(cfg, input);
-        toast.success(t('integrations.jira.created', { key }));
+        toast.success(t('integrations.tickets.created', { key }));
         onCreated();
         setOpen(false);
       } catch (err) {
@@ -74,8 +74,8 @@ export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithC
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="w-[min(95vw,520px)] gap-4">
         <DialogHeader>
-          <DialogTitle>{t('integrations.jira.createTitle')}</DialogTitle>
-          <DialogDescription>{t('integrations.jira.createDesc', { project: config.projectKey })}</DialogDescription>
+          <DialogTitle>{t('integrations.tickets.createTitle')}</DialogTitle>
+          <DialogDescription>{t('integrations.tickets.createDesc', { project: config.projectKey })}</DialogDescription>
         </DialogHeader>
 
         <form
@@ -88,14 +88,14 @@ export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithC
           <form.Field name="summary" validators={{ onChange: validators.required(), onBlur: validators.required() }}>
             {(field) => (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="jira-summary">{t('integrations.jira.summary')}</Label>
+                <Label htmlFor="tickets-summary">{t('integrations.tickets.summary')}</Label>
                 <Input
-                  id="jira-summary"
+                  id="tickets-summary"
                   autoFocus
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                   onBlur={field.handleBlur}
-                  placeholder={t('integrations.jira.summaryPlaceholder')}
+                  placeholder={t('integrations.tickets.summaryPlaceholder')}
                   aria-invalid={isInvalid(field)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -111,7 +111,7 @@ export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithC
           <form.Field name="typeId" validators={{ onChange: validators.required('common.validation.pickOne') }}>
             {(field) => (
               <div className="flex flex-col gap-2">
-                <Label>{t('integrations.jira.issueType')}</Label>
+                <Label>{t('integrations.tickets.issueType')}</Label>
                 <Select value={field.state.value} onValueChange={field.handleChange}>
                   <SelectTrigger aria-invalid={isInvalid(field)}>
                     <SelectValue placeholder={t('integrations.configure.selectPlaceholder')} />
@@ -137,7 +137,7 @@ export function CreateJiraIssueModal({ config, onCreated, children }: PropsWithC
             <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting] as const}>
               {([canSubmit, isSubmitting]) => (
                 <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? t('integrations.jira.creating') : t('integrations.jira.createCta')}
+                  {isSubmitting ? t('integrations.tickets.creating') : t('integrations.tickets.createCta')}
                 </Button>
               )}
             </form.Subscribe>
