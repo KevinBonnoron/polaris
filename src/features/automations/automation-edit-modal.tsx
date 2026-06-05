@@ -82,6 +82,7 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
             email: String(ticketsConfig.email ?? ''),
             token: String(ticketsConfig.token ?? ''),
             projectKey: String(ticketsConfig.projectKey ?? ''),
+            boardId: ticketsConfig.boardId ? Number(ticketsConfig.boardId) : undefined,
           }
         : null,
     [hasTickets, ticketsConfig],

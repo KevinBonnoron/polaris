@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { projectsCollection } from '@/collections/projects.collection';
-import { getIntegrations, withIntegration } from '@/features/integrations/project-integrations';
+import { getIntegrations } from '@/features/integrations/project-integrations';
 import type { Project } from '@/types';
 import type { TicketsConfig } from './types';
 
@@ -19,9 +19,8 @@ export function useTicketsConfig(project: Project | null | undefined): {
       const existing = (getIntegrations(project).tickets ?? {}) as TicketsConfig;
       const draft: TicketsConfig = { ...existing };
       mutator(draft);
-      const nextIntegrations = withIntegration(project, 'tickets', draft as Record<string, unknown>);
       projectsCollection.update(project.id, (d) => {
-        d.integrations = nextIntegrations;
+        d.integrations = { ...(d.integrations ?? {}), tickets: draft as Record<string, unknown> };
       });
     },
     [project],
