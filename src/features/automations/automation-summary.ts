@@ -4,13 +4,11 @@ export function triggerSummary(trigger: AutomationTrigger, statusName?: string, 
   if (trigger.kind === 'tickets.transition') {
     const to = statusName ?? trigger.toStatusId;
     const from = fromNames && fromNames.length > 0 ? fromNames.join(', ') : 'any';
-    const assignee = trigger.assignee === 'me' ? '@me' : trigger.assignee === 'any' ? 'anyone' : `@${trigger.assignee}`;
-    return `${from} → ${to} · ${assignee}`;
+    return `${from} → ${to}`;
   }
 
   if (trigger.kind === 'tickets.assigned') {
-    const assignee = trigger.assignee === 'me' ? '@me' : trigger.assignee === 'any' ? 'anyone' : `@${trigger.assignee}`;
-    return `assigned to ${assignee}`;
+    return 'assigned to me';
   }
 
   if (trigger.kind === 'repository.pr_opened') {
@@ -25,18 +23,15 @@ export function triggerSummary(trigger: AutomationTrigger, statusName?: string, 
   }
 
   if (trigger.kind === 'repository.pr_build_failed') {
-    const scope = trigger.onlyMine === false ? 'any PR' : 'my PRs';
-    return `failed build on ${scope}`;
+    return 'failed build on my PRs';
   }
 
   if (trigger.kind === 'repository.pr_build_success') {
-    const scope = trigger.onlyMine === false ? 'any PR' : 'my PRs';
-    return `successful build on ${scope}`;
+    return 'successful build on my PRs';
   }
 
   if (trigger.kind === 'repository.issue_assigned') {
-    const scope = trigger.onlyMine === false ? 'anyone' : 'me';
-    return `issue assigned to ${scope}`;
+    return 'issue assigned to me';
   }
 
   if (trigger.kind === 'sentry.new_issue') {

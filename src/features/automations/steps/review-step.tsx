@@ -45,11 +45,8 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
                   : t('automations.review.anyStatus')
               }
             />
-            <ReviewRow label={t('automations.assignee')} value={ticketsTransition.assignee || '—'} />
           </>
         )}
-
-        {trigger.kind === 'tickets.assigned' && <ReviewRow label={t('automations.assignee')} value={trigger.assignee || '—'} />}
 
         {trigger.kind === 'repository.pr_opened' && (
           <>
@@ -59,10 +56,6 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
         )}
 
         {trigger.kind === 'repository.pr_comment' && <ReviewRow label="" value={trigger.excludeOwnComments !== false ? t('automations.excludeOwnComments') : t('automations.review.includeOwnComments')} />}
-
-        {trigger.kind === 'repository.pr_build_failed' && <ReviewRow label="" value={trigger.onlyMine !== false ? t('automations.buildFailedOnlyMine') : t('automations.review.anyPr')} />}
-        {trigger.kind === 'repository.pr_build_success' && <ReviewRow label="" value={trigger.onlyMine !== false ? t('automations.buildFailedOnlyMine') : t('automations.review.anyPr')} />}
-        {trigger.kind === 'repository.issue_assigned' && <ReviewRow label="" value={trigger.onlyMine !== false ? t('automations.issueAssignedOnlyMine') : t('automations.review.anyAssignee')} />}
       </dl>
 
       <div className="flex flex-col gap-2">

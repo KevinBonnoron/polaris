@@ -224,6 +224,11 @@ func (store *Store) migrate() error {
 		`UPDATE automations SET actionsJson = replace(actionsJson, '"kind":"jira_transition"', '"kind":"tickets_transition"') WHERE actionsJson LIKE '%jira_transition%'`,
 		`UPDATE automations SET actionsJson = replace(actionsJson, '"jiraToStatusId"', '"ticketsToStatusId"') WHERE actionsJson LIKE '%jiraToStatusId%'`,
 		`UPDATE automations SET actionsJson = replace(actionsJson, '"jiraIssueKey"', '"ticketsIssueKey"') WHERE actionsJson LIKE '%jiraIssueKey%'`,
+		// Trigger assignee/onlyMine filters were dropped: tickets and repository
+		// automations now always act on the current user's items. Strip the now
+		// meaningless keys from stored triggers.
+		`UPDATE automations SET triggerJson = json_remove(triggerJson, '$.assignee') WHERE json_extract(triggerJson, '$.assignee') IS NOT NULL`,
+		`UPDATE automations SET triggerJson = json_remove(triggerJson, '$.onlyMine') WHERE json_extract(triggerJson, '$.onlyMine') IS NOT NULL`,
 	}
 	for _, q := range additiveCurrent {
 		if _, err := store.db.ExecContext(ctx, q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {

@@ -112,12 +112,10 @@ export type TicketsTransitionTrigger = {
   kind: 'tickets.transition';
   fromStatusIds?: string[];
   toStatusId: string;
-  assignee: 'me' | 'any' | string;
 };
 
 export type TicketsAssignedTrigger = {
   kind: 'tickets.assigned';
-  assignee: 'me' | 'any' | string;
 };
 
 export type RepositoryPullRequestOpenedTrigger = {
@@ -133,17 +131,14 @@ export type RepositoryPullRequestCommentTrigger = {
 
 export type RepositoryPullRequestBuildFailedTrigger = {
   kind: 'repository.pr_build_failed';
-  onlyMine?: boolean;
 };
 
 export type RepositoryPullRequestBuildSuccessTrigger = {
   kind: 'repository.pr_build_success';
-  onlyMine?: boolean;
 };
 
 export type RepositoryIssueAssignedTrigger = {
   kind: 'repository.issue_assigned';
-  onlyMine?: boolean;
 };
 
 export type SentryNewIssueTrigger = {
