@@ -7,5 +7,5 @@ import type { Project } from '@/types';
  */
 export function projectHasAutomatable(project: Project): boolean {
   const integrations = project.integrations ?? {};
-  return Object.hasOwn(integrations, 'jira') || Object.hasOwn(integrations, 'repository') || Object.hasOwn(integrations, 'sentry') || Object.hasOwn(integrations, 'dokploy');
+  return Object.hasOwn(integrations, 'tickets') || Object.hasOwn(integrations, 'repository') || Object.hasOwn(integrations, 'sentry') || Object.hasOwn(integrations, 'dokploy');
 }

@@ -104,16 +104,20 @@ export type CustomProvider = {
   models: string[];
 };
 
-export type AutomationSource = 'jira' | 'repository' | 'sentry' | 'dokploy';
+export type AutomationSource = 'tickets' | 'repository' | 'sentry' | 'dokploy';
 
 export type SentryLevel = 'warning' | 'error' | 'fatal';
 
-export type JiraTransitionTrigger = {
-  kind: 'jira.transition';
+export type TicketsTransitionTrigger = {
+  kind: 'tickets.transition';
   fromStatusIds?: string[];
   toStatusId: string;
   assignee: 'me' | 'any' | string;
-  alsoOnReassignment?: boolean;
+};
+
+export type TicketsAssignedTrigger = {
+  kind: 'tickets.assigned';
+  assignee: 'me' | 'any' | string;
 };
 
 export type RepositoryPullRequestOpenedTrigger = {
@@ -156,7 +160,8 @@ export type DokployDeploymentSucceededTrigger = {
 };
 
 export type AutomationTrigger =
-  | JiraTransitionTrigger
+  | TicketsTransitionTrigger
+  | TicketsAssignedTrigger
   | RepositoryPullRequestOpenedTrigger
   | RepositoryPullRequestCommentTrigger
   | RepositoryPullRequestBuildFailedTrigger
@@ -168,7 +173,7 @@ export type AutomationTrigger =
 
 export type TriggerKind = AutomationTrigger['kind'];
 
-export type ActionKind = 'spawn_agent' | 'jira_transition' | 'notification' | 'send_email' | 'send_message';
+export type ActionKind = 'spawn_agent' | 'tickets_transition' | 'notification' | 'send_email' | 'send_message';
 
 export type SpawnAgentAction = {
   kind: 'spawn_agent';
@@ -177,10 +182,10 @@ export type SpawnAgentAction = {
   taskTemplate: string;
 };
 
-export type JiraTransitionAction = {
-  kind: 'jira_transition';
-  jiraToStatusId: string;
-  jiraIssueKey?: string;
+export type TicketsTransitionAction = {
+  kind: 'tickets_transition';
+  ticketsToStatusId: string;
+  ticketsIssueKey?: string;
 };
 
 export type NotificationAction = {
@@ -203,7 +208,7 @@ export type SendMessageAction = {
   messageBody?: string;
 };
 
-export type AutomationAction = SpawnAgentAction | JiraTransitionAction | NotificationAction | SendEmailAction | SendMessageAction;
+export type AutomationAction = SpawnAgentAction | TicketsTransitionAction | NotificationAction | SendEmailAction | SendMessageAction;
 
 export type Automation = {
   id: string;

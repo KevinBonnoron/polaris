@@ -22,7 +22,7 @@ import { DetectTerminals, OpenTerminal } from '@/wailsjs/go/main/App';
 import type { terminal } from '@/wailsjs/go/models';
 
 const INTEGRATION_ROUTES: Record<string, string> = {
-  jira: '/jira',
+  tickets: '/tickets',
   repository: '/repository',
   nodejs: '/nodejs',
   python: '/python',
@@ -91,8 +91,12 @@ export function CommandPalette({ open, onOpenChange }: Props) {
 
   const connected = getIntegrations(currentProject);
   const integrationNav = INTEGRATIONS.filter((i) => {
-    if (!INTEGRATION_ROUTES[i.id]) { return false; }
-    if (i.id === 'repository') { return currentProject?.hasGit === true; }
+    if (!INTEGRATION_ROUTES[i.id]) {
+      return false;
+    }
+    if (i.id === 'repository') {
+      return currentProject?.hasGit === true;
+    }
     return Object.hasOwn(connected, i.id);
   });
   const hasAutomatable = projects.some(projectHasAutomatable);

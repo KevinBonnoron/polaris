@@ -1,23 +1,23 @@
 import { useTranslation } from 'react-i18next';
-import type { JiraStatus } from '@/collections/jira.issues.collection';
+import type { TicketsStatus } from '@/collections/tickets.issues.collection';
 import { Label } from '@/components/ui/label';
 import type { useAgentClis } from '@/state/agent-clis';
-import type { Automation, JiraTransitionTrigger } from '@/types';
+import type { Automation, TicketsTransitionTrigger } from '@/types';
 
 type AgentKindInfo = ReturnType<typeof useAgentClis>['kinds'][number];
 
 interface Props {
   values: Automation;
   agentKinds: AgentKindInfo[];
-  statuses: JiraStatus[];
+  statuses: TicketsStatus[];
 }
 
 export function ReviewStep({ values, agentKinds, statuses }: Props) {
   const { t } = useTranslation();
 
   const trigger = values.trigger;
-  const jiraTrigger: JiraTransitionTrigger | null = trigger.kind === 'jira.transition' ? trigger : null;
-  const triggerLabel = trigger.kind === 'jira.transition' ? t('automations.review.triggerJira') : t(`automations.repoTriggerKinds.${trigger.kind}`);
+  const ticketsTransition: TicketsTransitionTrigger | null = trigger.kind === 'tickets.transition' ? trigger : null;
+  const triggerLabel = trigger.kind === 'tickets.transition' || trigger.kind === 'tickets.assigned' ? t(`automations.ticketsTriggerKinds.${trigger.kind}`) : t(`automations.repoTriggerKinds.${trigger.kind}`);
 
   return (
     <div className="flex flex-col gap-3">
@@ -31,24 +31,25 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
         <ReviewRow label={t('automations.integration')} value={t(`automations.sources.${values.source}`)} />
         <ReviewRow label={t('automations.review.trigger')} value={triggerLabel} />
 
-        {jiraTrigger && (
+        {ticketsTransition && (
           <>
-            <ReviewRow label={t('automations.toStatus')} value={statuses.find((s) => s.statusIds.includes(jiraTrigger.toStatusId))?.name ?? jiraTrigger.toStatusId ?? '—'} />
+            <ReviewRow label={t('automations.toStatus')} value={statuses.find((s) => s.statusIds.includes(ticketsTransition.toStatusId))?.name ?? ticketsTransition.toStatusId ?? '—'} />
             <ReviewRow
               label={t('automations.fromStatus')}
               value={
-                jiraTrigger.fromStatusIds && jiraTrigger.fromStatusIds.length > 0
+                ticketsTransition.fromStatusIds && ticketsTransition.fromStatusIds.length > 0
                   ? statuses
-                      .filter((s) => s.statusIds.some((id) => jiraTrigger.fromStatusIds?.includes(id)))
+                      .filter((s) => s.statusIds.some((id) => ticketsTransition.fromStatusIds?.includes(id)))
                       .map((s) => s.name)
-                      .join(', ') || jiraTrigger.fromStatusIds.join(', ')
+                      .join(', ') || ticketsTransition.fromStatusIds.join(', ')
                   : t('automations.review.anyStatus')
               }
             />
-            <ReviewRow label={t('automations.assignee')} value={jiraTrigger.assignee || '—'} />
-            {jiraTrigger.alsoOnReassignment && <ReviewRow label="" value={t('automations.alsoOnReassignment')} />}
+            <ReviewRow label={t('automations.assignee')} value={ticketsTransition.assignee || '—'} />
           </>
         )}
+
+        {trigger.kind === 'tickets.assigned' && <ReviewRow label={t('automations.assignee')} value={trigger.assignee || '—'} />}
 
         {trigger.kind === 'repository.pr_opened' && (
           <>
@@ -77,7 +78,7 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
   );
 }
 
-function ActionReview({ index, action, agentKinds, statuses }: { index: number; action: Automation['actions'][number]; agentKinds: AgentKindInfo[]; statuses: JiraStatus[] }) {
+function ActionReview({ index, action, agentKinds, statuses }: { index: number; action: Automation['actions'][number]; agentKinds: AgentKindInfo[]; statuses: TicketsStatus[] }) {
   const { t } = useTranslation();
   if (action.kind === 'spawn_agent') {
     const agent = agentKinds.find((k) => k.id === action.agentKind);
@@ -92,14 +93,14 @@ function ActionReview({ index, action, agentKinds, statuses }: { index: number; 
       </div>
     );
   }
-  if (action.kind === 'jira_transition') {
-    const statusName = statuses.find((s) => s.statusIds.includes(action.jiraToStatusId))?.name ?? action.jiraToStatusId;
+  if (action.kind === 'tickets_transition') {
+    const statusName = statuses.find((s) => s.statusIds.includes(action.ticketsToStatusId))?.name ?? action.ticketsToStatusId;
     return (
       <div className="rounded-md border bg-muted/20 px-3 py-2">
         <div className="text-xs font-medium">
-          #{index + 1} · {t('automations.actions.kinds.jira_transition')} → {statusName}
+          #{index + 1} · {t('automations.actions.kinds.tickets_transition')} → {statusName}
         </div>
-        {action.jiraIssueKey && <div className="mt-1 font-mono text-[11px] text-muted-foreground">{action.jiraIssueKey}</div>}
+        {action.ticketsIssueKey && <div className="mt-1 font-mono text-[11px] text-muted-foreground">{action.ticketsIssueKey}</div>}
       </div>
     );
   }

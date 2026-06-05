@@ -8,7 +8,7 @@ import { projectsCollection } from '@/collections/projects.collection';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useJiraStatuses } from '@/features/integrations/jira/use-jira-sprint';
+import { useTicketsStatuses } from '@/features/integrations/tickets/use-tickets-sprint';
 import { useAgentClis } from '@/state/agent-clis';
 import type { AutomationSource, Project } from '@/types';
 import { ActionsStep } from './steps/actions-step';
@@ -19,7 +19,7 @@ import { TriggerStep } from './steps/trigger-step';
 import { buildDefaultAutomation, projectIntegrations } from './steps/triggers';
 import type { AutomationForm, Step } from './steps/types';
 
-type JiraCfg = NonNullable<NonNullable<Project['integrations']>['jira']>;
+type TicketsCfg = NonNullable<NonNullable<Project['integrations']>['tickets']>;
 
 interface Props {
   automationId?: string;
@@ -39,7 +39,7 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
   const projectId = existing?.projectId ?? payloadProjectId ?? '';
   const project = projects.find((p) => p.id === projectId) ?? null;
   const availableSources = useMemo(() => projectIntegrations(project), [project]);
-  const initialSource = payloadSource ?? availableSources[0] ?? 'jira';
+  const initialSource = payloadSource ?? availableSources[0] ?? 'tickets';
 
   const close = () => setOpen(false);
 
@@ -67,8 +67,8 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
     }
   }, [existing, form]);
 
-  const jiraConfig: JiraCfg | null = (project?.integrations?.jira as JiraCfg | undefined) ?? null;
-  const hasJira = Boolean(jiraConfig?.baseUrl && jiraConfig.email && jiraConfig.token && jiraConfig.projectKey);
+  const ticketsConfig: TicketsCfg | null = (project?.integrations?.tickets as TicketsCfg | undefined) ?? null;
+  const hasTickets = Boolean(ticketsConfig?.baseUrl && ticketsConfig.email && ticketsConfig.token && ticketsConfig.projectKey);
   const resendConfig = project?.integrations?.resend as { apiKey?: string; fromEmail?: string } | undefined;
   const hasResend = Boolean(resendConfig?.apiKey && resendConfig?.fromEmail);
   const messagingProviders = (['slack', 'discord', 'telegram'] as const).filter((p) => Boolean(project?.integrations?.[p]));
@@ -78,17 +78,17 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
 
   const statusesCfg = useMemo(
     () =>
-      hasJira && currentSource === 'jira' && jiraConfig
+      hasTickets && currentSource === 'tickets' && ticketsConfig
         ? {
-            baseUrl: String(jiraConfig.baseUrl ?? ''),
-            email: String(jiraConfig.email ?? ''),
-            token: String(jiraConfig.token ?? ''),
-            projectKey: String(jiraConfig.projectKey ?? ''),
+            baseUrl: String(ticketsConfig.baseUrl ?? ''),
+            email: String(ticketsConfig.email ?? ''),
+            token: String(ticketsConfig.token ?? ''),
+            projectKey: String(ticketsConfig.projectKey ?? ''),
           }
         : null,
-    [hasJira, currentSource, jiraConfig],
+    [hasTickets, currentSource, ticketsConfig],
   );
-  const { statuses, loading: statusesLoading, error: statusError } = useJiraStatuses(statusesCfg);
+  const { statuses, loading: statusesLoading, error: statusError } = useTicketsStatuses(statusesCfg);
 
   const isCreating = !existing;
   const [step, setStep] = useState<Step>(1);
@@ -96,10 +96,10 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
   const stepValid = useStore(form.store, (state) => {
     const v = state.values;
     if (step === 1) {
-      return v.name.trim().length > 0 && Boolean(v.source) && availableSources.includes(v.source) && (v.source !== 'jira' || hasJira);
+      return v.name.trim().length > 0 && Boolean(v.source) && availableSources.includes(v.source) && (v.source !== 'tickets' || hasTickets);
     }
     if (step === 2) {
-      if (v.trigger.kind === 'jira.transition' && !v.trigger.toStatusId) {
+      if (v.trigger.kind === 'tickets.transition' && !v.trigger.toStatusId) {
         return false;
       }
       return true;
@@ -112,7 +112,7 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
         if (action.kind === 'spawn_agent' && (!action.agentKind || !action.taskTemplate?.trim())) {
           return false;
         }
-        if (action.kind === 'jira_transition' && !action.jiraToStatusId) {
+        if (action.kind === 'tickets_transition' && !action.ticketsToStatusId) {
           return false;
         }
         if (action.kind === 'notification' && !action.notifyTitle?.trim()) {
@@ -177,16 +177,16 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
           <ScrollArea className="-mr-3 max-h-[70vh] pr-3">
             {isCreating ? (
               <>
-                {step === 1 && <SetupStep form={form} availableSources={availableSources} hasJira={hasJira} />}
-                {step === 2 && <TriggerStep form={form} hasJira={hasJira} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />}
-                {step === 3 && <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasJiraIntegration={hasJira} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />}
+                {step === 1 && <SetupStep form={form} availableSources={availableSources} hasTickets={hasTickets} />}
+                {step === 2 && <TriggerStep form={form} hasTickets={hasTickets} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />}
+                {step === 3 && <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />}
                 {step === 4 && <form.Subscribe selector={(state) => state.values}>{(values) => <ReviewStep values={values} agentKinds={agentKinds} statuses={statuses} />}</form.Subscribe>}
               </>
             ) : (
               <div className="flex flex-col gap-4">
-                <SetupStep form={form} availableSources={availableSources} hasJira={hasJira} />
-                <TriggerStep form={form} hasJira={hasJira} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />
-                <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasJiraIntegration={hasJira} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />
+                <SetupStep form={form} availableSources={availableSources} hasTickets={hasTickets} />
+                <TriggerStep form={form} hasTickets={hasTickets} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />
+                <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />
               </div>
             )}
           </ScrollArea>

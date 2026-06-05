@@ -1,7 +1,7 @@
 // Package dokploystore caches recent deployments for a Dokploy (instance,
 // project-filter) tuple and emits diffs when deployments reach a terminal
 // state. Multiple polaris projects watching the same instance + filter share a
-// single poll loop, mirroring ghstore / jirastore / sentrystore.
+// single poll loop, mirroring ghstore / ticketsstore / sentrystore.
 package dokploystore
 
 import (

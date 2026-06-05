@@ -1,33 +1,45 @@
 import { useTranslation } from 'react-i18next';
-import type { JiraStatus } from '@/collections/jira.issues.collection';
+import type { TicketsStatus } from '@/collections/tickets.issues.collection';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { FieldError, isInvalid } from '@/lib/form';
-import type { AutomationTrigger, JiraTransitionTrigger, RepositoryIssueAssignedTrigger, RepositoryPullRequestBuildFailedTrigger, RepositoryPullRequestBuildSuccessTrigger, RepositoryPullRequestCommentTrigger, RepositoryPullRequestOpenedTrigger, SentryLevel, SentryNewIssueTrigger } from '@/types';
-import { applyTriggerKind, DOKPLOY_TRIGGER_KINDS, type DokployTriggerKind, REPO_TRIGGER_KINDS, type RepoTriggerKind } from './triggers';
+import type {
+  AutomationTrigger,
+  RepositoryIssueAssignedTrigger,
+  RepositoryPullRequestBuildFailedTrigger,
+  RepositoryPullRequestBuildSuccessTrigger,
+  RepositoryPullRequestCommentTrigger,
+  RepositoryPullRequestOpenedTrigger,
+  SentryLevel,
+  SentryNewIssueTrigger,
+  TicketsAssignedTrigger,
+  TicketsTransitionTrigger,
+} from '@/types';
+import { applyTriggerKind, DOKPLOY_TRIGGER_KINDS, type DokployTriggerKind, REPO_TRIGGER_KINDS, type RepoTriggerKind, TICKETS_TRIGGER_KINDS, type TicketsTriggerKind } from './triggers';
 import type { AutomationForm } from './types';
 
 const SENTRY_LEVELS: SentryLevel[] = ['warning', 'error', 'fatal'];
 
 interface Props {
   form: AutomationForm;
-  hasJira: boolean;
-  statuses: JiraStatus[];
+  hasTickets: boolean;
+  statuses: TicketsStatus[];
   statusesLoading: boolean;
   statusError: string | null;
 }
 
-export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusError }: Props) {
+export function TriggerStep({ form, hasTickets, statuses, statusesLoading, statusError }: Props) {
   const { t } = useTranslation();
 
+  const switchTicketsTriggerKind = (kind: TicketsTriggerKind) => applyTriggerKind(form, kind);
   const switchRepoTriggerKind = (kind: RepoTriggerKind) => applyTriggerKind(form, kind);
   const switchDokployTriggerKind = (kind: DokployTriggerKind) => applyTriggerKind(form, kind);
 
   const toggleFromStatus = (ids: string[]) => {
     const trigger = form.state.values.trigger;
-    if (trigger.kind !== 'jira.transition') {
+    if (trigger.kind !== 'tickets.transition') {
       return;
     }
 
@@ -41,7 +53,8 @@ export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusEr
   return (
     <form.Subscribe selector={(state) => state.values}>
       {(values) => {
-        const jiraTrigger: JiraTransitionTrigger | null = values.trigger.kind === 'jira.transition' ? (values.trigger as JiraTransitionTrigger) : null;
+        const ticketsTransitionTrigger: TicketsTransitionTrigger | null = values.trigger.kind === 'tickets.transition' ? (values.trigger as TicketsTransitionTrigger) : null;
+        const ticketsAssignedTrigger: TicketsAssignedTrigger | null = values.trigger.kind === 'tickets.assigned' ? (values.trigger as TicketsAssignedTrigger) : null;
         const repoOpenedTrigger: RepositoryPullRequestOpenedTrigger | null = values.trigger.kind === 'repository.pr_opened' ? (values.trigger as RepositoryPullRequestOpenedTrigger) : null;
         const repoCommentTrigger: RepositoryPullRequestCommentTrigger | null = values.trigger.kind === 'repository.pr_comment' ? (values.trigger as RepositoryPullRequestCommentTrigger) : null;
         const repoBuildFailedTrigger: RepositoryPullRequestBuildFailedTrigger | null = values.trigger.kind === 'repository.pr_build_failed' ? (values.trigger as RepositoryPullRequestBuildFailedTrigger) : null;
@@ -51,13 +64,29 @@ export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusEr
 
         return (
           <div className="flex flex-col gap-4">
-            {jiraTrigger && hasJira && (
+            {values.source === 'tickets' && hasTickets && (
+              <div className="flex flex-col gap-2">
+                <Label>{t('automations.ticketsTriggerKind')}</Label>
+                <div className="flex flex-wrap gap-2">
+                  {TICKETS_TRIGGER_KINDS.map((k) => {
+                    const active = values.trigger.kind === k;
+                    return (
+                      <button key={k} type="button" onClick={() => switchTicketsTriggerKind(k)} className={`rounded-md border px-3 py-1.5 text-sm transition ${active ? 'border-blue-500 bg-blue-500/10 text-blue-200' : 'border-border text-muted-foreground hover:bg-accent'}`}>
+                        {t(`automations.ticketsTriggerKinds.${k}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {ticketsTransitionTrigger && hasTickets && (
               <>
                 <form.Field
                   name="trigger"
                   validators={{
                     onChange: ({ value }: { value: AutomationTrigger }) => {
-                      if (value.kind === 'jira.transition' && !value.toStatusId) {
+                      if (value.kind === 'tickets.transition' && !value.toStatusId) {
                         return t('automations.errors.missingTo');
                       }
                       return undefined;
@@ -67,7 +96,7 @@ export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusEr
                   {(field) => (
                     <div className="flex flex-col gap-2">
                       <Label>{t('automations.toStatus')}</Label>
-                      <Select value={jiraTrigger.toStatusId} onValueChange={(v) => field.handleChange({ ...jiraTrigger, toStatusId: v })} disabled={statusesLoading && statuses.length === 0}>
+                      <Select value={ticketsTransitionTrigger.toStatusId} onValueChange={(v) => field.handleChange({ ...ticketsTransitionTrigger, toStatusId: v })} disabled={statusesLoading && statuses.length === 0}>
                         <SelectTrigger aria-invalid={isInvalid(field)}>
                           <SelectValue placeholder={statusesLoading && statuses.length === 0 ? t('automations.statusesLoading') : t('automations.toStatusPlaceholder')} />
                         </SelectTrigger>
@@ -90,7 +119,7 @@ export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusEr
                   <p className="text-xs text-muted-foreground">{t('automations.fromStatusHint')}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {statuses.map((s) => {
-                      const active = s.statusIds.some((id: string) => jiraTrigger.fromStatusIds?.includes(id));
+                      const active = s.statusIds.some((id: string) => ticketsTransitionTrigger.fromStatusIds?.includes(id));
                       return (
                         <button key={s.name} type="button" onClick={() => toggleFromStatus(s.statusIds)} className={`rounded-full border px-2.5 py-1 text-xs ${active ? 'border-blue-500 bg-blue-500/10 text-blue-300' : 'border-border text-muted-foreground hover:bg-accent'}`}>
                           {s.name}
@@ -102,15 +131,18 @@ export function TriggerStep({ form, hasJira, statuses, statusesLoading, statusEr
 
                 <div className="flex flex-col gap-2">
                   <Label>{t('automations.assignee')}</Label>
-                  <Input value={jiraTrigger.assignee} onChange={(e) => form.setFieldValue('trigger', { ...jiraTrigger, assignee: e.target.value })} placeholder={t('automations.assigneePlaceholder')} />
+                  <Input value={ticketsTransitionTrigger.assignee} onChange={(e) => form.setFieldValue('trigger', { ...ticketsTransitionTrigger, assignee: e.target.value })} placeholder={t('automations.assigneePlaceholder')} />
                   <p className="text-xs text-muted-foreground">{t('automations.assigneeHint')}</p>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <Switch checked={Boolean(jiraTrigger.alsoOnReassignment)} onCheckedChange={(v) => form.setFieldValue('trigger', { ...jiraTrigger, alsoOnReassignment: v })} />
-                  <span className="text-sm">{t('automations.alsoOnReassignment')}</span>
-                </div>
               </>
+            )}
+
+            {ticketsAssignedTrigger && hasTickets && (
+              <div className="flex flex-col gap-2">
+                <Label>{t('automations.assignee')}</Label>
+                <Input value={ticketsAssignedTrigger.assignee} onChange={(e) => form.setFieldValue('trigger', { ...ticketsAssignedTrigger, assignee: e.target.value })} placeholder={t('automations.assigneePlaceholder')} />
+                <p className="text-xs text-muted-foreground">{t('automations.assignedHint')}</p>
+              </div>
             )}
 
             {values.source === 'repository' && (

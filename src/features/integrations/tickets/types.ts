@@ -1,6 +1,6 @@
 import type { tickets } from '@/wailsjs/go/models';
 
-export type JiraConfig = {
+export type TicketsConfig = {
   baseUrl?: string;
   email?: string;
   token?: string;
@@ -9,7 +9,7 @@ export type JiraConfig = {
   hiddenColumnsByBoard?: Record<string, string[]>;
 };
 
-export type ConnectedJiraConfig = {
+export type ConnectedTicketsConfig = {
   baseUrl: string;
   email: string;
   token: string;

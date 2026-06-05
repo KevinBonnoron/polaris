@@ -1,10 +1,10 @@
 import { createCollection } from '@tanstack/db';
 import { useLiveQuery } from '@tanstack/react-db';
 import { useEffect, useState } from 'react';
-import { getJiraEntry, type JiraStatus } from '@/collections/jira.issues.collection';
+import { getTicketsEntry, type TicketsStatus } from '@/collections/tickets.issues.collection';
 import { ListTicketsBoards } from '@/wailsjs/go/main/App';
 import { tickets } from '@/wailsjs/go/models';
-import type { ConnectedJiraConfig, Issue, Sprint } from './types';
+import type { ConnectedTicketsConfig, Issue, Sprint } from './types';
 
 export type SprintView = {
   issues: Issue[];
@@ -16,8 +16,8 @@ export type SprintView = {
   transition: (issueKey: string, targetStatusIds: string[]) => Promise<void>;
 };
 
-export function useJiraSprint(cfg: ConnectedJiraConfig): SprintView {
-  const entry = getJiraEntry(cfg);
+export function useTicketsSprint(cfg: ConnectedTicketsConfig): SprintView {
+  const entry = getTicketsEntry(cfg);
 
   // Subscribe to meta/loading/error/pending changes that live outside the collection.
   const [, setTick] = useState(0);
@@ -36,7 +36,7 @@ export function useJiraSprint(cfg: ConnectedJiraConfig): SprintView {
   };
 }
 
-const emptyStatusesCollection = createCollection<JiraStatus, string>({
+const emptyStatusesCollection = createCollection<TicketsStatus, string>({
   getKey: (s) => s.name,
   sync: {
     sync: ({ markReady }) => {
@@ -47,7 +47,7 @@ const emptyStatusesCollection = createCollection<JiraStatus, string>({
 });
 
 export type StatusesView = {
-  statuses: JiraStatus[];
+  statuses: TicketsStatus[];
   loading: boolean;
   error: string | null;
 };
@@ -94,12 +94,12 @@ function fetchBoards(cfg: { baseUrl: string; email: string; token: string; proje
   return p;
 }
 
-export function useJiraBoards(cfg: { baseUrl?: string; email?: string; token?: string; projectKey?: string } | null): {
+export function useTicketsBoards(cfg: { baseUrl?: string; email?: string; token?: string; projectKey?: string } | null): {
   boards: BoardOption[];
   loading: boolean;
   error: string | null;
 } {
-  const key = cfg?.baseUrl && cfg.email && cfg.token && cfg.projectKey ? `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}` : null;
+  const key = cfg?.baseUrl && cfg.email && cfg.token && cfg.projectKey ? `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}|${cfg.token}` : null;
 
   const [, setTick] = useState(0);
 
@@ -131,8 +131,8 @@ export function useJiraBoards(cfg: { baseUrl?: string; email?: string; token?: s
   };
 }
 
-export function useJiraStatuses(cfg: ConnectedJiraConfig | null): StatusesView {
-  const entry = cfg ? getJiraEntry(cfg) : null;
+export function useTicketsStatuses(cfg: ConnectedTicketsConfig | null): StatusesView {
+  const entry = cfg ? getTicketsEntry(cfg) : null;
 
   const [, setTick] = useState(0);
   useEffect(() => entry?.subscribe(() => setTick((t) => t + 1)), [entry]);

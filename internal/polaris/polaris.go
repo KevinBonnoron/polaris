@@ -76,7 +76,7 @@ type Agent struct {
 	FilesModified int        `json:"filesModified"`
 	ToolsUsed     int        `json:"toolsUsed"`
 	// Worktree carries the git-isolation details when the agent runs on a
-	// dedicated branch inside its own worktree (Jira-triggered or manually
+	// dedicated branch inside its own worktree (ticket-triggered or manually
 	// isolated spawns). Zero value when the agent worked in the project root.
 	Worktree Worktree `json:"worktree"`
 	// PendingQuestion holds an unanswered AskUserQuestion tool call. Persisted
@@ -123,15 +123,15 @@ type DayStat struct {
 }
 
 type KindStat struct {
-	Kind     string  `json:"kind"`
-	Sessions int     `json:"sessions"`
-	Tokens   int64   `json:"tokens"`
+	Kind     string `json:"kind"`
+	Sessions int    `json:"sessions"`
+	Tokens   int64  `json:"tokens"`
 }
 
 type ModelStat struct {
-	Model    string  `json:"model"`
-	Sessions int     `json:"sessions"`
-	Tokens   int64   `json:"tokens"`
+	Model    string `json:"model"`
+	Sessions int    `json:"sessions"`
+	Tokens   int64  `json:"tokens"`
 }
 
 type DashboardStats struct {
@@ -373,11 +373,9 @@ type AutomationTrigger struct {
 	FromStatusIDs []string `json:"fromStatusIds,omitempty"`
 	// ToStatusID is the destination status (required for tickets.transition).
 	ToStatusID string `json:"toStatusId,omitempty"`
-	// Assignee filter: "me" / "any" / specific displayName.
+	// Assignee filter: "me" / "any" / specific displayName. Used by both
+	// tickets.transition and tickets.assigned.
 	Assignee string `json:"assignee,omitempty"`
-	// AlsoOnReassignment fires even when the status didn't change, as long as
-	// the assignee just became the configured one.
-	AlsoOnReassignment bool `json:"alsoOnReassignment,omitempty"`
 	// IncludeDrafts, when true, lets repository.pr_opened fire for draft PRs.
 	IncludeDrafts bool `json:"includeDrafts,omitempty"`
 	// AuthorFilter restricts repository.pr_opened to a specific GitHub login.
@@ -399,7 +397,7 @@ type AutomationTrigger struct {
 // when the trigger fires. Multiple actions execute in declaration order; a
 // failing action only logs and does not halt the chain.
 type AutomationAction struct {
-	// Kind is one of: "spawn_agent", "jira_transition", "notification", "send_email", "send_message".
+	// Kind is one of: "spawn_agent", "tickets_transition", "notification", "send_email", "send_message".
 	Kind string `json:"kind"`
 
 	// spawn_agent fields
@@ -407,11 +405,11 @@ type AutomationAction struct {
 	Model        string `json:"model,omitempty"`
 	TaskTemplate string `json:"taskTemplate,omitempty"`
 
-	// jira_transition fields. JiraIssueKey is a template (e.g. "{{key}}");
+	// tickets_transition fields. TicketIssueKey is a template (e.g. "{{key}}");
 	// empty means "use the issue key from the trigger context", which for
 	// repository triggers is auto-extracted from the branch or PR title.
-	JiraIssueKey   string `json:"jiraIssueKey,omitempty"`
-	JiraToStatusID string `json:"jiraToStatusId,omitempty"`
+	TicketIssueKey   string `json:"ticketsIssueKey,omitempty"`
+	TicketToStatusID string `json:"ticketsToStatusId,omitempty"`
 
 	// notification fields
 	NotifyTitle string `json:"notifyTitle,omitempty"` // template

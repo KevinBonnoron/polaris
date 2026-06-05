@@ -1,12 +1,16 @@
 import type { Automation, AutomationTrigger } from '@/types';
 
 export function triggerSummary(trigger: AutomationTrigger, statusName?: string, fromNames?: string[]): string {
-  if (trigger.kind === 'jira.transition') {
+  if (trigger.kind === 'tickets.transition') {
     const to = statusName ?? trigger.toStatusId;
     const from = fromNames && fromNames.length > 0 ? fromNames.join(', ') : 'any';
     const assignee = trigger.assignee === 'me' ? '@me' : trigger.assignee === 'any' ? 'anyone' : `@${trigger.assignee}`;
-    const reassign = trigger.alsoOnReassignment ? ' · also on reassignment' : '';
-    return `${from} → ${to} · ${assignee}${reassign}`;
+    return `${from} → ${to} · ${assignee}`;
+  }
+
+  if (trigger.kind === 'tickets.assigned') {
+    const assignee = trigger.assignee === 'me' ? '@me' : trigger.assignee === 'any' ? 'anyone' : `@${trigger.assignee}`;
+    return `assigned to ${assignee}`;
   }
 
   if (trigger.kind === 'repository.pr_opened') {
@@ -61,8 +65,8 @@ export function actionsSummary(a: Automation): string {
         return `${action.agentKind}${model}`;
       }
 
-      if (action.kind === 'jira_transition') {
-        return `jira → ${action.jiraToStatusId || '?'}`;
+      if (action.kind === 'tickets_transition') {
+        return `tickets → ${action.ticketsToStatusId || '?'}`;
       }
 
       if (action.kind === 'send_email') {

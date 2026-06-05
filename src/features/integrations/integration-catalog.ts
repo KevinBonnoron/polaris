@@ -41,16 +41,24 @@ export interface Integration {
 
 export const INTEGRATIONS: Integration[] = [
   {
-    id: 'jira',
-    name: 'Jira',
+    id: 'tickets',
+    name: 'Tickets',
     icon: KanbanSquare,
     tint: 'text-blue-400 bg-blue-500/10',
     fields: [
+      {
+        key: 'provider',
+        label: 'Provider',
+        type: 'select',
+        required: true,
+        defaultValue: 'jira',
+        options: [{ value: 'jira', label: 'Jira' }],
+      },
       { key: 'baseUrl', label: 'Site URL', type: 'url', required: true, placeholder: 'https://your-org.atlassian.net' },
       { key: 'email', label: 'Account email', type: 'text', required: true, placeholder: 'you@example.com' },
       { key: 'token', label: 'API token', type: 'password', required: true, help: 'Create an API token', helpUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens' },
       { key: 'projectKey', label: 'Project key', type: 'text', required: true, placeholder: 'AUTH', help: 'The short key shown in issue IDs (e.g. AUTH-123 → AUTH).' },
-      { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often the active sprint is refreshed. Shared across every automation on this Jira project.' },
+      { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often the active sprint is refreshed. Shared across every automation on this ticket project.' },
     ],
   },
   {
@@ -323,7 +331,9 @@ async function loadDokployProjectOptions(values: Record<string, string>): Promis
 
 function pickScript(names: string[], candidates: string[]): string | undefined {
   for (const name of candidates) {
-    if (names.includes(name)) { return name; }
+    if (names.includes(name)) {
+      return name;
+    }
   }
   return undefined;
 }
@@ -343,9 +353,15 @@ async function detectNode(projectPath: string): Promise<IntegrationConfig | Inte
     const start = pickScript(names, ['dev', 'start', 'serve', 'develop']);
     const test = pickScript(names, ['test']);
     const build = pickScript(names, ['build']);
-    if (start) { c.startScript = start; }
-    if (test) { c.testScript = test; }
-    if (build) { c.buildScript = build; }
+    if (start) {
+      c.startScript = start;
+    }
+    if (test) {
+      c.testScript = test;
+    }
+    if (build) {
+      c.buildScript = build;
+    }
     return c;
   });
   return configs.length === 1 ? configs[0] : configs;
@@ -379,9 +395,15 @@ async function detectPython(projectPath: string): Promise<IntegrationConfig | In
     const start = pickScript(names, ['start', 'dev', 'serve', 'run']);
     const test = pickScript(names, ['test', 'pytest']);
     const build = pickScript(names, ['build', 'compile']);
-    if (start) { c.startScript = start; }
-    if (test) { c.testScript = test; }
-    if (build) { c.buildScript = build; }
+    if (start) {
+      c.startScript = start;
+    }
+    if (test) {
+      c.testScript = test;
+    }
+    if (build) {
+      c.buildScript = build;
+    }
     return c;
   });
   return configs.length === 1 ? configs[0] : configs;
