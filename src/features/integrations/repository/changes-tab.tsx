@@ -137,7 +137,9 @@ export function ChangesTab({ projectId }: Props) {
 
   const onOpenFile = useCallback(
     (path: string, line: number) => {
-      if (!project?.path) { return; }
+      if (!project?.path) {
+        return;
+      }
       OpenInIde(project.path, path, line, 0).catch(() => {});
     },
     [project?.path],

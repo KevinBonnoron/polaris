@@ -85,8 +85,12 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
       const text = (events ?? [])
         .filter((e) => e.content)
         .map((e) => {
-          if (e.type === 'tool_call') { return `→ ${e.name ?? 'Tool'}${e.content ? ' · ' + e.content : ''}`; }
-          if (e.type === 'tool_result') { return `← ${e.content}`; }
+          if (e.type === 'tool_call') {
+            return `→ ${e.name ?? 'Tool'}${e.content ? ' · ' + e.content : ''}`;
+          }
+          if (e.type === 'tool_result') {
+            return `← ${e.content}`;
+          }
           return e.content ?? '';
         })
         .join('\n');

@@ -102,7 +102,9 @@ export function ShellRunProvider({ children }: { children: ReactNode }) {
     setSessions((prev) => {
       const remaining = prev.filter((s) => s.sessionId !== id);
       setActiveSessionIdRaw((current) => {
-        if (current !== id) { return current; }
+        if (current !== id) {
+          return current;
+        }
         return remaining.length > 0 ? remaining[remaining.length - 1].sessionId : null;
       });
       return remaining;
@@ -122,6 +124,8 @@ export function ShellRunProvider({ children }: { children: ReactNode }) {
 
 export function useShellRun() {
   const ctx = useContext(ShellContext);
-  if (!ctx) { throw new Error('useShellRun must be used inside ShellRunProvider'); }
+  if (!ctx) {
+    throw new Error('useShellRun must be used inside ShellRunProvider');
+  }
   return ctx;
 }

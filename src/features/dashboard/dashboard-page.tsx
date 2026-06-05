@@ -13,17 +13,27 @@ import type { polaris } from '@/wailsjs/go/models';
 const CHART_COLORS = ['#818cf8', '#34d399', '#fb923c', '#e879f9', '#38bdf8'];
 
 function formatCost(usd: number): string {
-  if (usd <= 0) { return '$0.00'; }
-  if (usd < 0.01) { return `$${usd.toFixed(4)}`; }
+  if (usd <= 0) {
+    return '$0.00';
+  }
+  if (usd < 0.01) {
+    return `$${usd.toFixed(4)}`;
+  }
   return `$${usd.toFixed(2)}`;
 }
 
 function formatDuration(sec: number): string {
-  if (sec <= 0) { return '—'; }
+  if (sec <= 0) {
+    return '—';
+  }
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  if (h > 0) { return `${h}h ${m}m`; }
-  if (m > 0) { return `${m}m`; }
+  if (h > 0) {
+    return `${h}h ${m}m`;
+  }
+  if (m > 0) {
+    return `${m}m`;
+  }
   return `${Math.round(sec)}s`;
 }
 
@@ -46,9 +56,7 @@ function StatCard({ label, value, loading }: { label: string; value: string; loa
       <CardHeader className="px-4 pb-0">
         <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</CardTitle>
       </CardHeader>
-      <CardContent className="px-4">
-        {loading ? <Skeleton className="h-7 w-20" /> : <p className="text-2xl font-bold tabular-nums">{value}</p>}
-      </CardContent>
+      <CardContent className="px-4">{loading ? <Skeleton className="h-7 w-20" /> : <p className="text-2xl font-bold tabular-nums">{value}</p>}</CardContent>
     </Card>
   );
 }
@@ -78,7 +86,9 @@ export function DashboardPage() {
     setLoading(true);
     try {
       const data = await GetDashboardStats(kind === ALL ? '' : kind, model === ALL ? '' : model);
-      if (seq !== requestSeq.current) { return; }
+      if (seq !== requestSeq.current) {
+        return;
+      }
       setStats(data);
       if (kind === ALL && model === ALL) {
         setAllKinds(data.byKind?.map((k) => k.kind) ?? []);
@@ -87,9 +97,13 @@ export function DashboardPage() {
         setAllModels(data.byModel?.map((m) => m.model) ?? []);
       }
     } catch {
-      if (seq === requestSeq.current) { setStats(null); }
+      if (seq === requestSeq.current) {
+        setStats(null);
+      }
     } finally {
-      if (seq === requestSeq.current) { setLoading(false); }
+      if (seq === requestSeq.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -113,13 +127,23 @@ export function DashboardPage() {
           <p className="text-xs text-muted-foreground">{t('dashboard.description')}</p>
         </div>
         <div className="flex gap-2">
-          <Select value={kindFilter} onValueChange={(v) => { setKindFilter(v); setModelFilter(ALL); }}>
+          <Select
+            value={kindFilter}
+            onValueChange={(v) => {
+              setKindFilter(v);
+              setModelFilter(ALL);
+            }}
+          >
             <SelectTrigger className="h-8 w-36 text-xs">
               <SelectValue placeholder={t('dashboard.filters.kind')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>{t('dashboard.filters.allKinds')}</SelectItem>
-              {allKinds.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+              {allKinds.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <Select value={modelFilter} onValueChange={setModelFilter}>
@@ -128,7 +152,11 @@ export function DashboardPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>{t('dashboard.filters.allModels')}</SelectItem>
-              {allModels.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              {allModels.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -144,9 +172,7 @@ export function DashboardPage() {
 
           <Card className="gap-3 py-4">
             <CardHeader className="px-5 pb-0">
-              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('dashboard.charts.sessionsByDay')}
-              </CardTitle>
+              <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.charts.sessionsByDay')}</CardTitle>
             </CardHeader>
             <CardContent className="px-2">
               {loading ? (
@@ -164,37 +190,10 @@ export function DashboardPage() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid vertical={false} strokeDasharray="3 3" className="stroke-border/30" />
-                    <XAxis
-                      dataKey="date"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                      tickFormatter={formatDate}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
-                      allowDecimals={false}
-                      width={28}
-                    />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent
-                          labelFormatter={(v) => formatDate(v as string)}
-                        />
-                      }
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="sessions"
-                      stroke={AREA_COLOR}
-                      strokeWidth={2}
-                      fill="url(#sessions-gradient)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: AREA_COLOR, strokeWidth: 0 }}
-                    />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} tickFormatter={formatDate} interval="preserveStartEnd" />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} allowDecimals={false} width={28} />
+                    <ChartTooltip content={<ChartTooltipContent labelFormatter={(v) => formatDate(v as string)} />} />
+                    <Area type="monotone" dataKey="sessions" stroke={AREA_COLOR} strokeWidth={2} fill="url(#sessions-gradient)" dot={false} activeDot={{ r: 4, fill: AREA_COLOR, strokeWidth: 0 }} />
                   </AreaChart>
                 </ChartContainer>
               )}
@@ -204,14 +203,12 @@ export function DashboardPage() {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card className="gap-3 py-4">
               <CardHeader className="px-5 pb-0">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t('dashboard.charts.byKind')}
-                </CardTitle>
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.charts.byKind')}</CardTitle>
               </CardHeader>
               <CardContent className="px-2">
                 {loading ? (
                   <Skeleton className="mx-3 h-44" />
-                ) : !(stats?.byKind?.length) ? (
+                ) : !stats?.byKind?.length ? (
                   <EmptyChart height="h-44" />
                 ) : (
                   <ChartContainer key={`kind-${kindFilter}-${modelFilter}`} config={kindChartConfig} className="h-44 w-full">
@@ -233,28 +230,18 @@ export function DashboardPage() {
 
             <Card className="gap-3 py-4">
               <CardHeader className="px-5 pb-0">
-                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t('dashboard.charts.byModel')}
-                </CardTitle>
+                <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('dashboard.charts.byModel')}</CardTitle>
               </CardHeader>
               <CardContent className="px-2">
                 {loading ? (
                   <Skeleton className="mx-3 h-44" />
-                ) : !(stats?.byModel?.length) ? (
+                ) : !stats?.byModel?.length ? (
                   <EmptyChart height="h-44" />
                 ) : (
                   <ChartContainer key={`model-${kindFilter}-${modelFilter}`} config={modelChartConfig} className="h-44 w-full">
                     <BarChart data={stats?.byModel ?? []} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }}>
                       <XAxis type="number" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} allowDecimals={false} />
-                      <YAxis
-                        type="category"
-                        dataKey="model"
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fontSize: 11 }}
-                        width={148}
-                        tickFormatter={(v: string) => v.length > 20 ? `${v.slice(0, 20)}…` : v}
-                      />
+                      <YAxis type="category" dataKey="model" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} width={148} tickFormatter={(v: string) => (v.length > 20 ? `${v.slice(0, 20)}…` : v)} />
                       <ChartTooltip content={<ChartTooltipContent />} />
                       <Bar dataKey="sessions" radius={[0, 4, 4, 0]} maxBarSize={28}>
                         {(stats?.byModel ?? []).map((item, i) => (

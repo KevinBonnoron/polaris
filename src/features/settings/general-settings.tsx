@@ -102,7 +102,9 @@ export function GeneralSettings() {
     let cancelled = false;
     DetectIdes()
       .then((results) => {
-        if (cancelled) { return; }
+        if (cancelled) {
+          return;
+        }
         const map: Record<string, boolean> = {};
         for (const r of results) {
           map[r.id] = r.installed;
@@ -111,18 +113,28 @@ export function GeneralSettings() {
         setIdesLoading(false);
       })
       .catch(() => {
-        if (!cancelled) { setIdesLoading(false); }
+        if (!cancelled) {
+          setIdesLoading(false);
+        }
       });
     GetGeneralSettings()
       .then((s) => {
-        if (cancelled) { return; }
+        if (cancelled) {
+          return;
+        }
         setAutoResume(s.autoResumeSessions);
-        if (s.ideId) { setIdeId(s.ideId); }
-        if (s.agentCloseAction) { setAgentCloseAction(s.agentCloseAction); }
+        if (s.ideId) {
+          setIdeId(s.ideId);
+        }
+        if (s.agentCloseAction) {
+          setAgentCloseAction(s.agentCloseAction);
+        }
         setSettingsLoading(false);
       })
       .catch(() => {
-        if (!cancelled) { setSettingsLoading(false); }
+        if (!cancelled) {
+          setSettingsLoading(false);
+        }
       });
     return () => {
       cancelled = true;
