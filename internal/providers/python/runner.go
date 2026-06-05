@@ -38,8 +38,8 @@ type runHandle struct {
 	cancel             context.CancelFunc
 	done               chan struct{} // closed once the process has exited and been reaped
 	containerID        string        // non-empty for devcontainer runs
-	weStartedContainer bool   // true if we started the container (must stop it on exit)
-	cmdName            string // command name, for pkill when container was pre-existing
+	weStartedContainer bool          // true if we started the container (must stop it on exit)
+	cmdName            string        // command name, for pkill when container was pre-existing
 }
 
 func NewRunner(emit Emitter) *Runner {

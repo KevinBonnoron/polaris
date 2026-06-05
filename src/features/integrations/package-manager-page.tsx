@@ -178,7 +178,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, projectPath, t]);
 
   const checkForUpdates = useCallback(async () => {
-    if (!manifestPath) { return; }
+    if (!manifestPath) {
+      return;
+    }
     try {
       const result = await adapter.checkOutdated(manifestPath, packageManager, config?.runEnv ?? '');
       setOutdated(result ?? []);
@@ -188,7 +190,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, packageManager, config?.runEnv, t]);
 
   const checkForUnused = useCallback(async () => {
-    if (!manifestPath) { return; }
+    if (!manifestPath) {
+      return;
+    }
     try {
       const result = await adapter.checkUnused(projectPath, manifestPath, packageManager, config?.runEnv ?? '');
       setUnused(new Set((result ?? []).map((u) => `${u.workspace}::${u.name}`)));
@@ -198,7 +202,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [projectPath, manifestPath, packageManager, config?.runEnv, t]);
 
   const checkForVulns = useCallback(async () => {
-    if (!manifestPath) { return; }
+    if (!manifestPath) {
+      return;
+    }
     try {
       const result = await adapter.checkVulnerabilities(manifestPath, packageManager, config?.runEnv ?? '');
       setVulns(result ?? []);
@@ -208,7 +214,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   }, [manifestPath, packageManager, config?.runEnv, t]);
 
   const checkInstalled = useCallback(async () => {
-    if (!manifestPath) { return; }
+    if (!manifestPath) {
+      return;
+    }
     try {
       setInstalled(await adapter.checkInstalled(projectPath, manifestPath));
     } catch {
@@ -226,7 +234,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const wasRunningRef = useRef(false);
   useEffect(() => {
-    if (wasRunningRef.current && !isRunning) { void refreshEverything(); }
+    if (wasRunningRef.current && !isRunning) {
+      void refreshEverything();
+    }
     wasRunningRef.current = isRunning;
   }, [isRunning, refreshEverything]);
 
@@ -236,7 +246,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   const groupByType = (deps: Dep[]) => {
     const groups: Record<string, Dep[]> = {};
     for (const pkg of deps) {
-      if (!groups[pkg.type]) { groups[pkg.type] = []; }
+      if (!groups[pkg.type]) {
+        groups[pkg.type] = [];
+      }
       groups[pkg.type].push(pkg);
     }
     return Object.entries(groups).sort(([a], [b]) => {
@@ -247,14 +259,18 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const outdatedByName = useMemo(() => {
     const map = new Map<string, OutdatedPkg>();
-    for (const o of outdated) { map.set(o.name, o); }
+    for (const o of outdated) {
+      map.set(o.name, o);
+    }
     return map;
   }, [outdated]);
 
   const outdatedByWorkspace = useMemo(() => {
     const map = new Map<string, OutdatedPkg>();
     for (const o of outdated) {
-      if (o.workspace) { map.set(`${o.workspace}::${o.name}`, o); }
+      if (o.workspace) {
+        map.set(`${o.workspace}::${o.name}`, o);
+      }
     }
     return map;
   }, [outdated]);
@@ -271,7 +287,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const depUnused = useCallback(
     (dep: Dep, workspace?: string): boolean => {
-      if (workspace) { return unused.has(`${workspace}::${dep.name}`); }
+      if (workspace) {
+        return unused.has(`${workspace}::${dep.name}`);
+      }
       const locations = (dep.locations ?? []).filter((l) => l.type !== adapter.skipDepType);
       return locations.length > 0 && locations.every((l) => unused.has(`${l.workspace}::${dep.name}`));
     },
@@ -280,7 +298,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const updateInfo = useCallback(
     (name: string, workspace?: string): OutdatedPkg | undefined => {
-      if (isMonorepo) { return workspace ? outdatedByWorkspace.get(`${workspace}::${name}`) : undefined; }
+      if (isMonorepo) {
+        return workspace ? outdatedByWorkspace.get(`${workspace}::${name}`) : undefined;
+      }
       return outdatedByName.get(name);
     },
     [isMonorepo, outdatedByWorkspace, outdatedByName],
@@ -312,7 +332,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const conflictVersions = (dep: Dep): string[] | null => {
     const locs = dep.locations ?? [];
-    if (locs.length < 2) { return null; }
+    if (locs.length < 2) {
+      return null;
+    }
     const versions = [...new Set(locs.map((l) => l.version))];
     return versions.length > 1 ? versions : null;
   };
@@ -338,7 +360,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
 
   const addPackage = () => {
     const name = addInput.trim();
-    if (!name) { return; }
+    if (!name) {
+      return;
+    }
     void runCommand(adapter.addArgs(packageManager, name, addAsDev), `add ${name}`, addManifest);
     setAddInput('');
     setAddAsDev(false);
@@ -363,21 +387,31 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
     };
     if (activeWorkspace) {
       for (const dep of activeWorkspace.dependencies ?? []) {
-        if (dep.type === adapter.skipDepType || depUnused(dep, activeWorkspace.name)) { continue; }
+        if (dep.type === adapter.skipDepType || depUnused(dep, activeWorkspace.name)) {
+          continue;
+        }
         const hit = updateInfo(dep.name, activeWorkspace.name);
-        if (hit) { queue(dep.name, hit.latest, activeWorkspace.manifest); }
+        if (hit) {
+          queue(dep.name, hit.latest, activeWorkspace.manifest);
+        }
       }
     } else {
       for (const dep of packages) {
         for (const loc of dep.locations ?? []) {
-          if (loc.type === adapter.skipDepType || unused.has(`${loc.workspace}::${dep.name}`)) { continue; }
+          if (loc.type === adapter.skipDepType || unused.has(`${loc.workspace}::${dep.name}`)) {
+            continue;
+          }
           const hit = updateInfo(dep.name, loc.workspace);
-          if (hit) { queue(dep.name, hit.latest, loc.manifest); }
+          if (hit) {
+            queue(dep.name, hit.latest, loc.manifest);
+          }
         }
       }
     }
     const commands = [...byManifest].map(([manifest, specs]) => ({ args: adapter.updateAllArgs(packageManager, specs), label: t(`${adapter.i18nKey}.updateAll`), manifest }));
-    if (commands.length > 0) { void runInWorkspaces(commands); }
+    if (commands.length > 0) {
+      void runInWorkspaces(commands);
+    }
   };
 
   const openResolve = (dep: Dep) => {
@@ -387,7 +421,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   };
 
   const applyResolve = async () => {
-    if (!resolveDep || !resolveTarget) { return; }
+    if (!resolveDep || !resolveTarget) {
+      return;
+    }
     const manifests = [...new Set((resolveDep.locations ?? []).map((l) => l.manifest))];
     const name = resolveDep.name;
     setResolveDep(null);
@@ -401,7 +437,9 @@ export function PackageManagerPage({ adapter }: { adapter: PackageManagerAdapter
   };
 
   const resolveOptions = useMemo(() => {
-    if (!resolveDep) { return []; }
+    if (!resolveDep) {
+      return [];
+    }
     const declared = [...new Set((resolveDep.locations ?? []).map((l) => l.version))];
     const latest = outdatedByName.get(resolveDep.name)?.latest;
     return latest && !declared.includes(latest) ? [latest, ...declared] : declared;

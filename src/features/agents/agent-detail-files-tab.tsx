@@ -53,14 +53,18 @@ export function AgentDetailFilesTab({ agent, onCountChange }: { agent: Agent | n
 
   const onOpenFile = useCallback(
     (path: string, line: number) => {
-      if (!project?.path) { return; }
+      if (!project?.path) {
+        return;
+      }
       OpenInIde(project.path, path, line, 0).catch(() => {});
     },
     [project?.path],
   );
 
   const onClose = useCallback(async () => {
-    if (!agent?.id) { return; }
+    if (!agent?.id) {
+      return;
+    }
     const settings = await GetGeneralSettings().catch(() => null);
     if (settings?.agentCloseAction === 'delete') {
       await DeleteAgent(agent.id);

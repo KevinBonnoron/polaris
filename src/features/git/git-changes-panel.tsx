@@ -342,14 +342,22 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
     }, 'agents.detail.unapproveFailed');
 
   const discardFile = (path: string, untracked: boolean) => {
-    if (!ops.discardFile) { return; }
-    if (!window.confirm(t('agents.detail.discardFileConfirm', { name: splitPath(path).name }))) { return; }
+    if (!ops.discardFile) {
+      return;
+    }
+    if (!window.confirm(t('agents.detail.discardFileConfirm', { name: splitPath(path).name }))) {
+      return;
+    }
     runWith(() => ops.discardFile!(path, untracked), 'agents.detail.discardFailed');
   };
 
   const discardDir = (node: TreeNode) => {
-    if (!ops.discardFiles) { return; }
-    if (!window.confirm(t('agents.detail.discardDirConfirm', { name: node.name }))) { return; }
+    if (!ops.discardFiles) {
+      return;
+    }
+    if (!window.confirm(t('agents.detail.discardDirConfirm', { name: node.name }))) {
+      return;
+    }
     const paths = collectPaths(node);
     const untrackedSet = new Set(paths.filter((p) => statuses?.find((s) => s.path === p)?.status === '?'));
     runWith(
@@ -363,7 +371,9 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
   };
 
   const handleGenerate = async () => {
-    if (!ops.generateCommitMessage || generating) { return; }
+    if (!ops.generateCommitMessage || generating) {
+      return;
+    }
     setGenerating(true);
     try {
       const msg = await ops.generateCommitMessage();
