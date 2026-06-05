@@ -453,7 +453,7 @@ func (automationManager *AutomationManager) ticketsConfigFor(projectID string) (
 		ProjectKey: stringField(raw, "projectKey"),
 		BoardID:    int64Field(raw, "boardId"),
 	}
-	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
+	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" || cfg.ProjectKey == "" {
 		return tickets.Config{}, false
 	}
 	return cfg, true

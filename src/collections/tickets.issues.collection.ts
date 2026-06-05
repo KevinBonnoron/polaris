@@ -32,7 +32,7 @@ type Entry = {
 };
 
 function configKey(cfg: ConnectedTicketsConfig): string {
-  return `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}|${cfg.boardId ?? ''}`;
+  return `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}|${cfg.boardId ?? ''}|${cfg.token}`;
 }
 
 function computeStatuses(sprint: tickets.Sprint): TicketsStatus[] {

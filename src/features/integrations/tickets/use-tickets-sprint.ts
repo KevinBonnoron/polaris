@@ -99,7 +99,7 @@ export function useTicketsBoards(cfg: { baseUrl?: string; email?: string; token?
   loading: boolean;
   error: string | null;
 } {
-  const key = cfg?.baseUrl && cfg.email && cfg.token && cfg.projectKey ? `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}` : null;
+  const key = cfg?.baseUrl && cfg.email && cfg.token && cfg.projectKey ? `${cfg.baseUrl}|${cfg.email}|${cfg.projectKey}|${cfg.token}` : null;
 
   const [, setTick] = useState(0);
 
