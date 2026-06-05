@@ -373,9 +373,6 @@ type AutomationTrigger struct {
 	FromStatusIDs []string `json:"fromStatusIds,omitempty"`
 	// ToStatusID is the destination status (required for tickets.transition).
 	ToStatusID string `json:"toStatusId,omitempty"`
-	// Assignee filter: "me" / "any" / specific displayName. Used by both
-	// tickets.transition and tickets.assigned.
-	Assignee string `json:"assignee,omitempty"`
 	// IncludeDrafts, when true, lets repository.pr_opened fire for draft PRs.
 	IncludeDrafts bool `json:"includeDrafts,omitempty"`
 	// AuthorFilter restricts repository.pr_opened to a specific GitHub login.
@@ -384,10 +381,6 @@ type AutomationTrigger struct {
 	// ExcludeOwnComments, when true, skips comments authored by the current
 	// gh-authenticated user on repository.pr_comment triggers.
 	ExcludeOwnComments bool `json:"excludeOwnComments,omitempty"`
-	// OnlyMine restricts repository.pr_build_failed / pr_build_success to PRs
-	// authored by the current gh-authenticated user, and
-	// repository.issue_assigned to issues newly assigned to that user.
-	OnlyMine bool `json:"onlyMine,omitempty"`
 	// MinLevel is the minimum Sentry severity that fires sentry.new_issue
 	// ("warning" | "error" | "fatal"). Empty means any level.
 	MinLevel string `json:"minLevel,omitempty"`

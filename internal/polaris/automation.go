@@ -487,7 +487,7 @@ func int64Field(m map[string]any, key string) int64 {
 // matchesTrigger returns true when the issue matches every constraint of the
 // rule. It dispatches on the trigger kind: "tickets.transition" fires on a
 // column change, "tickets.assigned" fires when the issue becomes assigned to
-// the configured person.
+// you. Both only ever act on your own tickets.
 func matchesTrigger(t AutomationTrigger, myEmail string, issue tickets.Issue, prev issueState, hadPrev bool) bool {
 	assigneeKey := issue.AssigneeEmail
 	if assigneeKey == "" {
@@ -498,7 +498,7 @@ func matchesTrigger(t AutomationTrigger, myEmail string, issue tickets.Issue, pr
 	case "tickets.transition":
 		return matchesTransitionTrigger(t, myEmail, issue, assigneeKey, prev, hadPrev)
 	case "tickets.assigned":
-		return matchesAssignedTrigger(t, myEmail, assigneeKey, issue.Assignee, prev, hadPrev)
+		return matchesAssignedTrigger(myEmail, assigneeKey, prev, hadPrev)
 	default:
 		return false
 	}
@@ -508,7 +508,7 @@ func matchesTransitionTrigger(t AutomationTrigger, myEmail string, issue tickets
 	if t.ToStatusID != "" && issue.StatusID != t.ToStatusID {
 		return false
 	}
-	if !matchesAssignee(t.Assignee, myEmail, assigneeKey, issue.Assignee) {
+	if !assignedToMe(myEmail, assigneeKey) {
 		return false
 	}
 
@@ -527,30 +527,22 @@ func matchesTransitionTrigger(t AutomationTrigger, myEmail string, issue tickets
 	return true
 }
 
-func matchesAssignedTrigger(t AutomationTrigger, myEmail, assigneeKey, displayName string, prev issueState, hadPrev bool) bool {
-	if assigneeKey == "" {
-		return false
-	}
-	if !matchesAssignee(t.Assignee, myEmail, assigneeKey, displayName) {
+func matchesAssignedTrigger(myEmail, assigneeKey string, prev issueState, hadPrev bool) bool {
+	if !assignedToMe(myEmail, assigneeKey) {
 		return false
 	}
 	// Fire only when the assignment is new: either the issue just appeared
-	// already assigned to the target, or its assignee just changed.
+	// already assigned to me, or its assignee just changed to me.
 	if !hadPrev {
 		return true
 	}
 	return prev.Assignee != assigneeKey
 }
 
-func matchesAssignee(filter, myEmail, assigneeKey, displayName string) bool {
-	switch filter {
-	case "", "any":
-		return true
-	case "me":
-		return myEmail != "" && strings.EqualFold(assigneeKey, myEmail)
-	default:
-		return strings.EqualFold(assigneeKey, filter) || strings.EqualFold(displayName, filter)
-	}
+// assignedToMe reports whether the issue's assignee resolves to the configured
+// user. Tickets automations only ever act on your own tickets.
+func assignedToMe(myEmail, assigneeKey string) bool {
+	return myEmail != "" && strings.EqualFold(assigneeKey, myEmail)
 }
 
 func contains(list []string, v string) bool {
@@ -694,12 +686,9 @@ func (automationManager *AutomationManager) dispatchPROpened(a Automation, cfg r
 }
 
 func (automationManager *AutomationManager) dispatchPRBuildResults(a Automation, cfg repoConfig, diff repositorystore.Diff, conclusion string) {
-	var me string
-	if a.Trigger.OnlyMine {
-		me = automationManager.currentGHLogin()
-		if me == "" {
-			return
-		}
+	me := automationManager.currentGHLogin()
+	if me == "" {
+		return
 	}
 	prByNumber := make(map[int]repository.PullRequest, len(diff.After.PRs))
 	for _, pr := range diff.After.PRs {
@@ -714,7 +703,7 @@ func (automationManager *AutomationManager) dispatchPRBuildResults(a Automation,
 			if !ok {
 				continue
 			}
-			if a.Trigger.OnlyMine && !strings.EqualFold(pr.Author, me) {
+			if !strings.EqualFold(pr.Author, me) {
 				continue
 			}
 			automationManager.firePRBuildResult(a, cfg, pr, run)
@@ -723,15 +712,12 @@ func (automationManager *AutomationManager) dispatchPRBuildResults(a Automation,
 }
 
 func (automationManager *AutomationManager) dispatchIssueAssigned(a Automation, cfg repoConfig, diff repositorystore.Diff) {
-	var me string
-	if a.Trigger.OnlyMine {
-		me = automationManager.currentGHLogin()
-		if me == "" {
-			return
-		}
+	me := automationManager.currentGHLogin()
+	if me == "" {
+		return
 	}
 	for _, ev := range diff.IssuesAssigned {
-		if a.Trigger.OnlyMine && !strings.EqualFold(ev.Assignee, me) {
+		if !strings.EqualFold(ev.Assignee, me) {
 			continue
 		}
 		automationManager.fireIssueAssigned(a, cfg, ev.Issue, ev.Assignee)

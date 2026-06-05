@@ -21,13 +21,13 @@ type TriggerDef = {
 export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
   'tickets.transition': {
     source: 'tickets',
-    defaultTrigger: () => ({ kind: 'tickets.transition', fromStatusIds: [], toStatusId: '', assignee: 'me' }),
+    defaultTrigger: () => ({ kind: 'tickets.transition', fromStatusIds: [], toStatusId: '' }),
     defaultTemplate: 'Work on {{key}}: {{summary}}\n\n{{url}}',
     placeholders: ['{{key}}', '{{summary}}', '{{fromStatus}}', '{{toStatus}}', '{{assignee}}', '{{url}}', '{{lastComment}}'],
   },
   'tickets.assigned': {
     source: 'tickets',
-    defaultTrigger: () => ({ kind: 'tickets.assigned', assignee: 'me' }),
+    defaultTrigger: () => ({ kind: 'tickets.assigned' }),
     defaultTemplate: 'Work on {{key}}: {{summary}}\n\n{{url}}',
     placeholders: ['{{key}}', '{{summary}}', '{{toStatus}}', '{{assignee}}', '{{url}}', '{{lastComment}}'],
   },
@@ -57,7 +57,7 @@ export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
   },
   'repository.pr_build_failed': {
     source: 'repository',
-    defaultTrigger: () => ({ kind: 'repository.pr_build_failed', onlyMine: true }),
+    defaultTrigger: () => ({ kind: 'repository.pr_build_failed' }),
     defaultTemplate: [
       'Build {{workflow}} failed on PR #{{number}} ({{title}}) — branch `{{branch}}`.',
       '',
@@ -74,13 +74,13 @@ export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
   },
   'repository.pr_build_success': {
     source: 'repository',
-    defaultTrigger: () => ({ kind: 'repository.pr_build_success', onlyMine: true }),
+    defaultTrigger: () => ({ kind: 'repository.pr_build_success' }),
     defaultTemplate: 'Build {{workflow}} passed on PR #{{number}} ({{title}}) — branch `{{branch}}`.\n\nRun: {{runUrl}}\nPR: {{url}}',
     placeholders: ['{{number}}', '{{title}}', '{{workflow}}', '{{conclusion}}', '{{branch}}', '{{url}}', '{{runUrl}}'],
   },
   'repository.issue_assigned': {
     source: 'repository',
-    defaultTrigger: () => ({ kind: 'repository.issue_assigned', onlyMine: true }),
+    defaultTrigger: () => ({ kind: 'repository.issue_assigned' }),
     defaultTemplate: 'Issue #{{number}} ({{title}}) was assigned to @{{assignee}}.\n\n{{url}}',
     placeholders: ['{{number}}', '{{title}}', '{{author}}', '{{assignee}}', '{{url}}'],
   },

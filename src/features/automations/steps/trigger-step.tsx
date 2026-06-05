@@ -128,22 +128,10 @@ export function TriggerStep({ form, hasTickets, statuses, statusesLoading, statu
                     })}
                   </div>
                 </div>
-
-                <div className="flex flex-col gap-2">
-                  <Label>{t('automations.assignee')}</Label>
-                  <Input value={ticketsTransitionTrigger.assignee} onChange={(e) => form.setFieldValue('trigger', { ...ticketsTransitionTrigger, assignee: e.target.value })} placeholder={t('automations.assigneePlaceholder')} />
-                  <p className="text-xs text-muted-foreground">{t('automations.assigneeHint')}</p>
-                </div>
               </>
             )}
 
-            {ticketsAssignedTrigger && hasTickets && (
-              <div className="flex flex-col gap-2">
-                <Label>{t('automations.assignee')}</Label>
-                <Input value={ticketsAssignedTrigger.assignee} onChange={(e) => form.setFieldValue('trigger', { ...ticketsAssignedTrigger, assignee: e.target.value })} placeholder={t('automations.assigneePlaceholder')} />
-                <p className="text-xs text-muted-foreground">{t('automations.assignedHint')}</p>
-              </div>
-            )}
+            {ticketsAssignedTrigger && hasTickets && <p className="text-xs text-muted-foreground">{t('automations.assignedHint')}</p>}
 
             {values.source === 'repository' && (
               <div className="flex flex-col gap-2">
@@ -186,35 +174,11 @@ export function TriggerStep({ form, hasTickets, statuses, statusesLoading, statu
               </div>
             )}
 
-            {repoBuildFailedTrigger && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-muted-foreground">{t('automations.repoBuildFailedHint')}</p>
-                <div className="flex items-center gap-3">
-                  <Switch checked={repoBuildFailedTrigger.onlyMine !== false} onCheckedChange={(v) => form.setFieldValue('trigger', { ...repoBuildFailedTrigger, onlyMine: v })} />
-                  <span className="text-sm">{t('automations.buildFailedOnlyMine')}</span>
-                </div>
-              </div>
-            )}
+            {repoBuildFailedTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoBuildFailedHint')}</p>}
 
-            {repoBuildSuccessTrigger && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-muted-foreground">{t('automations.repoBuildSuccessHint')}</p>
-                <div className="flex items-center gap-3">
-                  <Switch checked={repoBuildSuccessTrigger.onlyMine !== false} onCheckedChange={(v) => form.setFieldValue('trigger', { ...repoBuildSuccessTrigger, onlyMine: v })} />
-                  <span className="text-sm">{t('automations.buildFailedOnlyMine')}</span>
-                </div>
-              </div>
-            )}
+            {repoBuildSuccessTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoBuildSuccessHint')}</p>}
 
-            {repoIssueAssignedTrigger && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-muted-foreground">{t('automations.repoIssueAssignedHint')}</p>
-                <div className="flex items-center gap-3">
-                  <Switch checked={repoIssueAssignedTrigger.onlyMine !== false} onCheckedChange={(v) => form.setFieldValue('trigger', { ...repoIssueAssignedTrigger, onlyMine: v })} />
-                  <span className="text-sm">{t('automations.issueAssignedOnlyMine')}</span>
-                </div>
-              </div>
-            )}
+            {repoIssueAssignedTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoIssueAssignedHint')}</p>}
 
             {sentryTrigger && (
               <div className="flex flex-col gap-2">

@@ -892,11 +892,9 @@ export namespace polaris {
 	    kind: string;
 	    fromStatusIds?: string[];
 	    toStatusId?: string;
-	    assignee?: string;
 	    includeDrafts?: boolean;
 	    authorFilter?: string;
 	    excludeOwnComments?: boolean;
-	    onlyMine?: boolean;
 	    minLevel?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -908,11 +906,9 @@ export namespace polaris {
 	        this.kind = source["kind"];
 	        this.fromStatusIds = source["fromStatusIds"];
 	        this.toStatusId = source["toStatusId"];
-	        this.assignee = source["assignee"];
 	        this.includeDrafts = source["includeDrafts"];
 	        this.authorFilter = source["authorFilter"];
 	        this.excludeOwnComments = source["excludeOwnComments"];
-	        this.onlyMine = source["onlyMine"];
 	        this.minLevel = source["minLevel"];
 	    }
 	}
