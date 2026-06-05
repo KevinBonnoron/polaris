@@ -651,7 +651,7 @@ export const en = {
       selectProject: 'Select a project to view its Tickets board.',
       notConnected: '{{project}} · No Tickets workspace connected yet.',
       connectTitle: 'Connect Tickets',
-      connectDesc: 'Connect your ticket provider (e.g. Jira) with an API token to pull the active sprint board into Polaris.',
+      connectDesc: 'Connect your ticket provider (Jira, Linear) with an API token to pull the active sprint board into Polaris.',
       configureCta: 'Configure Tickets',
       sprintBoard: 'Sprint board',
       selectBoard: 'Select board',

@@ -52,7 +52,10 @@ export const INTEGRATIONS: Integration[] = [
         type: 'select',
         required: true,
         defaultValue: 'jira',
-        options: [{ value: 'jira', label: 'Jira' }],
+        options: [
+          { value: 'jira', label: 'Jira' },
+          { value: 'linear', label: 'Linear' },
+        ],
       },
       { key: 'baseUrl', label: 'Site URL', type: 'url', required: true, placeholder: 'https://your-org.atlassian.net' },
       { key: 'email', label: 'Account email', type: 'text', required: true, placeholder: 'you@example.com' },

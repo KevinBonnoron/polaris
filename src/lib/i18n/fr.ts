@@ -653,7 +653,7 @@ export const fr: Translation = {
       selectProject: 'Sélectionnez un projet pour voir son tableau Tickets.',
       notConnected: "{{project}} · Aucun workspace Tickets connecté pour l'instant.",
       connectTitle: 'Connecter Tickets',
-      connectDesc: 'Connecte ton fournisseur de tickets (ex : Jira) avec un jeton API pour afficher le sprint actif dans Polaris.',
+      connectDesc: 'Connecte ton fournisseur de tickets (Jira, Linear) avec un jeton API pour afficher le sprint actif dans Polaris.',
       configureCta: 'Configurer Tickets',
       sprintBoard: 'Tableau de sprint',
       selectBoard: 'Choisir un board',
