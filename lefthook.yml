@@ -20,3 +20,8 @@ pre-commit:
     vet:
       glob: "*.go"
       run: go vet ./...
+
+pre-push:
+  commands:
+    nix-build:
+      run: bash scripts/check-nix-build.sh
