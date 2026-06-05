@@ -40,7 +40,7 @@
 
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-d13jpRkJ4QyE3H3iq+ppVrB4VXMzLdm9KGiVjkUlHbU=";
+        outputHash = "sha256-yJqMaDhScAQwQL76U+Fhh8ZVsug35x1eVVn+8AD0J1k=";
       };
 
       frontend = pkgs.stdenv.mkDerivation {
