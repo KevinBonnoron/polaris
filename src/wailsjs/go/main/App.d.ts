@@ -199,6 +199,8 @@ export function ListRepoPullRequests(arg1:string,arg2:string):Promise<Array<repo
 
 export function ListRepoWorkflowRuns(arg1:string,arg2:string,arg3:number):Promise<repository.WorkflowRunsPage>;
 
+export function ListRepoWorkflows(arg1:string,arg2:string):Promise<Array<repository.WorkflowSummary>>;
+
 export function ListResendDomains(arg1:resend.Config):Promise<Array<resend.Domain>>;
 
 export function ListResendEmails(arg1:resend.Config,arg2:number):Promise<Array<resend.Email>>;

@@ -869,6 +869,9 @@ export namespace polaris {
 	    messageProvider?: string;
 	    messageTitle?: string;
 	    messageBody?: string;
+	    workflowFile?: string;
+	    workflowRef?: string;
+	    workflowInputs?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AutomationAction(source);
@@ -890,6 +893,9 @@ export namespace polaris {
 	        this.messageProvider = source["messageProvider"];
 	        this.messageTitle = source["messageTitle"];
 	        this.messageBody = source["messageBody"];
+	        this.workflowFile = source["workflowFile"];
+	        this.workflowRef = source["workflowRef"];
+	        this.workflowInputs = source["workflowInputs"];
 	    }
 	}
 	export class AutomationTrigger {
@@ -898,7 +904,6 @@ export namespace polaris {
 	    toStatusId?: string;
 	    includeDrafts?: boolean;
 	    authorFilter?: string;
-	    excludeOwnComments?: boolean;
 	    minLevel?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -912,7 +917,6 @@ export namespace polaris {
 	        this.toStatusId = source["toStatusId"];
 	        this.includeDrafts = source["includeDrafts"];
 	        this.authorFilter = source["authorFilter"];
-	        this.excludeOwnComments = source["excludeOwnComments"];
 	        this.minLevel = source["minLevel"];
 	    }
 	}
@@ -2012,6 +2016,22 @@ export namespace repository {
 		    }
 		    return a;
 		}
+	}
+	export class WorkflowSummary {
+	    id: number;
+	    name: string;
+	    path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WorkflowSummary(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	    }
 	}
 
 }

@@ -126,7 +126,17 @@ export type RepositoryPullRequestOpenedTrigger = {
 
 export type RepositoryPullRequestCommentTrigger = {
   kind: 'repository.pr_comment';
-  excludeOwnComments?: boolean;
+};
+
+export type RepositoryPullRequestApprovedTrigger = {
+  kind: 'repository.pr_approved';
+};
+
+export type TriggerWorkflowAction = {
+  kind: 'trigger_workflow';
+  workflowFile: string;
+  workflowRef: string;
+  workflowInputs?: string;
 };
 
 export type RepositoryPullRequestBuildFailedTrigger = {
@@ -159,6 +169,7 @@ export type AutomationTrigger =
   | TicketsAssignedTrigger
   | RepositoryPullRequestOpenedTrigger
   | RepositoryPullRequestCommentTrigger
+  | RepositoryPullRequestApprovedTrigger
   | RepositoryPullRequestBuildFailedTrigger
   | RepositoryPullRequestBuildSuccessTrigger
   | RepositoryIssueAssignedTrigger
@@ -168,7 +179,7 @@ export type AutomationTrigger =
 
 export type TriggerKind = AutomationTrigger['kind'];
 
-export type ActionKind = 'spawn_agent' | 'tickets_transition' | 'notification' | 'send_email' | 'send_message';
+export type ActionKind = 'spawn_agent' | 'resume_pr_agent' | 'tickets_transition' | 'notification' | 'send_email' | 'send_message' | 'trigger_workflow';
 
 export type SpawnAgentAction = {
   kind: 'spawn_agent';
@@ -203,7 +214,12 @@ export type SendMessageAction = {
   messageBody?: string;
 };
 
-export type AutomationAction = SpawnAgentAction | TicketsTransitionAction | NotificationAction | SendEmailAction | SendMessageAction;
+export type ResumePrAgentAction = {
+  kind: 'resume_pr_agent';
+  taskTemplate: string;
+};
+
+export type AutomationAction = SpawnAgentAction | ResumePrAgentAction | TicketsTransitionAction | NotificationAction | SendEmailAction | SendMessageAction | TriggerWorkflowAction;
 
 export type Automation = {
   id: string;

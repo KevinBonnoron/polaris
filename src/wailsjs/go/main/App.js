@@ -374,6 +374,10 @@ export function ListRepoWorkflowRuns(arg1, arg2, arg3) {
   return window['go']['main']['App']['ListRepoWorkflowRuns'](arg1, arg2, arg3);
 }
 
+export function ListRepoWorkflows(arg1, arg2) {
+  return window['go']['main']['App']['ListRepoWorkflows'](arg1, arg2);
+}
+
 export function ListResendDomains(arg1) {
   return window['go']['main']['App']['ListResendDomains'](arg1);
 }

@@ -426,6 +426,11 @@ type AutomationAction struct {
 	MessageProvider string `json:"messageProvider,omitempty"` // "slack" | "discord" | "telegram"
 	MessageTitle    string `json:"messageTitle,omitempty"`    // template
 	MessageBody     string `json:"messageBody,omitempty"`     // template
+
+	// trigger_workflow fields (requires a repository integration)
+	WorkflowFile   string `json:"workflowFile,omitempty"`   // workflow filename, e.g. "deploy.yml"; supports templates
+	WorkflowRef    string `json:"workflowRef,omitempty"`    // branch/tag ref; supports templates
+	WorkflowInputs string `json:"workflowInputs,omitempty"` // "KEY=value\nKEY2=value2"; supports templates
 }
 
 // Automation links a trigger to a list of actions. Snapshot holds the

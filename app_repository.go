@@ -49,6 +49,10 @@ func (app *App) GetRepositoryCurrentUser() (string, error) {
 	return repository.GetCurrentUser()
 }
 
+func (app *App) ListRepoWorkflows(owner, repo string) ([]repository.WorkflowSummary, error) {
+	return repository.ListWorkflows(owner, repo)
+}
+
 func (app *App) GetRepoWorkflowDispatch(owner, repo string, workflowID int64) (*repository.WorkflowDispatchSpec, error) {
 	return repository.GetWorkflowDispatch(owner, repo, workflowID)
 }
