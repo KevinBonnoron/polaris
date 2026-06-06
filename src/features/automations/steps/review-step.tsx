@@ -54,8 +54,6 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
             <ReviewRow label="" value={trigger.includeDrafts ? t('automations.includeDrafts') : t('automations.review.noDrafts')} />
           </>
         )}
-
-        {trigger.kind === 'repository.pr_comment' && <ReviewRow label="" value={t('automations.excludeOwnComments')} />}
       </dl>
 
       <div className="flex flex-col gap-2">

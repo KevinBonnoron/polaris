@@ -134,8 +134,8 @@ export type RepositoryPullRequestApprovedTrigger = {
 
 export type TriggerWorkflowAction = {
   kind: 'trigger_workflow';
-  workflowFile: string;
-  workflowRef: string;
+  workflowFile?: string;
+  workflowRef?: string;
   workflowInputs?: string;
 };
 
@@ -216,7 +216,7 @@ export type SendMessageAction = {
 
 export type ResumePrAgentAction = {
   kind: 'resume_pr_agent';
-  taskTemplate: string;
+  taskTemplate?: string;
 };
 
 export type AutomationAction = SpawnAgentAction | ResumePrAgentAction | TicketsTransitionAction | NotificationAction | SendEmailAction | SendMessageAction | TriggerWorkflowAction;

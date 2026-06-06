@@ -59,7 +59,7 @@ export function ActionsStep({ form, agentKinds, statuses, hasTicketsIntegration,
           if (k === 'send_email') return hasResendIntegration;
           if (k === 'send_message') return hasMessagingIntegration;
           if (k === 'trigger_workflow') return hasRepositoryIntegration;
-          if (k === 'resume_pr_agent') return (['repository.pr_comment', 'repository.pr_approved', 'repository.pr_build_failed', 'repository.pr_build_success'] as const).includes(triggerKind as never);
+          if (k === 'resume_pr_agent') return ['repository.pr_comment', 'repository.pr_approved', 'repository.pr_build_failed', 'repository.pr_build_success'].includes(triggerKind);
           return true;
         });
         return (

@@ -125,6 +125,12 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
         if (action.kind === 'send_email' && (!action.emailTo?.trim() || !action.emailSubject?.trim())) {
           return false;
         }
+        if (action.kind === 'resume_pr_agent' && !action.taskTemplate?.trim()) {
+          return false;
+        }
+        if (action.kind === 'trigger_workflow' && (!action.workflowFile?.trim() || !action.workflowRef?.trim())) {
+          return false;
+        }
       }
       return true;
     }

@@ -375,7 +375,11 @@ func DefaultGeneralSettings() GeneralSettings {
 // fire an automation. The wire format is JSON so the frontend can evolve the
 // shape without forcing a Go-side migration on every change.
 type AutomationTrigger struct {
-	// Kind is one of: "tickets.transition", "repository.pr_opened".
+	// Kind is one of: "tickets.transition", "repository.pr_opened",
+	// "repository.pr_comment", "repository.pr_approved",
+	// "repository.pr_build_failed", "repository.pr_build_success",
+	// "repository.issue_assigned", "sentry.new_issue",
+	// "dokploy.deployment_failed", "dokploy.deployment_succeeded".
 	Kind string `json:"kind"`
 	// FromStatusIDs is the set of source statuses accepted ([] = any). For
 	// "tickets.transition".
@@ -387,9 +391,6 @@ type AutomationTrigger struct {
 	// AuthorFilter restricts repository.pr_opened to a specific GitHub login.
 	// Empty means any author.
 	AuthorFilter string `json:"authorFilter,omitempty"`
-	// ExcludeOwnComments, when true, skips comments authored by the current
-	// gh-authenticated user on repository.pr_comment triggers.
-	ExcludeOwnComments bool `json:"excludeOwnComments,omitempty"`
 	// MinLevel is the minimum Sentry severity that fires sentry.new_issue
 	// ("warning" | "error" | "fatal"). Empty means any level.
 	MinLevel string `json:"minLevel,omitempty"`
@@ -399,7 +400,7 @@ type AutomationTrigger struct {
 // when the trigger fires. Multiple actions execute in declaration order; a
 // failing action only logs and does not halt the chain.
 type AutomationAction struct {
-	// Kind is one of: "spawn_agent", "tickets_transition", "notification", "send_email", "send_message".
+	// Kind is one of: "spawn_agent", "resume_pr_agent", "tickets_transition", "notification", "send_email", "send_message", "trigger_workflow".
 	Kind string `json:"kind"`
 
 	// spawn_agent fields
