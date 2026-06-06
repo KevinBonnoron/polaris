@@ -459,6 +459,21 @@ func (store *Store) ListAgentsByStatus(status string) ([]Agent, error) {
 	return out, rows.Err()
 }
 
+func (store *Store) GetAgentByPRURL(projectID, prURL string) (*Agent, error) {
+	row := store.db.QueryRow(
+		`SELECT `+agentColumns+` FROM agents WHERE projectId = ? AND status != 'deleted' AND json_valid(worktreeJson) AND json_extract(worktreeJson, '$.prUrl') = ? ORDER BY startedAt DESC LIMIT 1`,
+		projectID, prURL,
+	)
+	a, err := scanAgent(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &a, nil
+}
+
 func (store *Store) GetAgent(id string) (*Agent, error) {
 	row := store.db.QueryRow(`SELECT `+agentColumns+` FROM agents WHERE id = ?`, id)
 	a, err := scanAgent(row)

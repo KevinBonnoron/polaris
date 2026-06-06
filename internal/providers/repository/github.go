@@ -494,6 +494,7 @@ func TriggerWorkflowDispatchByFile(owner, repo, workflowFile, ref string, inputs
 	if err != nil {
 		return fmt.Errorf("encode dispatch payload: %w", err)
 	}
+	dispatchedAt := time.Now().Add(-2 * time.Second)
 	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
 	defer cancel()
 	apiPath := fmt.Sprintf("/repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflowFile)
@@ -505,10 +506,36 @@ func TriggerWorkflowDispatchByFile(owner, repo, workflowFile, ref string, inputs
 		return nil
 	}
 	msg := strings.TrimSpace(string(out))
+	if isLikelyTransientServerError(msg) && verifyWorkflowDispatchedByFile(owner, repo, workflowFile, dispatchedAt) {
+		return nil
+	}
 	if msg == "" {
 		msg = runErr.Error()
 	}
 	return fmt.Errorf("gh api %s: %s", apiPath, msg)
+}
+
+func verifyWorkflowDispatchedByFile(owner, repo, workflowFile string, since time.Time) bool {
+	apiPath := fmt.Sprintf("/repos/%s/%s/actions/workflows/%s/runs?event=workflow_dispatch&per_page=5", owner, repo, workflowFile)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var raw struct {
+			WorkflowRuns []struct {
+				CreatedAt time.Time `json:"created_at"`
+			} `json:"workflow_runs"`
+		}
+		if err := callJSON(apiPath, &raw); err == nil {
+			for _, r := range raw.WorkflowRuns {
+				if r.CreatedAt.After(since) {
+					return true
+				}
+			}
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(800 * time.Millisecond)
+	}
 }
 
 func CancelWorkflowRun(owner, repo string, runID int64) error {

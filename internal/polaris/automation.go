@@ -669,6 +669,8 @@ func (automationManager *AutomationManager) onRepositoryDiff(diff repositorystor
 			automationManager.dispatchPRBuildResults(a, cfg, diff, "failure")
 		case "repository.pr_build_success":
 			automationManager.dispatchPRBuildResults(a, cfg, diff, "success")
+		case "repository.pr_approved":
+			automationManager.dispatchPRApproved(a, cfg, diff)
 		case "repository.issue_assigned":
 			automationManager.dispatchIssueAssigned(a, cfg, diff)
 		default:
@@ -746,6 +748,66 @@ func (automationManager *AutomationManager) currentGHLogin() string {
 	return login
 }
 
+func (automationManager *AutomationManager) dispatchPRApproved(a Automation, _ repoConfig, diff repositorystore.Diff) {
+	me := automationManager.currentGHLogin()
+	if me == "" {
+		return
+	}
+
+	fresh, err := automationManager.svc.store.GetAutomation(a.ID)
+	if err != nil || fresh == nil {
+		return
+	}
+	prev := parsePRSnapshot(fresh.SnapshotJSON)
+	next := prSnapshot{}
+	seedOnly := !hasSnapshot(*fresh)
+
+	var fires []repository.PullRequest
+
+	for _, pr := range diff.After.PRs {
+		if !strings.EqualFold(pr.Author, me) {
+			continue
+		}
+		if pr.ReviewDecision != "APPROVED" {
+			continue
+		}
+		key := fmt.Sprintf("%d", pr.Number)
+		next[key] = struct{}{}
+		if seedOnly {
+			continue
+		}
+		if _, seen := prev[key]; seen {
+			continue
+		}
+		fires = append(fires, pr)
+	}
+
+	if err := automationManager.svc.store.PatchAutomationSnapshot(a.ID, next.encode()); err != nil {
+		log.Printf("automation %s: persist snapshot: %v", a.ID, err)
+	}
+
+	for _, pr := range fires {
+		automationManager.firePRApproved(a, pr)
+	}
+}
+
+func (automationManager *AutomationManager) firePRApproved(a Automation, pr repository.PullRequest) {
+	fc := fireContext{
+		Automation:     a,
+		PR:             &pr,
+		TicketIssueKey: extractTicketKey(pr.Title),
+		NotifLabel:     fmt.Sprintf("PR #%d approved", pr.Number),
+		Vars: map[string]string{
+			"number": fmt.Sprintf("%d", pr.Number),
+			"title":  pr.Title,
+			"author": pr.Author,
+			"url":    pr.URL,
+		},
+	}
+	automationManager.attachTicketCfg(&fc)
+	automationManager.runActions(fc)
+}
+
 // dispatchPRComments still needs its own per-PR comment fetch — the store
 // doesn't cache PR comments — but it piggy-backs on the store's tick
 // cadence (this handler is only invoked when the store emits a diff for
@@ -789,7 +851,7 @@ func (automationManager *AutomationManager) dispatchPRComments(a Automation, cfg
 			if _, seen := prev[key]; seen {
 				continue
 			}
-			if a.Trigger.ExcludeOwnComments && strings.EqualFold(c.Author, me) {
+			if strings.EqualFold(c.Author, me) {
 				continue
 			}
 			fires = append(fires, pendingComment{pr: pr, comment: c})
@@ -931,6 +993,8 @@ func (automationManager *AutomationManager) runActions(fc fireContext) {
 		switch action.Kind {
 		case "spawn_agent":
 			results = append(results, automationManager.runSpawnAgent(fc, action, i))
+		case "resume_pr_agent":
+			results = append(results, automationManager.runResumePRAgent(fc, action, i))
 		case "tickets_transition":
 			results = append(results, automationManager.runTicketsTransition(fc, action, i))
 		case "notification":
@@ -999,6 +1063,40 @@ func (automationManager *AutomationManager) runSpawnAgent(fc fireContext, action
 		Payload:       map[string]any{"automationId": a.ID, "agentId": agent.ID},
 	})
 	return ActionResult{Kind: "spawn_agent", Status: "ok", Detail: agent.ID}
+}
+
+func (automationManager *AutomationManager) runResumePRAgent(fc fireContext, action AutomationAction, idx int) ActionResult {
+	a := fc.Automation
+	if fc.PR == nil {
+		log.Printf("automation %s action[%d] resume_pr_agent: no PR context (trigger is not a PR trigger)", a.ID, idx)
+		return ActionResult{Kind: "resume_pr_agent", Status: "skipped", Detail: "no PR context"}
+	}
+	agent, err := automationManager.svc.store.GetAgentByPRURL(a.ProjectID, fc.PR.URL)
+	if err != nil {
+		log.Printf("automation %s action[%d] resume_pr_agent: lookup: %v", a.ID, idx, err)
+		return ActionResult{Kind: "resume_pr_agent", Status: "error", Detail: err.Error()}
+	}
+	if agent == nil {
+		log.Printf("automation %s action[%d] resume_pr_agent: no agent found for PR %s", a.ID, idx, fc.PR.URL)
+		return ActionResult{Kind: "resume_pr_agent", Status: "skipped", Detail: "no agent found for this PR"}
+	}
+	message := renderTemplate(action.TaskTemplate, fc.Vars)
+	if message == "" {
+		log.Printf("automation %s action[%d] resume_pr_agent: empty message after template render", a.ID, idx)
+		return ActionResult{Kind: "resume_pr_agent", Status: "skipped", Detail: "empty message"}
+	}
+	if err := automationManager.svc.Send(agent.ID, message); err != nil {
+		log.Printf("automation %s action[%d] resume_pr_agent: send: %v", a.ID, idx, err)
+		return ActionResult{Kind: "resume_pr_agent", Status: "error", Detail: err.Error()}
+	}
+	_, _ = automationManager.svc.Notify(NotifyInput{
+		ProjectID:     a.ProjectID,
+		Type:          NotifTypeAutomation,
+		Severity:      SeverityInfo,
+		TitleTemplate: fmt.Sprintf("%s · %s · resumed agent %s", fc.NotifLabel, a.Name, agent.Kind),
+		Payload:       map[string]any{"automationId": a.ID, "agentId": agent.ID},
+	})
+	return ActionResult{Kind: "resume_pr_agent", Status: "ok", Detail: agent.ID}
 }
 
 func (automationManager *AutomationManager) runTicketsTransition(fc fireContext, action AutomationAction, idx int) ActionResult {

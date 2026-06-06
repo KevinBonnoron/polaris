@@ -8,6 +8,7 @@ import { FieldError, isInvalid } from '@/lib/form';
 import type {
   AutomationTrigger,
   RepositoryIssueAssignedTrigger,
+  RepositoryPullRequestApprovedTrigger,
   RepositoryPullRequestBuildFailedTrigger,
   RepositoryPullRequestBuildSuccessTrigger,
   RepositoryPullRequestCommentTrigger,
@@ -57,6 +58,7 @@ export function TriggerStep({ form, hasTickets, statuses, statusesLoading, statu
         const ticketsAssignedTrigger: TicketsAssignedTrigger | null = values.trigger.kind === 'tickets.assigned' ? (values.trigger as TicketsAssignedTrigger) : null;
         const repoOpenedTrigger: RepositoryPullRequestOpenedTrigger | null = values.trigger.kind === 'repository.pr_opened' ? (values.trigger as RepositoryPullRequestOpenedTrigger) : null;
         const repoCommentTrigger: RepositoryPullRequestCommentTrigger | null = values.trigger.kind === 'repository.pr_comment' ? (values.trigger as RepositoryPullRequestCommentTrigger) : null;
+        const repoApprovedTrigger: RepositoryPullRequestApprovedTrigger | null = values.trigger.kind === 'repository.pr_approved' ? (values.trigger as RepositoryPullRequestApprovedTrigger) : null;
         const repoBuildFailedTrigger: RepositoryPullRequestBuildFailedTrigger | null = values.trigger.kind === 'repository.pr_build_failed' ? (values.trigger as RepositoryPullRequestBuildFailedTrigger) : null;
         const repoBuildSuccessTrigger: RepositoryPullRequestBuildSuccessTrigger | null = values.trigger.kind === 'repository.pr_build_success' ? (values.trigger as RepositoryPullRequestBuildSuccessTrigger) : null;
         const repoIssueAssignedTrigger: RepositoryIssueAssignedTrigger | null = values.trigger.kind === 'repository.issue_assigned' ? (values.trigger as RepositoryIssueAssignedTrigger) : null;
@@ -164,15 +166,9 @@ export function TriggerStep({ form, hasTickets, statuses, statusesLoading, statu
               </>
             )}
 
-            {repoCommentTrigger && (
-              <div className="flex flex-col gap-2">
-                <p className="text-xs text-muted-foreground">{t('automations.repoCommentHint')}</p>
-                <div className="flex items-center gap-3">
-                  <Switch checked={repoCommentTrigger.excludeOwnComments !== false} onCheckedChange={(v) => form.setFieldValue('trigger', { ...repoCommentTrigger, excludeOwnComments: v })} />
-                  <span className="text-sm">{t('automations.excludeOwnComments')}</span>
-                </div>
-              </div>
-            )}
+            {repoCommentTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoCommentHint')}</p>}
+
+            {repoApprovedTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoApprovedHint')}</p>}
 
             {repoBuildFailedTrigger && <p className="text-xs text-muted-foreground">{t('automations.repoBuildFailedHint')}</p>}
 
