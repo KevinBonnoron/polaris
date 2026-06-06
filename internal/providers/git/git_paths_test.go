@@ -9,13 +9,13 @@ import (
 )
 
 func TestRepoRelativePaths(t *testing.T) {
-	root := "/home/kevin/Workspaces/polaris"
+	root := "/home/user/Workspaces/polaris"
 	got := RepoRelativePaths(root, []string{
-		"/home/kevin/Workspaces/polaris/app.go", // in-repo absolute -> relativized
-		"internal/git.go",                       // already relative -> kept
-		"/home/kevin/.claude/plans/x.md",        // out-of-repo -> dropped
-		"/home/kevin/Workspaces/polaris/app.go", // duplicate -> deduped
-		"",                                      // empty -> skipped
+		"/home/user/Workspaces/polaris/app.go", // in-repo absolute -> relativized
+		"internal/git.go",                      // already relative -> kept
+		"/home/user/.claude/plans/x.md",        // out-of-repo -> dropped
+		"/home/user/Workspaces/polaris/app.go", // duplicate -> deduped
+		"",                                     // empty -> skipped
 	})
 	want := []string{"app.go", "internal/git.go"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
