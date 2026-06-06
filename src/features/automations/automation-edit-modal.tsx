@@ -8,6 +8,7 @@ import { projectsCollection } from '@/collections/projects.collection';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import type { RepoConfig } from '@/features/integrations/repository/types';
 import { useTicketsStatuses } from '@/features/integrations/tickets/use-tickets-sprint';
 import { useAgentClis } from '@/state/agent-clis';
 import type { AutomationSource, Project } from '@/types';
@@ -73,6 +74,10 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
   const hasResend = Boolean(resendConfig?.apiKey && resendConfig?.fromEmail);
   const messagingProviders = (['slack', 'discord', 'telegram'] as const).filter((p) => Boolean(project?.integrations?.[p]));
   const hasMessaging = messagingProviders.length > 0;
+  const repoConfig = project?.integrations?.repository as RepoConfig | undefined;
+  const hasRepository = Boolean(repoConfig?.owner && repoConfig?.repo);
+  const repoOwner = repoConfig?.owner ?? '';
+  const repoRepo = repoConfig?.repo ?? '';
 
   const statusesCfg = useMemo(
     () =>
@@ -178,14 +183,16 @@ export function AutomationEditModal({ automationId, projectId: payloadProjectId,
               <>
                 {step === 1 && <SetupStep form={form} availableSources={availableSources} hasTickets={hasTickets} />}
                 {step === 2 && <TriggerStep form={form} hasTickets={hasTickets} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />}
-                {step === 3 && <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />}
+                {step === 3 && (
+                  <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} hasRepositoryIntegration={hasRepository} repoOwner={repoOwner} repoRepo={repoRepo} />
+                )}
                 {step === 4 && <form.Subscribe selector={(state) => state.values}>{(values) => <ReviewStep values={values} agentKinds={agentKinds} statuses={statuses} />}</form.Subscribe>}
               </>
             ) : (
               <div className="flex flex-col gap-4">
                 <SetupStep form={form} availableSources={availableSources} hasTickets={hasTickets} />
                 <TriggerStep form={form} hasTickets={hasTickets} statuses={statuses} statusesLoading={statusesLoading} statusError={statusError} />
-                <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} />
+                <ActionsStep form={form} agentKinds={agentKinds} statuses={statuses} hasTicketsIntegration={hasTickets} hasResendIntegration={hasResend} hasMessagingIntegration={hasMessaging} messagingProviders={messagingProviders} hasRepositoryIntegration={hasRepository} repoOwner={repoOwner} repoRepo={repoRepo} />
               </div>
             )}
           </ScrollArea>

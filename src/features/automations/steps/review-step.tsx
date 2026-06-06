@@ -55,7 +55,7 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
           </>
         )}
 
-        {trigger.kind === 'repository.pr_comment' && <ReviewRow label="" value={trigger.excludeOwnComments !== false ? t('automations.excludeOwnComments') : t('automations.review.includeOwnComments')} />}
+        {trigger.kind === 'repository.pr_comment' && <ReviewRow label="" value={t('automations.excludeOwnComments')} />}
       </dl>
 
       <div className="flex flex-col gap-2">
@@ -73,6 +73,16 @@ export function ReviewStep({ values, agentKinds, statuses }: Props) {
 
 function ActionReview({ index, action, agentKinds, statuses }: { index: number; action: Automation['actions'][number]; agentKinds: AgentKindInfo[]; statuses: TicketsStatus[] }) {
   const { t } = useTranslation();
+  if (action.kind === 'resume_pr_agent') {
+    return (
+      <div className="rounded-md border bg-muted/20 px-3 py-2">
+        <div className="text-xs font-medium">
+          #{index + 1} · {t('automations.actions.kinds.resume_pr_agent')}
+        </div>
+        <pre className="mt-1 max-h-32 overflow-auto font-mono text-[11px] whitespace-pre-wrap">{action.taskTemplate}</pre>
+      </div>
+    );
+  }
   if (action.kind === 'spawn_agent') {
     const agent = agentKinds.find((k) => k.id === action.agentKind);
     const model = agent?.models.find((m) => m.value === action.model);
@@ -114,6 +124,15 @@ function ActionReview({ index, action, agentKinds, statuses }: { index: number; 
           #{index + 1} · {t('automations.actions.kinds.send_message')} → {action.messageProvider}
         </div>
         {action.messageTitle && <div className="mt-1 font-mono text-[11px] text-muted-foreground">{action.messageTitle}</div>}
+      </div>
+    );
+  }
+  if (action.kind === 'trigger_workflow') {
+    return (
+      <div className="rounded-md border bg-muted/20 px-3 py-2">
+        <div className="text-xs font-medium">
+          #{index + 1} · {t('automations.actions.kinds.trigger_workflow')} · {action.workflowFile || '?'}@{action.workflowRef || '?'}
+        </div>
       </div>
     );
   }

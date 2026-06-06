@@ -18,8 +18,11 @@ export function triggerSummary(trigger: AutomationTrigger, statusName?: string, 
   }
 
   if (trigger.kind === 'repository.pr_comment') {
-    const excl = trigger.excludeOwnComments === false ? '' : ' · excl. mine';
-    return `comment on my PRs${excl}`;
+    return 'comment on my PRs';
+  }
+
+  if (trigger.kind === 'repository.pr_approved') {
+    return 'PR approved';
   }
 
   if (trigger.kind === 'repository.pr_build_failed') {
@@ -55,6 +58,10 @@ export function actionsSummary(a: Automation): string {
   }
   return a.actions
     .map((action) => {
+      if (action.kind === 'resume_pr_agent') {
+        return 'resume PR agent';
+      }
+
       if (action.kind === 'spawn_agent') {
         const model = action.model ? ` (${action.model})` : '';
         return `${action.agentKind}${model}`;
@@ -70,6 +77,10 @@ export function actionsSummary(a: Automation): string {
 
       if (action.kind === 'send_message') {
         return `message → ${action.messageProvider || '?'}`;
+      }
+
+      if (action.kind === 'trigger_workflow') {
+        return `workflow → ${action.workflowFile || '?'}@${action.workflowRef || '?'}`;
       }
 
       return `notify (${action.notifyKind ?? 'info'})`;

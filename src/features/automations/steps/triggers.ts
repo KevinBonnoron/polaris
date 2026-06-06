@@ -39,7 +39,7 @@ export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
   },
   'repository.pr_comment': {
     source: 'repository',
-    defaultTrigger: () => ({ kind: 'repository.pr_comment', excludeOwnComments: true }),
+    defaultTrigger: () => ({ kind: 'repository.pr_comment' }),
     defaultTemplate: [
       'New comment on your PR #{{number}} ({{title}}) by @{{commentAuthor}}:',
       '',
@@ -54,6 +54,12 @@ export const TRIGGERS: Record<TriggerKind, TriggerDef> = {
       'When you push, use fixup commits (`git commit --fixup=<sha>`) targeting the original commit so the history can be cleaned up later via `git rebase -i --autosquash`.',
     ].join('\n'),
     placeholders: ['{{number}}', '{{title}}', '{{prAuthor}}', '{{commentAuthor}}', '{{comment}}', '{{url}}'],
+  },
+  'repository.pr_approved': {
+    source: 'repository',
+    defaultTrigger: () => ({ kind: 'repository.pr_approved' }),
+    defaultTemplate: ['PR #{{number}} ({{title}}) by @{{author}} has been approved.', '', 'PR: {{url}}', '', 'The review is approved. You can now merge the PR if CI is green, or address any remaining nits first.'].join('\n'),
+    placeholders: ['{{number}}', '{{title}}', '{{author}}', '{{url}}'],
   },
   'repository.pr_build_failed': {
     source: 'repository',
@@ -146,6 +152,10 @@ export function defaultActionForKind(actionKind: AutomationAction['kind'], taskT
       return { kind: 'send_email', emailTo: '', emailSubject: '', emailBody: '' };
     case 'send_message':
       return { kind: 'send_message', messageProvider: 'slack', messageTitle: '', messageBody: '' };
+    case 'resume_pr_agent':
+      return { kind: 'resume_pr_agent', taskTemplate };
+    case 'trigger_workflow':
+      return { kind: 'trigger_workflow', workflowFile: '', workflowRef: 'main', workflowInputs: '' };
   }
 }
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { TicketsStatus } from '@/collections/tickets.issues.collection';
@@ -8,7 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { useAgentClis } from '@/state/agent-clis';
-import type { ActionKind, AutomationAction, NotificationAction, SendEmailAction, SendMessageAction, SpawnAgentAction, TicketsTransitionAction } from '@/types';
+import type { repository } from '@/wailsjs/go/models';
+import { ListRepoWorkflows } from '@/wailsjs/go/main/App';
+import type { ActionKind, AutomationAction, NotificationAction, ResumePrAgentAction, SendEmailAction, SendMessageAction, SpawnAgentAction, TicketsTransitionAction, TriggerWorkflowAction } from '@/types';
 import { defaultActionForKind, TRIGGERS } from './triggers';
 import type { AutomationForm } from './types';
 
@@ -22,29 +25,18 @@ interface Props {
   hasResendIntegration: boolean;
   hasMessagingIntegration: boolean;
   messagingProviders: string[];
+  hasRepositoryIntegration: boolean;
+  repoOwner: string;
+  repoRepo: string;
 }
 
-const ACTION_KINDS: ActionKind[] = ['spawn_agent', 'tickets_transition', 'notification', 'send_email', 'send_message'];
+const ACTION_KINDS: ActionKind[] = ['spawn_agent', 'resume_pr_agent', 'tickets_transition', 'notification', 'send_email', 'send_message', 'trigger_workflow'];
 
-export function ActionsStep({ form, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders }: Props) {
+export function ActionsStep({ form, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders, hasRepositoryIntegration, repoOwner, repoRepo }: Props) {
   const { t } = useTranslation();
 
-  const availableKinds = ACTION_KINDS.filter((k) => {
-    if (k === 'tickets_transition') {
-      return hasTicketsIntegration;
-    }
-    if (k === 'send_email') {
-      return hasResendIntegration;
-    }
-    if (k === 'send_message') {
-      return hasMessagingIntegration;
-    }
-    return true;
-  });
-
-  const addAction = (kind: ActionKind) => {
-    const triggerKind = form.state.values.trigger.kind;
-    const template = kind === 'spawn_agent' ? TRIGGERS[triggerKind].defaultTemplate : '';
+  const addAction = (kind: ActionKind, triggerKind: string) => {
+    const template = kind === 'spawn_agent' ? (TRIGGERS[triggerKind as keyof typeof TRIGGERS]?.defaultTemplate ?? '') : '';
     const next = [...form.state.values.actions, defaultActionForKind(kind, template)];
     form.setFieldValue('actions', next);
   };
@@ -60,52 +52,64 @@ export function ActionsStep({ form, agentKinds, statuses, hasTicketsIntegration,
   };
 
   return (
-    <form.Subscribe selector={(state) => state.values.actions}>
-      {(actions) => (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col">
-            <Label>{t('automations.actions.title')}</Label>
-            <p className="text-xs text-muted-foreground">{t('automations.actions.desc')}</p>
-          </div>
-
-          {actions.length > 0 && (
-            <div className="flex flex-col gap-3">
-              {actions.map((action, index) => (
-                <ActionCard
-                  // biome-ignore lint/suspicious/noArrayIndexKey: actions are an ordered list with no stable id
-                  key={index}
-                  index={index}
-                  action={action}
-                  agentKinds={agentKinds}
-                  statuses={statuses}
-                  hasTicketsIntegration={hasTicketsIntegration}
-                  hasResendIntegration={hasResendIntegration}
-                  hasMessagingIntegration={hasMessagingIntegration}
-                  messagingProviders={messagingProviders}
-                  onChange={(patch) => updateAction(index, patch)}
-                  onRemove={() => removeAction(index)}
-                />
-              ))}
+    <form.Subscribe selector={(state) => ({ actions: state.values.actions, triggerKind: state.values.trigger.kind })}>
+      {({ actions, triggerKind }) => {
+        const availableKinds = ACTION_KINDS.filter((k) => {
+          if (k === 'tickets_transition') return hasTicketsIntegration;
+          if (k === 'send_email') return hasResendIntegration;
+          if (k === 'send_message') return hasMessagingIntegration;
+          if (k === 'trigger_workflow') return hasRepositoryIntegration;
+          if (k === 'resume_pr_agent') return (['repository.pr_comment', 'repository.pr_approved', 'repository.pr_build_failed', 'repository.pr_build_success'] as const).includes(triggerKind as never);
+          return true;
+        });
+        return (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col">
+              <Label>{t('automations.actions.title')}</Label>
+              <p className="text-xs text-muted-foreground">{t('automations.actions.desc')}</p>
             </div>
-          )}
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed py-6 text-sm text-muted-foreground transition-colors hover:border-blue-500 hover:bg-accent hover:text-foreground">
-                <Plus className="size-4" />
-                {t('automations.actions.addLabel')}
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="center" className="w-[var(--radix-dropdown-menu-trigger-width)]">
-              {availableKinds.map((k) => (
-                <DropdownMenuItem key={k} onSelect={() => addAction(k)}>
-                  {t(`automations.actions.add.${k}`)}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
+            {actions.length > 0 && (
+              <div className="flex flex-col gap-3">
+                {actions.map((action, index) => (
+                  <ActionCard
+                    // biome-ignore lint/suspicious/noArrayIndexKey: actions are an ordered list with no stable id
+                    key={index}
+                    index={index}
+                    action={action}
+                    agentKinds={agentKinds}
+                    statuses={statuses}
+                    hasTicketsIntegration={hasTicketsIntegration}
+                    hasResendIntegration={hasResendIntegration}
+                    hasMessagingIntegration={hasMessagingIntegration}
+                    messagingProviders={messagingProviders}
+                    repoOwner={repoOwner}
+                    repoRepo={repoRepo}
+                    onChange={(patch) => updateAction(index, patch)}
+                    onRemove={() => removeAction(index)}
+                  />
+                ))}
+              </div>
+            )}
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border border-dashed py-6 text-sm text-muted-foreground transition-colors hover:border-blue-500 hover:bg-accent hover:text-foreground">
+                  <Plus className="size-4" />
+                  {t('automations.actions.addLabel')}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" className="w-[var(--radix-dropdown-menu-trigger-width)]">
+                {availableKinds.map((k) => (
+                  <DropdownMenuItem key={k} onSelect={() => addAction(k, triggerKind)}>
+                    {t(`automations.actions.add.${k}`)}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        );
+      }}
     </form.Subscribe>
   );
 }
@@ -119,11 +123,13 @@ interface ActionCardProps {
   hasResendIntegration: boolean;
   hasMessagingIntegration: boolean;
   messagingProviders: string[];
+  repoOwner: string;
+  repoRepo: string;
   onChange: (patch: Partial<AutomationAction>) => void;
   onRemove: () => void;
 }
 
-function ActionCard({ index, action, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders, onChange, onRemove }: ActionCardProps) {
+function ActionCard({ index, action, agentKinds, statuses, hasTicketsIntegration, hasResendIntegration, hasMessagingIntegration, messagingProviders, repoOwner, repoRepo, onChange, onRemove }: ActionCardProps) {
   const { t } = useTranslation();
 
   return (
@@ -140,10 +146,12 @@ function ActionCard({ index, action, agentKinds, statuses, hasTicketsIntegration
       </div>
 
       {action.kind === 'spawn_agent' && <SpawnAgentEditor action={action} agentKinds={agentKinds} onChange={onChange} />}
+      {action.kind === 'resume_pr_agent' && <ResumePrAgentEditor action={action} onChange={onChange} />}
       {action.kind === 'tickets_transition' && <TicketsTransitionEditor action={action} statuses={statuses} hasTicketsIntegration={hasTicketsIntegration} onChange={onChange} />}
       {action.kind === 'notification' && <NotificationEditor action={action} onChange={onChange} />}
       {action.kind === 'send_email' && <SendEmailEditor action={action} hasResendIntegration={hasResendIntegration} onChange={onChange} />}
       {action.kind === 'send_message' && <SendMessageEditor action={action} hasMessagingIntegration={hasMessagingIntegration} messagingProviders={messagingProviders} onChange={onChange} />}
+      {action.kind === 'trigger_workflow' && <TriggerWorkflowEditor action={action} repoOwner={repoOwner} repoRepo={repoRepo} onChange={onChange} />}
     </div>
   );
 }
@@ -189,6 +197,19 @@ function SpawnAgentEditor({ action, agentKinds, onChange }: { action: SpawnAgent
       <div className="flex flex-col gap-1.5">
         <Label>{t('automations.template')}</Label>
         <Textarea value={action.taskTemplate} onChange={(e) => onChange({ taskTemplate: e.target.value })} rows={5} className="font-mono text-xs" />
+      </div>
+    </div>
+  );
+}
+
+function ResumePrAgentEditor({ action, onChange }: { action: ResumePrAgentAction; onChange: (patch: Partial<AutomationAction>) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-muted-foreground">{t('automations.actions.resumePrAgentHint')}</p>
+      <div className="flex flex-col gap-1.5">
+        <Label>{t('automations.template')}</Label>
+        <Textarea value={action.taskTemplate} onChange={(e) => onChange({ taskTemplate: e.target.value })} rows={4} className="font-mono text-xs" />
       </div>
     </div>
   );
@@ -275,6 +296,55 @@ function SendEmailEditor({ action, hasResendIntegration, onChange }: { action: S
         <Label>{t('automations.actions.emailBody')}</Label>
         <Textarea value={action.emailBody ?? ''} onChange={(e) => onChange({ emailBody: e.target.value })} rows={4} placeholder={t('automations.actions.emailBodyPlaceholder')} />
         <p className="text-xs text-muted-foreground">{t('automations.actions.emailBodyHint')}</p>
+      </div>
+    </div>
+  );
+}
+
+function TriggerWorkflowEditor({ action, repoOwner, repoRepo, onChange }: { action: TriggerWorkflowAction; repoOwner: string; repoRepo: string; onChange: (patch: Partial<AutomationAction>) => void }) {
+  const { t } = useTranslation();
+  const [workflows, setWorkflows] = useState<repository.WorkflowSummary[]>([]);
+
+  useEffect(() => {
+    if (!repoOwner || !repoRepo) return;
+    ListRepoWorkflows(repoOwner, repoRepo)
+      .then((result) => setWorkflows(result ?? []))
+      .catch(() => setWorkflows([]));
+  }, [repoOwner, repoRepo]);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1.5">
+        <Label>{t('automations.actions.workflowFile')}</Label>
+        {workflows.length > 0 ? (
+          <Select value={action.workflowFile} onValueChange={(v) => onChange({ workflowFile: v })}>
+            <SelectTrigger>
+              <SelectValue placeholder={t('automations.actions.workflowFilePlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {workflows.map((w) => (
+                <SelectItem key={w.path} value={w.path}>
+                  {w.name} · <span className="text-muted-foreground">{w.path}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Input value={action.workflowFile} onChange={(e) => onChange({ workflowFile: e.target.value })} placeholder={t('automations.actions.workflowFilePlaceholder')} className="font-mono text-xs" />
+        )}
+        <p className="text-xs text-muted-foreground">{t('automations.actions.workflowFileHint')}</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label>{t('automations.actions.workflowRef')}</Label>
+        <Input value={action.workflowRef} onChange={(e) => onChange({ workflowRef: e.target.value })} placeholder={t('automations.actions.workflowRefPlaceholder')} className="font-mono text-xs" />
+        <p className="text-xs text-muted-foreground">{t('automations.actions.workflowRefHint')}</p>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <Label>{t('automations.actions.workflowInputs')}</Label>
+        <Textarea value={action.workflowInputs ?? ''} onChange={(e) => onChange({ workflowInputs: e.target.value })} rows={3} placeholder={t('automations.actions.workflowInputsPlaceholder')} className="font-mono text-xs" />
+        <p className="text-xs text-muted-foreground">{t('automations.actions.workflowInputsHint')}</p>
       </div>
     </div>
   );

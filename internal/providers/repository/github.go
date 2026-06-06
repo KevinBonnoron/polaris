@@ -448,6 +448,69 @@ func TriggerWorkflowDispatch(owner, repo string, workflowID int64, ref string, i
 	return fmt.Errorf("gh api %s: %s", apiPath, msg)
 }
 
+type WorkflowSummary struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"` // filename only, e.g. "deploy.yml"
+}
+
+func ListWorkflows(owner, repo string) ([]WorkflowSummary, error) {
+	var result struct {
+		Workflows []struct {
+			ID   int64  `json:"id"`
+			Name string `json:"name"`
+			Path string `json:"path"`
+		} `json:"workflows"`
+	}
+	if err := callJSON(fmt.Sprintf("/repos/%s/%s/actions/workflows", owner, repo), &result); err != nil {
+		return nil, err
+	}
+	out := make([]WorkflowSummary, 0, len(result.Workflows))
+	for _, w := range result.Workflows {
+		filename := w.Path
+		if idx := strings.LastIndex(w.Path, "/"); idx >= 0 {
+			filename = w.Path[idx+1:]
+		}
+		out = append(out, WorkflowSummary{ID: w.ID, Name: w.Name, Path: filename})
+	}
+	return out, nil
+}
+
+func TriggerWorkflowDispatchByFile(owner, repo, workflowFile, ref string, inputs map[string]string) error {
+	if ref == "" {
+		return fmt.Errorf("ref is required")
+	}
+	if workflowFile == "" {
+		return fmt.Errorf("workflowFile is required")
+	}
+	if _, err := exec.LookPath("gh"); err != nil {
+		return ErrCLIMissing
+	}
+	payload := map[string]any{"ref": ref}
+	if len(inputs) > 0 {
+		payload["inputs"] = inputs
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("encode dispatch payload: %w", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	apiPath := fmt.Sprintf("/repos/%s/%s/actions/workflows/%s/dispatches", owner, repo, workflowFile)
+	cmd := exec.CommandContext(ctx, "gh", "api", "-X", "POST", "-H", "Accept: application/vnd.github+json", "--input", "-", apiPath)
+	cmd.Stdin = bytes.NewReader(body)
+	sysexec.Hide(cmd)
+	out, runErr := cmd.CombinedOutput()
+	if runErr == nil {
+		return nil
+	}
+	msg := strings.TrimSpace(string(out))
+	if msg == "" {
+		msg = runErr.Error()
+	}
+	return fmt.Errorf("gh api %s: %s", apiPath, msg)
+}
+
 func CancelWorkflowRun(owner, repo string, runID int64) error {
 	if runID <= 0 {
 		return fmt.Errorf("runID is required")

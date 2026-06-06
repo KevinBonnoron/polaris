@@ -939,6 +939,8 @@ func (automationManager *AutomationManager) runActions(fc fireContext) {
 			results = append(results, automationManager.runSendEmail(fc, action, i))
 		case "send_message":
 			results = append(results, automationManager.runSendMessage(fc, action, i))
+		case "trigger_workflow":
+			results = append(results, automationManager.runTriggerWorkflow(fc, action, i))
 		default:
 			log.Printf("automation %s: unknown action kind %q at index %d", a.ID, action.Kind, i)
 			results = append(results, ActionResult{Kind: action.Kind, Status: "skipped", Detail: "unknown action kind"})
@@ -1385,4 +1387,48 @@ func (automationManager *AutomationManager) runSendMessage(fc fireContext, actio
 	}
 
 	return ActionResult{Kind: "send_message", Status: "ok", Detail: provider}
+}
+
+func parseWorkflowInputs(raw string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		out[strings.TrimSpace(k)] = strings.TrimSpace(v)
+	}
+	return out
+}
+
+func (automationManager *AutomationManager) runTriggerWorkflow(fc fireContext, action AutomationAction, idx int) ActionResult {
+	a := fc.Automation
+	cfg, ok := automationManager.repoConfigFor(a.ProjectID)
+	if !ok {
+		log.Printf("automation %s action[%d] trigger_workflow: no repository integration", a.ID, idx)
+		return ActionResult{Kind: "trigger_workflow", Status: "skipped", Detail: "no repository integration"}
+	}
+	file := renderTemplate(action.WorkflowFile, fc.Vars)
+	ref := renderTemplate(action.WorkflowRef, fc.Vars)
+	if file == "" || ref == "" {
+		log.Printf("automation %s action[%d] trigger_workflow: missing workflowFile or workflowRef", a.ID, idx)
+		return ActionResult{Kind: "trigger_workflow", Status: "skipped", Detail: "missing workflowFile or workflowRef"}
+	}
+	inputs := parseWorkflowInputs(renderTemplate(action.WorkflowInputs, fc.Vars))
+	if err := repository.TriggerWorkflowDispatchByFile(cfg.Owner, cfg.Repo, file, ref, inputs); err != nil {
+		log.Printf("automation %s action[%d] trigger_workflow: %v", a.ID, idx, err)
+		_, _ = automationManager.svc.Notify(NotifyInput{
+			ProjectID:     a.ProjectID,
+			Type:          NotifTypeAutomation,
+			Severity:      SeverityError,
+			TitleTemplate: fmt.Sprintf("Automation %q · %s · trigger_workflow failed: %v", a.Name, fc.NotifLabel, err),
+			Payload:       map[string]any{"automationId": a.ID},
+		})
+		return ActionResult{Kind: "trigger_workflow", Status: "error", Detail: err.Error()}
+	}
+	return ActionResult{Kind: "trigger_workflow", Status: "ok", Detail: fmt.Sprintf("%s@%s", file, ref)}
 }
