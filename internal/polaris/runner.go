@@ -446,6 +446,13 @@ func (service *Service) PromoteAgentToWorktree(in PromoteWorktreeInput) error {
 		return fmt.Errorf("persist worktree: %w", err)
 	}
 
+	// Claude Code resolves session storage from CWD: ~/.claude/projects/<cwd-encoded>/<uuid>.jsonl.
+	// Move the transcript so --resume works after the CWD shifts to the worktree. Done only
+	// once the worktree is persisted, so a failed promotion never strands the transcript.
+	if agent.SessionID != "" {
+		relocateClaudeSession(project.Path, worktreePath, agent.SessionID)
+	}
+
 	// The changes now live in the worktree; rewind the project root to the spawn
 	// snapshot so the agent's work is moved rather than copied, leaving any
 	// pre-existing changes in the root untouched.
@@ -463,6 +470,18 @@ func (service *Service) PromoteAgentToWorktree(in PromoteWorktreeInput) error {
 // branch names already pass git check-ref-format.
 func sanitizeLeaf(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
+}
+
+// relocateClaudeSession moves a Claude Code session transcript from the source
+// working directory's project slot to the destination's, so --resume works
+// after the agent's CWD changes (e.g. on worktree promotion). Best-effort.
+func relocateClaudeSession(srcDir, dstDir, sessionID string) {
+	src := filepath.Join(claudeProjectDir(srcDir), sessionID+".jsonl")
+	dst := filepath.Join(claudeProjectDir(dstDir), sessionID+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return
+	}
+	_ = os.Rename(src, dst)
 }
 
 // agentRunDir picks the working directory for a follow-up turn. When the

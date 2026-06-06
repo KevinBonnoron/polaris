@@ -24,13 +24,21 @@ type ClaudeSession struct {
 }
 
 // claudeProjectDir returns the ~/.claude/projects/<encoded> directory for the
-// given project path. Claude Code encodes paths by replacing every '/' with '-'.
+// given project path. Claude Code encodes the path by replacing every
+// non-alphanumeric rune with '-' (so '/', '.', '_' all collapse to '-').
+// Claude additionally truncates encodings longer than 200 chars and appends a
+// hash; we don't, so callers relying on this for such paths are best-effort.
 func claudeProjectDir(projectPath string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	encoded := strings.ReplaceAll(projectPath, "/", "-")
+	encoded := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			return r
+		}
+		return '-'
+	}, projectPath)
 	return filepath.Join(home, ".claude", "projects", encoded)
 }
 
