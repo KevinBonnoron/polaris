@@ -102,7 +102,7 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
       }
     }
     return seed;
-  }, [project, integration, isMulti, instanceIndex]);
+  }, [project, integration, isMulti, instanceIndex, storageKey]);
 
   const [removing, setRemoving] = useState(false);
   const [detectedHint, setDetectedHint] = useState<string | null>(null);

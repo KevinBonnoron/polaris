@@ -15,8 +15,12 @@ export function isConnected(project: Project | null | undefined, id: string): bo
 export function isIntegrationConnected(project: Project | null | undefined, integration: Integration): boolean {
   const key = integration.storageKey ?? integration.id;
   const config = getIntegrations(project)[key];
-  if (!config) return false;
-  if (!integration.fixedValues) return true;
+  if (!config) {
+    return false;
+  }
+  if (!integration.fixedValues) {
+    return true;
+  }
   return Object.entries(integration.fixedValues).every(([k, v]) => config[k] === v);
 }
 

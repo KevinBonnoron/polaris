@@ -303,7 +303,9 @@ export function findIntegrationForStorageKey(storageKey: string, config?: Record
   const provider = typeof config?.provider === 'string' ? config.provider : undefined;
   if (provider) {
     const byProvider = INTEGRATIONS.find((i) => i.id === provider && (i.storageKey ?? i.id) === storageKey);
-    if (byProvider) return byProvider;
+    if (byProvider) {
+      return byProvider;
+    }
   }
   return INTEGRATIONS.find((i) => (i.storageKey ?? i.id) === storageKey);
 }
