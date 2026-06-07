@@ -1073,11 +1073,18 @@ func (automationManager *AutomationManager) runResumePRAgent(fc fireContext, act
 	}
 	agent, err := automationManager.svc.store.GetAgentByPRURL(a.ProjectID, fc.PR.URL)
 	if err != nil {
-		log.Printf("automation %s action[%d] resume_pr_agent: lookup: %v", a.ID, idx, err)
+		log.Printf("automation %s action[%d] resume_pr_agent: lookup by prUrl: %v", a.ID, idx, err)
 		return ActionResult{Kind: "resume_pr_agent", Status: "error", Detail: err.Error()}
 	}
+	if agent == nil && fc.PR.HeadBranch != "" {
+		agent, err = automationManager.svc.store.GetAgentByBranch(a.ProjectID, fc.PR.HeadBranch)
+		if err != nil {
+			log.Printf("automation %s action[%d] resume_pr_agent: lookup by branch: %v", a.ID, idx, err)
+			return ActionResult{Kind: "resume_pr_agent", Status: "error", Detail: err.Error()}
+		}
+	}
 	if agent == nil {
-		log.Printf("automation %s action[%d] resume_pr_agent: no agent found for PR %s", a.ID, idx, fc.PR.URL)
+		log.Printf("automation %s action[%d] resume_pr_agent: no agent found for PR %s (branch %q)", a.ID, idx, fc.PR.URL, fc.PR.HeadBranch)
 		return ActionResult{Kind: "resume_pr_agent", Status: "skipped", Detail: "no agent found for this PR"}
 	}
 	message := renderTemplate(action.TaskTemplate, fc.Vars)
