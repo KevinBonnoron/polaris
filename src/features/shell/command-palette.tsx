@@ -95,10 +95,14 @@ export function CommandPalette({ open, onOpenChange }: Props) {
     const items: (typeof INTEGRATIONS)[number][] = [];
     for (const i of INTEGRATIONS) {
       const key = i.storageKey ?? i.id;
-      if (!INTEGRATION_ROUTES[key] || seen.has(key)) continue;
+      if (!INTEGRATION_ROUTES[key] || seen.has(key)) {
+        continue;
+      }
       seen.add(key);
       const isRepo = key === 'repository';
-      if (isRepo ? currentProject?.hasGit !== true : !Object.hasOwn(connected, key)) continue;
+      if (isRepo ? currentProject?.hasGit !== true : !Object.hasOwn(connected, key)) {
+        continue;
+      }
       const connectedEntry = INTEGRATIONS.find((e) => (e.storageKey ?? e.id) === key && isIntegrationConnected(currentProject, e));
       items.push(connectedEntry ?? i);
     }

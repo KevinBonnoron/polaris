@@ -172,10 +172,14 @@ export function AppSidebar() {
     const items: NavItem[] = [];
     for (const i of INTEGRATIONS) {
       const key = i.storageKey ?? i.id;
-      if (!NAV_ROUTES[key] || seen.has(key)) continue;
+      if (!NAV_ROUTES[key] || seen.has(key)) {
+        continue;
+      }
       seen.add(key);
       const isRepo = key === 'repository';
-      if (isRepo ? !hasGit : !Object.hasOwn(connected, key)) continue;
+      if (isRepo ? !hasGit : !Object.hasOwn(connected, key)) {
+        continue;
+      }
       const connectedEntry = INTEGRATIONS.find((e) => (e.storageKey ?? e.id) === key && isIntegrationConnected(currentProject, e));
       const display = connectedEntry ?? i;
       items.push({ id: `integration:${key}`, to: NAV_ROUTES[key], label: display.name, icon: display.icon });
