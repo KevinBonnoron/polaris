@@ -13,7 +13,7 @@ import type { Project } from '@/types';
 import { ConfigureIntegrationModal } from './configure-integration-modal';
 import { IntegrationCard } from './integration-card';
 import { INTEGRATIONS } from './integration-catalog';
-import { isConnected, withIntegration } from './project-integrations';
+import { effectiveStorageKey, isIntegrationConnected, withIntegration } from './project-integrations';
 
 interface Props {
   project: Project;
@@ -31,8 +31,8 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
     const q = query.trim().toLowerCase();
     const matches = INTEGRATIONS.filter((i) => !q || i.name.toLowerCase().includes(q));
     return {
-      available: matches.filter((i) => !isConnected(project, i.id)),
-      connected: matches.filter((i) => isConnected(project, i.id)),
+      available: matches.filter((i) => !isIntegrationConnected(project, i)),
+      connected: matches.filter((i) => isIntegrationConnected(project, i)),
     };
   }, [query, project]);
 
@@ -43,11 +43,14 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
     const path = project.path;
     setDetecting(true);
     try {
+      const seenStorageKeys = new Set<string>();
       const results = await Promise.all(
         INTEGRATIONS.map(async (i) => {
-          if (!i.detect || isConnected(project, i.id)) {
+          const key = effectiveStorageKey(i);
+          if (!i.detect || isIntegrationConnected(project, i) || seenStorageKeys.has(key)) {
             return null;
           }
+          seenStorageKeys.add(key);
           try {
             const result = await i.detect(path);
             if (!result) {
@@ -59,17 +62,17 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
             } else if (i.multi && !Array.isArray(result)) {
               config = { _instances: [result] };
             } else if (!Array.isArray(result)) {
-              config = result;
+              config = { ...i.fixedValues, ...result };
             } else {
               return null;
             }
-            return { id: i.id, config } as const;
+            return { storageKey: key, name: i.name, config } as const;
           } catch {
             return null;
           }
         }),
       );
-      const added = results.filter((r): r is { id: string; config: Record<string, unknown> } => r !== null);
+      const added = results.filter((r): r is { storageKey: string; name: string; config: Record<string, unknown> } => r !== null);
       if (added.length === 0) {
         toast.message(t('projects.settings.redetectedNone'));
         return;
@@ -77,12 +80,12 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
       const tx = projectsCollection.update(project.id, (draft) => {
         let next = draft.integrations ?? {};
         for (const item of added) {
-          next = withIntegration({ ...draft, integrations: next }, item.id, item.config);
+          next = withIntegration({ ...draft, integrations: next }, item.storageKey, item.config);
         }
         draft.integrations = next;
       });
       await tx.isPersisted.promise;
-      const names = added.map((a) => INTEGRATIONS.find((i) => i.id === a.id)?.name ?? a.id).join(', ');
+      const names = added.map((a) => a.name).join(', ');
       toast.success(t('projects.settings.redetectedAdded', { count: added.length }), { description: names });
     } catch (err) {
       toastError({ title: t('projects.settings.couldNotRedetect'), err });

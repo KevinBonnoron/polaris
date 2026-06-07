@@ -13,7 +13,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
 import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
-import { getIntegrations } from '@/features/integrations/project-integrations';
+import { getIntegrations, isIntegrationConnected } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { useShellRun } from '@/features/integrations/shell/shell-context';
 import { AddProjectModal } from '@/features/projects/add-project-modal';
@@ -168,21 +168,20 @@ export function AppSidebar() {
   );
 
   const baseIntegrationItems: NavItem[] = useMemo(() => {
-    return INTEGRATIONS.filter((i) => {
-      if (!NAV_ROUTES[i.id]) {
-        return false;
-      }
-      if (i.id === 'repository') {
-        return hasGit;
-      }
-      return Object.hasOwn(connected, i.id);
-    }).map((i) => ({
-      id: `integration:${i.id}`,
-      to: NAV_ROUTES[i.id],
-      label: i.name,
-      icon: i.icon,
-    }));
-  }, [connected, hasGit]);
+    const seen = new Set<string>();
+    const items: NavItem[] = [];
+    for (const i of INTEGRATIONS) {
+      const key = i.storageKey ?? i.id;
+      if (!NAV_ROUTES[key] || seen.has(key)) continue;
+      seen.add(key);
+      const isRepo = key === 'repository';
+      if (isRepo ? !hasGit : !Object.hasOwn(connected, key)) continue;
+      const connectedEntry = INTEGRATIONS.find((e) => (e.storageKey ?? e.id) === key && isIntegrationConnected(currentProject, e));
+      const display = connectedEntry ?? i;
+      items.push({ id: `integration:${key}`, to: NAV_ROUTES[key], label: display.name, icon: display.icon });
+    }
+    return items;
+  }, [connected, hasGit, currentProject]);
 
   const [order, setOrder] = useState<string[]>(() => readStoredOrder());
   const [draggingId, setDraggingId] = useState<string | null>(null);

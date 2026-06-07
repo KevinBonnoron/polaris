@@ -229,6 +229,11 @@ func (store *Store) migrate() error {
 		// meaningless keys from stored triggers.
 		`UPDATE automations SET triggerJson = json_remove(triggerJson, '$.assignee') WHERE json_extract(triggerJson, '$.assignee') IS NOT NULL`,
 		`UPDATE automations SET triggerJson = json_remove(triggerJson, '$.onlyMine') WHERE json_extract(triggerJson, '$.onlyMine') IS NOT NULL`,
+		// Provider cards: tickets and repository configs now require an explicit provider field.
+		// Backfill configs migrated from the old per-provider key ($.jira → $.tickets)
+		// that never had a provider field written.
+		`UPDATE projects SET integrations = json_set(integrations, '$.tickets.provider', 'jira') WHERE json_extract(integrations, '$.tickets') IS NOT NULL AND json_extract(integrations, '$.tickets.provider') IS NULL`,
+		`UPDATE projects SET integrations = json_set(integrations, '$.repository.provider', 'github') WHERE json_extract(integrations, '$.repository') IS NOT NULL AND json_extract(integrations, '$.repository.provider') IS NULL`,
 	}
 	for _, q := range additiveCurrent {
 		if _, err := store.db.ExecContext(ctx, q); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
