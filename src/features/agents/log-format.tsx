@@ -1,6 +1,6 @@
 import 'highlight.js/styles/github-dark.css';
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { Fragment, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -96,7 +96,18 @@ type UserMessageBlock = {
   key: string;
 };
 
-export type LogBlock = LogLineBlock | ThinkingBlock | TextBlock | ToolResultBlock | UserMessageBlock;
+type AgentGroupBlock = {
+  type: 'agent-group';
+  description: string;
+  subagentType?: string;
+  children: LogBlock[];
+  key: string;
+  toolStatus: 'pending' | 'success' | 'error';
+  toolId?: string;
+  resultLines?: string[];
+};
+
+export type LogBlock = LogLineBlock | ThinkingBlock | TextBlock | ToolResultBlock | UserMessageBlock | AgentGroupBlock;
 
 function stripXmlTags(text: string): string {
   return text.replace(/<\/?[a-z_]+>/gi, '').trim();
@@ -135,13 +146,20 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
   let thinkingLines: string[] = [];
   let thinkingKey: string | null = null;
 
+  // Stack for nesting sub-agent events under their Agent tool call
+  const agentStack: Array<{ id: string; block: AgentGroupBlock }> = [];
+
+  function target(): LogBlock[] {
+    return agentStack.length > 0 ? agentStack[agentStack.length - 1].block.children : out;
+  }
+
   const flushText = () => {
     if (!textKey || !textLines.length) {
       return;
     }
     const content = textLines.join('\n').trim();
     if (content) {
-      out.push({ type: 'text', content, key: textKey });
+      target().push({ type: 'text', content, key: textKey });
     }
     textLines = [];
     textKey = null;
@@ -150,7 +168,7 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
     if (!thinkingKey || !thinkingLines.length) {
       return;
     }
-    out.push({ type: 'thinking', lines: thinkingLines, key: thinkingKey });
+    target().push({ type: 'thinking', lines: thinkingLines, key: thinkingKey });
     thinkingLines = [];
     thinkingKey = null;
   };
@@ -175,22 +193,51 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
       case 'tool_call': {
         flushText();
         flushThinking();
-        const rest = '→ ' + (evt.name ?? 'Tool') + (evt.content ? ' · ' + evt.content : '');
-        out.push({ type: 'line', stamp: evt.ts ?? null, rest, key: `tool-${blockIndex++}-${i}`, toolId: evt.id, toolStatus: 'pending' });
+        if (evt.name === 'Agent' && evt.id) {
+          const description = (evt.input?.description as string | undefined) ?? '';
+          const agentBlock: AgentGroupBlock = {
+            type: 'agent-group',
+            description,
+            subagentType: evt.input?.subagent_type as string | undefined,
+            children: [],
+            key: `agent-group-${blockIndex++}-${i}`,
+            toolStatus: 'pending',
+            toolId: evt.id,
+          };
+          target().push(agentBlock);
+          agentStack.push({ id: evt.id, block: agentBlock });
+        } else {
+          const rest = '→ ' + (evt.name ?? 'Tool') + (evt.content ? ' · ' + evt.content : '');
+          target().push({ type: 'line', stamp: evt.ts ?? null, rest, key: `tool-${blockIndex++}-${i}`, toolId: evt.id, toolStatus: 'pending' });
+        }
         break;
       }
       case 'tool_result': {
         flushText();
         flushThinking();
+        // Check if this closes an active agent group
+        if (evt.id) {
+          const agentIdx = agentStack.findIndex((a) => a.id === evt.id);
+          if (agentIdx !== -1) {
+            const agent = agentStack[agentIdx];
+            agent.block.toolStatus = evt.error ? 'error' : 'success';
+            const resultText = evt.rendered_content || evt.content || '';
+            if (resultText) {
+              agent.block.resultLines = resultText.split('\n');
+            }
+            agentStack.splice(agentIdx, 1);
+            break;
+          }
+        }
         const text = evt.rendered_content || evt.content || '';
-        out.push({ type: 'tool-result', lines: text ? text.split('\n') : [], key: `result-${blockIndex++}-${i}`, toolId: evt.id ?? undefined, status: evt.error ? 'error' : 'success' });
+        target().push({ type: 'tool-result', lines: text ? text.split('\n') : [], key: `result-${blockIndex++}-${i}`, toolId: evt.id ?? undefined, status: evt.error ? 'error' : 'success' });
         break;
       }
       case 'user_message':
         flushText();
         flushThinking();
         if (evt.content) {
-          out.push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` });
+          target().push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` });
         }
         break;
       case 'system': {
@@ -198,7 +245,7 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
         flushThinking();
         const content = evt.content ?? '';
         if (content) {
-          out.push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
+          target().push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
         }
         break;
       }
@@ -209,53 +256,91 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
   flushText();
   flushThinking();
 
-  // Pair tool_call events with tool_result events by ID (O(n)).
-  // Falls back to FIFO when IDs are absent (legacy sessions).
-  const absorbed = new Set<number>();
-  const callsById = new Map<string, LogLineBlock>();
-  const pendingFifo: LogLineBlock[] = [];
+  // Pair tool_call events with tool_result events by ID, recursively within agent groups.
+  function pairToolResults(blocks: LogBlock[]): LogBlock[] {
+    const absorbed = new Set<number>();
+    const callsById = new Map<string, LogLineBlock>();
+    const pendingFifo: LogLineBlock[] = [];
 
-  const attachResult = (call: LogLineBlock, status: 'success' | 'error', resultLines: string[]) => {
-    call.toolStatus = status;
-    call.toolResultLines = resultLines;
-  };
+    const attachResult = (call: LogLineBlock, status: 'success' | 'error', resultLines: string[]) => {
+      call.toolStatus = status;
+      call.toolResultLines = resultLines;
+    };
 
-  for (let i = 0; i < out.length; i++) {
-    const block = out[i];
-    if (block.type === 'line' && block.rest.startsWith('→ ')) {
-      if (block.toolId) {
-        callsById.set(block.toolId, block);
-      } else {
-        pendingFifo.push(block);
-      }
-    } else if (block.type === 'tool-result') {
-      let call: LogLineBlock | undefined;
-      if (block.toolId && callsById.has(block.toolId)) {
-        call = callsById.get(block.toolId);
-        callsById.delete(block.toolId);
-      } else {
-        call = pendingFifo.shift();
-      }
-      if (call) {
-        if (block.status === 'error') {
-          // AskUserQuestion / ExitPlanMode get no tool_result from the agent (subprocess
-          // was stopped to wait for user input), so an error result here means "turn
-          // ended before you answered". Keep them pending rather than flagging failure.
-          if (call.rest.startsWith('→ AskUserQuestion') || call.rest.startsWith('→ ExitPlanMode')) {
-            absorbed.add(i);
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (block.type === 'line' && block.rest.startsWith('→ ')) {
+        if (block.toolId) {
+          callsById.set(block.toolId, block);
+        } else {
+          pendingFifo.push(block);
+        }
+      } else if (block.type === 'tool-result') {
+        let call: LogLineBlock | undefined;
+        if (block.toolId && callsById.has(block.toolId)) {
+          call = callsById.get(block.toolId);
+          callsById.delete(block.toolId);
+        } else {
+          call = pendingFifo.shift();
+        }
+        if (call) {
+          if (block.status === 'error') {
+            // AskUserQuestion / ExitPlanMode get no tool_result from the agent (subprocess
+            // was stopped to wait for user input), so an error result here means "turn
+            // ended before you answered". Keep them pending rather than flagging failure.
+            if (call.rest.startsWith('→ AskUserQuestion') || call.rest.startsWith('→ ExitPlanMode')) {
+              absorbed.add(i);
+            } else {
+              attachResult(call, 'error', cleanResultLines(block.lines));
+              absorbed.add(i);
+            }
           } else {
-            attachResult(call, 'error', cleanResultLines(block.lines));
+            attachResult(call, 'success', cleanResultLines(block.lines));
             absorbed.add(i);
           }
-        } else {
-          attachResult(call, 'success', cleanResultLines(block.lines));
-          absorbed.add(i);
         }
+      } else if (block.type === 'agent-group') {
+        block.children = pairToolResults(block.children);
       }
     }
+
+    return blocks.filter((_, i) => !absorbed.has(i));
   }
 
-  return out.filter((_, i) => !absorbed.has(i));
+  return pairToolResults(out);
+}
+
+function AgentGroup({ description, subagentType, children, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
+  const isPending = toolStatus === 'pending';
+  const [open, setOpen] = useState(isPending);
+  const prevStatus = useRef(toolStatus);
+
+  useEffect(() => {
+    if (prevStatus.current === 'pending' && toolStatus !== 'pending') {
+      setOpen(false);
+    }
+    prevStatus.current = toolStatus;
+  }, [toolStatus]);
+
+  const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
+  const hasChildren = children.length > 0;
+  const label = subagentType ? `Agent · ${subagentType}` : 'Agent';
+
+  return (
+    <div className="col-span-2 my-0.5">
+      <button type="button" onClick={() => hasChildren && setOpen((v) => !v)} className={cn('flex w-full items-center gap-1.5 text-left font-mono text-xs', hasChildren && 'cursor-pointer')}>
+        <span className={cn('mt-px size-1.5 shrink-0 rounded-full', dotClass)} />
+        <span className="text-violet-400">{label}</span>
+        {description && <span className="text-muted-foreground/50">{description}</span>}
+        {hasChildren && (open ? <ChevronDown className="ml-auto size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground/40" />)}
+      </button>
+      {open && hasChildren && (
+        <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
+          <LogBlocksGrid blocks={children} showTimestamps={false} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ThinkingGroup({ lines }: { lines: string[] }) {
@@ -465,6 +550,9 @@ export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 font-mono text-xs leading-relaxed">
       {blocks.map((block) => {
+        if (block.type === 'agent-group') {
+          return <AgentGroup key={block.key} description={block.description} subagentType={block.subagentType} children={block.children} toolStatus={block.toolStatus} toolId={block.toolId} resultLines={block.resultLines} />;
+        }
         if (block.type === 'user-message') {
           return (
             <div key={block.key} className="col-span-2 my-1 whitespace-pre-wrap break-words rounded-md bg-muted/50 px-3 py-2 text-sm text-foreground/80">
