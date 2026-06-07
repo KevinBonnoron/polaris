@@ -32,6 +32,7 @@ type PullRequest struct {
 	Title          string  `json:"title"`
 	Author         string  `json:"author"`
 	URL            string  `json:"url"`
+	HeadBranch     string  `json:"headBranch"`
 	State          string  `json:"state"`
 	Draft          bool    `json:"draft"`
 	ReviewDecision string  `json:"reviewDecision"`
@@ -77,7 +78,7 @@ const workflowRunsPerPage = 30
 const apiTimeout = 15 * time.Second
 
 func ListPullRequests(owner, repo string) ([]PullRequest, error) {
-	const query = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:30,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url isDraft createdAt updatedAt reviewDecision author{login} labels(first:20){nodes{name color}}}}}}`
+	const query = `query($owner:String!,$name:String!){repository(owner:$owner,name:$name){pullRequests(states:OPEN,first:30,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url headRefName isDraft createdAt updatedAt reviewDecision author{login} labels(first:20){nodes{name color}}}}}}`
 	var raw struct {
 		Data struct {
 			Repository struct {
@@ -86,6 +87,7 @@ func ListPullRequests(owner, repo string) ([]PullRequest, error) {
 						Number         int       `json:"number"`
 						Title          string    `json:"title"`
 						URL            string    `json:"url"`
+						HeadRefName    string    `json:"headRefName"`
 						IsDraft        bool      `json:"isDraft"`
 						CreatedAt      time.Time `json:"createdAt"`
 						UpdatedAt      time.Time `json:"updatedAt"`
@@ -114,6 +116,7 @@ func ListPullRequests(owner, repo string) ([]PullRequest, error) {
 			Title:          p.Title,
 			Author:         author,
 			URL:            p.URL,
+			HeadBranch:     p.HeadRefName,
 			State:          "open",
 			Draft:          p.IsDraft,
 			ReviewDecision: p.ReviewDecision,
