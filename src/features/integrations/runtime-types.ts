@@ -21,6 +21,7 @@ export interface RunState {
   manifest?: string;
   lines: RunLine[];
   exited?: RunExitEvent;
+  agentId?: string;
 }
 
 export interface WorkspaceCommand {

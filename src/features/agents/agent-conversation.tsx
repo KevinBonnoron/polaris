@@ -119,18 +119,21 @@ export function AgentConversation({ agentId }: { agentId: string }) {
 
   const devManifestPath = useMemo(() => {
     const manifest = activeRun?.config?.manifestPath;
+    if (!manifest) {
+      return undefined;
+    }
     const worktreePath = agent?.worktree?.path;
+    if (!worktreePath) {
+      return manifest;
+    }
     const projectPath = project?.path;
-    if (!manifest || !worktreePath || !projectPath) {
+    if (!projectPath || !manifest.startsWith(projectPath)) {
       return undefined;
     }
-
-    if (!manifest.startsWith(projectPath)) {
-      return undefined;
-    }
-
     return worktreePath + manifest.slice(projectPath.length);
   }, [activeRun?.config?.manifestPath, agent?.worktree?.path, project?.path]);
+
+  const thisAgentRunning = activeRun?.isRunning === true && activeRun.run?.agentId === agentId;
 
   const onDevRun = useCallback(() => {
     if (!activeRun) {
@@ -140,9 +143,9 @@ export function AgentConversation({ agentId }: { agentId: string }) {
     if (activeRun.isRunning) {
       void activeRun.stop();
     } else if (activeRun.config?.startScript && devManifestPath) {
-      void activeRun.startScript(activeRun.config.startScript, devManifestPath);
+      void activeRun.startScript(activeRun.config.startScript, devManifestPath, agentId);
     }
-  }, [activeRun, devManifestPath]);
+  }, [activeRun, devManifestPath, agentId]);
 
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
@@ -403,23 +406,26 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               </TabsTrigger>
             </TabsList>
           </div>
-          {agent?.worktree?.branch ? (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <GitBranch className="size-3 shrink-0" />
-              <span className="font-mono">{agent.worktree.branch}</span>
-              {activeRun && (activeRun.isRunning || devManifestPath) && (
-                <Button size="sm" variant={activeRun.isRunning ? 'destructive' : 'secondary'} onClick={onDevRun} className="ml-1 h-6 px-2 text-xs">
-                  {activeRun.isRunning ? <Square className="mr-1 size-3 fill-current" /> : <Play className="mr-1 size-3 fill-current" />}
-                  {activeRun.isRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
-                </Button>
-              )}
-            </div>
-          ) : agent && project?.hasGit && !isDraft ? (
-            <Button size="sm" variant="ghost" onClick={() => setPromoteOpen(true)} className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
-              <GitBranchPlus className="size-3 shrink-0" />
-              {t('agents.detail.promoteWorktree')}
-            </Button>
-          ) : null}
+          <div className="flex items-center gap-1">
+            {(agent?.worktree?.branch ?? project?.branch) && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <GitBranch className="size-3 shrink-0" />
+                <span className="font-mono">{agent?.worktree?.branch ?? project?.branch}</span>
+              </div>
+            )}
+            {activeRun && (thisAgentRunning || (!activeRun.isRunning && devManifestPath)) && (
+              <Button size="sm" variant={thisAgentRunning ? 'destructive' : 'secondary'} onClick={onDevRun} className="ml-1 h-6 px-2 text-xs">
+                {thisAgentRunning ? <Square className="mr-1 size-3 fill-current" /> : <Play className="mr-1 size-3 fill-current" />}
+                {thisAgentRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
+              </Button>
+            )}
+            {!agent?.worktree?.branch && agent && project?.hasGit && !isDraft && (
+              <Button size="sm" variant="ghost" onClick={() => setPromoteOpen(true)} className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
+                <GitBranchPlus className="size-3 shrink-0" />
+                {t('agents.detail.promoteWorktree')}
+              </Button>
+            )}
+          </div>
         </div>
 
         <TabsContent forceMount value="logs" className={cn('m-0 flex min-h-0 flex-col gap-3', activeTab !== 'logs' && 'hidden')}>
