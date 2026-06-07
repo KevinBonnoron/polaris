@@ -9,7 +9,7 @@ import { projectHasAutomatable } from '@/features/automations/eligibility';
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
 import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
-import { getIntegrations } from '@/features/integrations/project-integrations';
+import { getIntegrations, isIntegrationConnected } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { installArgs } from '@/features/integrations/python/types';
 import { AddProjectModal } from '@/features/projects/add-project-modal';
@@ -90,15 +90,20 @@ export function CommandPalette({ open, onOpenChange }: Props) {
   const otherProjects = projects.filter((p) => p.id !== currentProject?.id);
 
   const connected = getIntegrations(currentProject);
-  const integrationNav = INTEGRATIONS.filter((i) => {
-    if (!INTEGRATION_ROUTES[i.id]) {
-      return false;
+  const integrationNav = (() => {
+    const seen = new Set<string>();
+    const items: (typeof INTEGRATIONS)[number][] = [];
+    for (const i of INTEGRATIONS) {
+      const key = i.storageKey ?? i.id;
+      if (!INTEGRATION_ROUTES[key] || seen.has(key)) continue;
+      seen.add(key);
+      const isRepo = key === 'repository';
+      if (isRepo ? currentProject?.hasGit !== true : !Object.hasOwn(connected, key)) continue;
+      const connectedEntry = INTEGRATIONS.find((e) => (e.storageKey ?? e.id) === key && isIntegrationConnected(currentProject, e));
+      items.push(connectedEntry ?? i);
     }
-    if (i.id === 'repository') {
-      return currentProject?.hasGit === true;
-    }
-    return Object.hasOwn(connected, i.id);
-  });
+    return items;
+  })();
   const hasAutomatable = projects.some(projectHasAutomatable);
 
   const { config: nodejsConfig, isRunning: nodejsRunning, startScript: nodejsStart, runCommand: nodejsRunCommand, stop: nodejsStop } = useNodejsRun();
@@ -181,7 +186,7 @@ export function CommandPalette({ open, onOpenChange }: Props) {
                   <span>{t('sidebar.files')}</span>
                 </CommandItem>
                 {integrationNav.map((i) => (
-                  <CommandItem key={i.id} value={`go ${i.name}`} onSelect={run(() => goTo(INTEGRATION_ROUTES[i.id]))}>
+                  <CommandItem key={i.storageKey ?? i.id} value={`go ${i.name}`} onSelect={run(() => goTo(INTEGRATION_ROUTES[i.storageKey ?? i.id]))}>
                     <i.icon />
                     <span>{i.name}</span>
                   </CommandItem>

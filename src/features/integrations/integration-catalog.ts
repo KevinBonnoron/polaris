@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
-import { Boxes, Bug, Container, GitBranch, KanbanSquare, Mail, MessageSquare, Package, Rocket } from 'lucide-react';
+import { Boxes, Bug, Container, Mail, Package, Rocket } from 'lucide-react';
 import type { ComponentType } from 'react';
-import { DiscordIcon, TelegramIcon } from '@/components/brand-icons';
+import { BitbucketIcon, DiscordIcon, GitHubIcon, GitLabIcon, JiraIcon, LinearIcon, SlackIcon, TelegramIcon } from '@/components/brand-icons';
 import type { IntegrationConfig } from '@/types';
 import { DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectGitRemote, DetectProviderToken, ListDokployProjectNames, ListNodeScripts, ListPythonScripts } from '@/wailsjs/go/main/App';
 import { dokploy } from '@/wailsjs/go/models';
@@ -34,61 +34,83 @@ export interface Integration {
   icon: LucideIcon | ComponentType<{ className?: string }>;
   tint: string;
   fields: IntegrationField[];
+  /** When set, config is stored under this key instead of `id`. */
+  storageKey?: string;
+  /** Values always merged into saved config (not shown as form fields). */
+  fixedValues?: Record<string, string>;
   multi?: boolean;
   instanceLabel?: (config: IntegrationConfig, projectPath: string) => string;
   detect?: (projectPath: string) => Promise<IntegrationConfig | IntegrationConfig[] | null | undefined>;
 }
 
+const TICKETS_FIELDS_JIRA: IntegrationField[] = [
+  { key: 'baseUrl', label: 'Site URL', type: 'url', required: true, placeholder: 'https://your-org.atlassian.net' },
+  { key: 'email', label: 'Account email', type: 'text', required: true, placeholder: 'you@example.com' },
+  { key: 'token', label: 'API token', type: 'password', required: true, help: 'Create an API token', helpUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens' },
+  { key: 'projectKey', label: 'Project key', type: 'text', required: true, placeholder: 'AUTH', help: 'The short key shown in issue IDs (e.g. AUTH-123 → AUTH).' },
+  { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often the active sprint is refreshed. Shared across every automation on this ticket project.' },
+];
+
+const TICKETS_FIELDS_LINEAR: IntegrationField[] = [
+  { key: 'token', label: 'API key', type: 'password', required: true, help: 'Create an API key', helpUrl: 'https://linear.app/settings/api' },
+  { key: 'projectKey', label: 'Team key', type: 'text', required: true, placeholder: 'ENG', help: 'The short identifier for your Linear team (e.g. ENG-123 → ENG).' },
+  { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often the active sprint is refreshed. Shared across every automation on this ticket project.' },
+];
+
+const REPOSITORY_FIELDS: IntegrationField[] = [
+  { key: 'baseUrl', label: 'Instance URL', type: 'url', placeholder: 'https://github.com', help: 'Leave blank for the provider default.' },
+  { key: 'owner', label: 'Owner / org', type: 'text', placeholder: 'octocat' },
+  { key: 'repo', label: 'Repository', type: 'text', placeholder: 'hello-world' },
+  { key: 'token', label: 'Personal access token', type: 'password', help: 'Only needed for private repos, write actions, or to lift API rate limits.' },
+  { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often PRs, issues and recent workflow runs are refreshed. Shared across every automation on this repository.' },
+];
+
 export const INTEGRATIONS: Integration[] = [
   {
-    id: 'tickets',
-    name: 'Tickets',
-    icon: KanbanSquare,
+    id: 'jira',
+    name: 'Jira',
+    icon: JiraIcon,
     tint: 'text-blue-400 bg-blue-500/10',
-    fields: [
-      {
-        key: 'provider',
-        label: 'Provider',
-        type: 'select',
-        required: true,
-        defaultValue: 'jira',
-        options: [
-          { value: 'jira', label: 'Jira' },
-          { value: 'linear', label: 'Linear' },
-        ],
-      },
-      { key: 'baseUrl', label: 'Site URL', type: 'url', required: true, placeholder: 'https://your-org.atlassian.net' },
-      { key: 'email', label: 'Account email', type: 'text', required: true, placeholder: 'you@example.com' },
-      { key: 'token', label: 'API token', type: 'password', required: true, help: 'Create an API token', helpUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens' },
-      { key: 'projectKey', label: 'Project key', type: 'text', required: true, placeholder: 'AUTH', help: 'The short key shown in issue IDs (e.g. AUTH-123 → AUTH).' },
-      { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often the active sprint is refreshed. Shared across every automation on this ticket project.' },
-    ],
+    storageKey: 'tickets',
+    fixedValues: { provider: 'jira' },
+    fields: TICKETS_FIELDS_JIRA,
   },
   {
-    id: 'repository',
-    name: 'Repository',
-    icon: GitBranch,
-    tint: 'text-purple-400 bg-purple-500/10',
-    fields: [
-      {
-        key: 'provider',
-        label: 'Provider',
-        type: 'select',
-        required: true,
-        defaultValue: 'github',
-        options: [
-          { value: 'github', label: 'GitHub' },
-          { value: 'gitlab', label: 'GitLab' },
-          { value: 'bitbucket', label: 'Bitbucket' },
-        ],
-      },
-      { key: 'baseUrl', label: 'Instance URL', type: 'url', placeholder: 'https://github.com', help: 'Leave blank for the provider default.' },
-      { key: 'owner', label: 'Owner / org', type: 'text', placeholder: 'octocat' },
-      { key: 'repo', label: 'Repository', type: 'text', placeholder: 'hello-world' },
-      { key: 'token', label: 'Personal access token', type: 'password', help: 'Only needed for private repos, write actions, or to lift API rate limits.' },
-      { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often PRs, issues and recent workflow runs are refreshed. Shared across every automation on this repository.' },
-    ],
+    id: 'linear',
+    name: 'Linear',
+    icon: LinearIcon,
+    tint: 'text-violet-400 bg-violet-500/10',
+    storageKey: 'tickets',
+    fixedValues: { provider: 'linear' },
+    fields: TICKETS_FIELDS_LINEAR,
+  },
+  {
+    id: 'github',
+    name: 'GitHub',
+    icon: GitHubIcon,
+    tint: 'text-neutral-400 bg-neutral-500/10',
+    storageKey: 'repository',
+    fixedValues: { provider: 'github' },
+    fields: REPOSITORY_FIELDS,
     detect: detectRepository,
+  },
+  {
+    id: 'gitlab',
+    name: 'GitLab',
+    icon: GitLabIcon,
+    tint: 'text-orange-400 bg-orange-500/10',
+    storageKey: 'repository',
+    fixedValues: { provider: 'gitlab' },
+    fields: REPOSITORY_FIELDS,
+  },
+  {
+    id: 'bitbucket',
+    name: 'Bitbucket',
+    icon: BitbucketIcon,
+    tint: 'text-blue-500 bg-blue-500/10',
+    storageKey: 'repository',
+    fixedValues: { provider: 'bitbucket' },
+    fields: REPOSITORY_FIELDS,
   },
   {
     id: 'nodejs',
@@ -215,7 +237,7 @@ export const INTEGRATIONS: Integration[] = [
   {
     id: 'slack',
     name: 'Slack',
-    icon: MessageSquare,
+    icon: SlackIcon,
     tint: 'text-[#4A154B] bg-[#4A154B]/10',
     fields: [
       {
@@ -274,6 +296,16 @@ export const INTEGRATIONS: Integration[] = [
 
 export function findIntegration(id: string): Integration | undefined {
   return INTEGRATIONS.find((i) => i.id === id);
+}
+
+/** Find the active integration entry for a given storageKey, using the saved provider value. */
+export function findIntegrationForStorageKey(storageKey: string, config?: Record<string, unknown> | null): Integration | undefined {
+  const provider = typeof config?.provider === 'string' ? config.provider : undefined;
+  if (provider) {
+    const byProvider = INTEGRATIONS.find((i) => i.id === provider && (i.storageKey ?? i.id) === storageKey);
+    if (byProvider) return byProvider;
+  }
+  return INTEGRATIONS.find((i) => (i.storageKey ?? i.id) === storageKey);
 }
 
 async function detectRepository(projectPath: string): Promise<IntegrationConfig | null> {

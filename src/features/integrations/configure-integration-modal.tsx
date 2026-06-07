@@ -20,8 +20,8 @@ import { cn } from '@/lib/utils';
 import { useProjects } from '@/state/projects';
 import type { Project } from '@/types';
 import { DetectGitRemote, DetectProviderToken, OpenExternalURL } from '@/wailsjs/go/main/App';
-import { findIntegration, type Integration, type IntegrationField, type IntegrationFieldOption } from './integration-catalog';
-import { getInstance, getInstances, isConnected, withInstanceRemoved, withInstanceUpdate, withIntegration, withoutIntegration } from './project-integrations';
+import { findIntegration, findIntegrationForStorageKey, type Integration, type IntegrationField, type IntegrationFieldOption } from './integration-catalog';
+import { effectiveStorageKey, getInstance, getInstances, isIntegrationConnected, withInstanceRemoved, withInstanceUpdate, withIntegration, withoutIntegration } from './project-integrations';
 
 interface Props extends DialogModeProps {
   projectId: string;
@@ -34,7 +34,7 @@ export function ConfigureIntegrationModal({ projectId, integrationId, instanceIn
   const { open, setOpen } = useDialogMode(modeProps);
   const { projects } = useProjects();
   const project = useMemo(() => projects.find((p) => p.id === projectId) ?? null, [projects, projectId]);
-  const integration = findIntegration(integrationId);
+  const integration = findIntegration(integrationId) ?? findIntegrationForStorageKey(integrationId, project?.integrations?.[integrationId] as Record<string, unknown> | undefined);
 
   const close = () => setOpen(false);
 
@@ -55,7 +55,7 @@ export function ConfigureIntegrationModal({ projectId, integrationId, instanceIn
             </DialogFooter>
           </>
         ) : (
-          <Body project={project} integration={integration} onClose={close} connected={isConnected(project, integration.id)} instanceIndex={instanceIndex ?? 0} />
+          <Body project={project} integration={integration} onClose={close} connected={isIntegrationConnected(project, integration)} instanceIndex={instanceIndex ?? 0} />
         )}
       </DialogContent>
     </Dialog>
@@ -87,8 +87,9 @@ function fieldValidator(field: IntegrationField) {
 function Body({ project, integration, connected, onClose, instanceIndex }: BodyProps) {
   const { t } = useTranslation();
   const isMulti = !!integration.multi;
+  const storageKey = effectiveStorageKey(integration);
   const initial = useMemo(() => {
-    const stored = (isMulti ? getInstance(project, integration.id, instanceIndex) : undefined) ?? ((getInstance(project, integration.id, 0) ?? {}) as Record<string, unknown>);
+    const stored = (isMulti ? getInstance(project, storageKey, instanceIndex) : undefined) ?? ((getInstance(project, storageKey, 0) ?? {}) as Record<string, unknown>);
     const seed: Record<string, string> = {};
     for (const f of integration.fields) {
       const raw = stored[f.key];
@@ -111,14 +112,14 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
     defaultValues: initial,
     onSubmit: async ({ value }) => {
       try {
-        const config: Record<string, unknown> = {};
+        const config: Record<string, unknown> = { ...integration.fixedValues };
         for (const f of integration.fields) {
           const v = value[f.key]?.trim();
           if (v) {
             config[f.key] = v;
           }
         }
-        const next = isMulti ? withInstanceUpdate(project, integration.id, instanceIndex, config) : withIntegration(project, integration.id, config);
+        const next = isMulti ? withInstanceUpdate(project, storageKey, instanceIndex, config) : withIntegration(project, storageKey, config);
         const tx = projectsCollection.update(project.id, (draft) => {
           draft.integrations = next;
         });
@@ -131,11 +132,13 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
     },
   });
 
+  const provider = integration.fixedValues?.provider;
+
   useEffect(() => {
-    if (integration.id !== 'repository') {
+    if (storageKey !== 'repository') {
       return;
     }
-    const currentProvider = form.getFieldValue('provider') ?? '';
+    const currentProvider = provider ?? form.getFieldValue('provider') ?? '';
     if (currentProvider !== 'github' && currentProvider !== 'gitlab') {
       return;
     }
@@ -159,10 +162,10 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
     return () => {
       cancelled = true;
     };
-  }, [integration.id, form]);
+  }, [storageKey, provider, form]);
 
   useEffect(() => {
-    if (integration.id !== 'repository' || !project.path) {
+    if (storageKey !== 'repository' || !project.path) {
       return;
     }
     let cancelled = false;
@@ -176,9 +179,6 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
             form.setFieldValue(key, val);
           }
         };
-        if (remote.provider && remote.provider !== 'unknown') {
-          fill('provider', remote.provider);
-        }
         fill('owner', remote.owner ?? '');
         fill('repo', remote.repo ?? '');
         if (remote.baseUrl && remote.host && remote.host !== 'github.com') {
@@ -192,15 +192,15 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
     return () => {
       cancelled = true;
     };
-  }, [integration.id, project.path, form]);
+  }, [storageKey, project.path, form]);
 
   const Icon = integration.icon;
 
   const disconnect = async () => {
     setRemoving(true);
     try {
-      const instances = getInstances(project, integration.id);
-      const next = isMulti && instances.length > 1 ? withInstanceRemoved(project, integration.id, instanceIndex) : withoutIntegration(project, integration.id);
+      const instances = getInstances(project, storageKey);
+      const next = isMulti && instances.length > 1 ? withInstanceRemoved(project, storageKey, instanceIndex) : withoutIntegration(project, storageKey);
       const tx = projectsCollection.update(project.id, (draft) => {
         draft.integrations = next;
       });

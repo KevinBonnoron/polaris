@@ -1,4 +1,5 @@
 import type { IntegrationConfig, Project, ProjectIntegrations } from '@/types';
+import type { Integration } from './integration-catalog';
 
 const INSTANCES_KEY = '_instances';
 
@@ -9,6 +10,18 @@ export function getIntegrations(project: Project | null | undefined): ProjectInt
 export function isConnected(project: Project | null | undefined, id: string): boolean {
   const map = getIntegrations(project);
   return Object.hasOwn(map, id);
+}
+
+export function isIntegrationConnected(project: Project | null | undefined, integration: Integration): boolean {
+  const key = integration.storageKey ?? integration.id;
+  const config = getIntegrations(project)[key];
+  if (!config) return false;
+  if (!integration.fixedValues) return true;
+  return Object.entries(integration.fixedValues).every(([k, v]) => config[k] === v);
+}
+
+export function effectiveStorageKey(integration: Integration): string {
+  return integration.storageKey ?? integration.id;
 }
 
 export function withIntegration(project: Project, id: string, config: Record<string, unknown>): ProjectIntegrations {
