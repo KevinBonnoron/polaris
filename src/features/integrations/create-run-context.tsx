@@ -204,7 +204,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
       if (!run) {
         return;
       }
-      const { runId, scriptName, manifest } = run;
+      const { runId, scriptName, manifest, agentId } = run;
       const mp = manifest ?? config?.manifestPath;
       if (!mp) {
         return;
@@ -223,7 +223,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
       }
       try {
         const newRunId = await fns.start(mp, config?.packageManager ?? defaultPm, scriptName, config?.runEnv ?? '');
-        setProjectRun({ runId: newRunId, scriptName, manifest: mp, lines: [] });
+        setProjectRun({ runId: newRunId, scriptName, manifest: mp, lines: [], agentId });
       } catch (err) {
         toastError({ title: t(`${i18nPrefix}.couldNotStart`), err });
       }
