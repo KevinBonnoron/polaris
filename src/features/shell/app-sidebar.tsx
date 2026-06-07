@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import { Link, useRouterState } from '@tanstack/react-router';
-import { ArrowDownAZ, ArrowUpDown, Bell, Bot, Check, ChevronsUpDown, Clock, Files, LayoutDashboard, Plus, Settings, SquareTerminal, Workflow } from 'lucide-react';
+import { ArrowDownAZ, ArrowUpDown, Bell, Bot, Check, ChevronsUpDown, Clock, Files, GitBranch, KanbanSquare, LayoutDashboard, Plus, Settings, SquareTerminal, Workflow } from 'lucide-react';
 import { type ComponentType, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
@@ -181,7 +181,11 @@ export function AppSidebar() {
         continue;
       }
       const connectedEntry = INTEGRATIONS.find((e) => (e.storageKey ?? e.id) === key && isIntegrationConnected(currentProject, e));
-      const display = connectedEntry ?? i;
+      const NEUTRAL: Record<string, { name: string; icon: ComponentType }> = {
+        repository: { name: 'Repository', icon: GitBranch },
+        tickets: { name: 'Tickets', icon: KanbanSquare },
+      };
+      const display = connectedEntry ?? NEUTRAL[key] ?? i;
       items.push({ id: `integration:${key}`, to: NAV_ROUTES[key], label: display.name, icon: display.icon });
     }
     return items;
