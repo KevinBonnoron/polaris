@@ -13,7 +13,7 @@ import type { Project } from '@/types';
 import { ConfigureIntegrationModal } from './configure-integration-modal';
 import { IntegrationCard } from './integration-card';
 import { INTEGRATIONS } from './integration-catalog';
-import { effectiveStorageKey, isIntegrationConnected, withIntegration } from './project-integrations';
+import { effectiveStorageKey, isConnected, isIntegrationConnected, withIntegration } from './project-integrations';
 
 interface Props {
   project: Project;
@@ -47,7 +47,7 @@ export function IntegrationBrowser({ project, className, scrollClassName }: Prop
       const results = await Promise.all(
         INTEGRATIONS.map(async (i) => {
           const key = effectiveStorageKey(i);
-          if (!i.detect || isIntegrationConnected(project, i) || seenStorageKeys.has(key)) {
+          if (!i.detect || isConnected(project, key) || seenStorageKeys.has(key)) {
             return null;
           }
           seenStorageKeys.add(key);
