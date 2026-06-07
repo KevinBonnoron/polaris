@@ -194,11 +194,11 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
         flushText();
         flushThinking();
         if (evt.name === 'Agent' && evt.id) {
-          const description = (evt.input?.description as string | undefined) ?? '';
+          const description = typeof evt.input?.description === 'string' ? evt.input.description : '';
           const agentBlock: AgentGroupBlock = {
             type: 'agent-group',
             description,
-            subagentType: evt.input?.subagent_type as string | undefined,
+            subagentType: typeof evt.input?.subagent_type === 'string' ? evt.input.subagent_type : undefined,
             children: [],
             key: `agent-group-${blockIndex++}-${i}`,
             toolStatus: 'pending',
@@ -310,7 +310,7 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
   return pairToolResults(out);
 }
 
-function AgentGroup({ description, subagentType, children, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
+function AgentGroup({ description, subagentType, children, resultLines, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
   const isPending = toolStatus === 'pending';
   const [open, setOpen] = useState(isPending);
   const prevStatus = useRef(toolStatus);
@@ -324,19 +324,22 @@ function AgentGroup({ description, subagentType, children, toolStatus }: Omit<Ag
 
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
   const hasChildren = children.length > 0;
+  const hasResult = (resultLines?.length ?? 0) > 0;
+  const canExpand = hasChildren || hasResult;
   const label = subagentType ? `Agent · ${subagentType}` : 'Agent';
 
   return (
     <div className="col-span-2 my-0.5">
-      <button type="button" onClick={() => hasChildren && setOpen((v) => !v)} className={cn('flex w-full items-center gap-1.5 text-left font-mono text-xs', hasChildren && 'cursor-pointer')}>
+      <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full items-center gap-1.5 text-left font-mono text-xs', canExpand && 'cursor-pointer')}>
         <span className={cn('mt-px size-1.5 shrink-0 rounded-full', dotClass)} />
         <span className="text-violet-400">{label}</span>
         {description && <span className="text-muted-foreground/50">{description}</span>}
-        {hasChildren && (open ? <ChevronDown className="ml-auto size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground/40" />)}
+        {canExpand && (open ? <ChevronDown className="ml-auto size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
-      {open && hasChildren && (
+      {open && canExpand && (
         <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
-          <LogBlocksGrid blocks={children} showTimestamps={false} />
+          {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} />}
+          {hasResult && <ToolResultPanel lines={cleanResultLines(resultLines!)} toolName="Agent" />}
         </div>
       )}
     </div>
