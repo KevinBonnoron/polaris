@@ -33,7 +33,7 @@ interface RunContextValue<TConfig extends BaseConfig> {
   setInstanceIndex: (index: number) => void;
   terminalOpen: boolean;
   setTerminalOpen: (open: boolean) => void;
-  startScript: (scriptName: string, manifestOverride?: string) => Promise<void>;
+  startScript: (scriptName: string, manifestOverride?: string, agentId?: string) => Promise<void>;
   runCommand: (args: string[], label: string, manifestPath?: string) => Promise<void>;
   runInWorkspaces: (commands: WorkspaceCommand[]) => Promise<void>;
   stop: () => Promise<void>;
@@ -134,14 +134,14 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
     );
 
     const startScript = useCallback(
-      async (scriptName: string, manifestOverride?: string) => {
+      async (scriptName: string, manifestOverride?: string, agentId?: string) => {
         const mp = manifestOverride ?? config?.manifestPath;
         if (!mp || isRunning) {
           return;
         }
         try {
           const runId = await fns.start(mp, config?.packageManager ?? defaultPm, scriptName, config?.runEnv ?? '');
-          setProjectRun({ runId, scriptName, manifest: mp, lines: [] });
+          setProjectRun({ runId, scriptName, manifest: mp, lines: [], agentId });
           setTerminalOpen(true);
         } catch (err) {
           toastError({ title: t(`${i18nPrefix}.couldNotStart`), err });
