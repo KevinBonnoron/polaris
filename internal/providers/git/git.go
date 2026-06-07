@@ -1481,6 +1481,12 @@ func HasCommitsAhead(worktreePath string) (bool, error) {
 
 // PushBranch publishes the current branch of worktreePath to origin, setting
 // it as upstream. Required before `gh pr create` so GitHub knows the head ref.
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*[mKHFJGArsuABCDEF]|\x1b\([AB]`)
+
+func stripANSI(s string) string {
+	return ansiEscape.ReplaceAllString(s, "")
+}
+
 func PushBranch(worktreePath, branchName string) error {
 	if worktreePath == "" || branchName == "" {
 		return fmt.Errorf("worktreePath and branchName are required")
@@ -1492,7 +1498,7 @@ func PushBranch(worktreePath, branchName string) error {
 	sysexec.Hide(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git push: %s", strings.TrimSpace(string(out)))
+		return fmt.Errorf("git push: %s", strings.TrimSpace(stripANSI(string(out))))
 	}
 	return nil
 }

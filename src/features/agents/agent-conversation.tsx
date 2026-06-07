@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import type { TFunction } from 'i18next';
-import { Check, GitBranch, GitBranchPlus, Play, Square } from 'lucide-react';
+import { Check, ExternalLink, GitBranch, GitBranchPlus, GitPullRequest, Play, Square } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
@@ -16,13 +16,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { isSeparator, isUsageBlock, sepGlyph, usageMode } from '@/features/settings/status-bar-settings';
+import { toast } from 'sonner';
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { useStatusBarBlocks } from '@/providers/theme-accent';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
 import { useCurrentProject } from '@/state/projects';
-import { PromoteAgentToWorktree, ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
+import { CreatePRForAgent, PromoteAgentToWorktree, ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
+import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
 import type { polaris } from '@/wailsjs/go/models';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
@@ -146,6 +148,33 @@ export function AgentConversation({ agentId }: { agentId: string }) {
       void activeRun.startScript(activeRun.config.startScript, devManifestPath, agentId);
     }
   }, [activeRun, devManifestPath, agentId]);
+
+  const prUrl = agent?.worktree?.prUrl ?? '';
+  const hasBranch = Boolean(agent?.worktree?.branch && agent?.worktree?.path);
+  const prAvailable = !!prUrl || (hasBranch && !isWorking);
+  const [creatingPr, setCreatingPr] = useState(false);
+
+  const openOrCreatePr = useCallback(async () => {
+    if (creatingPr) return;
+    if (prUrl) {
+      BrowserOpenURL(prUrl);
+      return;
+    }
+    setCreatingPr(true);
+    const toastId = toast.loading(t('agents.detail.createPrInProgress'));
+    try {
+      const url = await CreatePRForAgent(agentId);
+      toast.success(t('agents.detail.createPrSuccess'), {
+        id: toastId,
+        action: url ? { label: t('agents.detail.openPr'), onClick: () => BrowserOpenURL(url) } : undefined,
+      });
+    } catch (err) {
+      toast.dismiss(toastId);
+      toastError({ title: t('agents.detail.createPrFailed'), err });
+    } finally {
+      setCreatingPr(false);
+    }
+  }, [agentId, creatingPr, prUrl, t]);
 
   const [modelPopoverOpen, setModelPopoverOpen] = useState(false);
   const [promoteOpen, setPromoteOpen] = useState(false);
@@ -411,6 +440,11 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <GitBranch className="size-3 shrink-0" />
                 <span className="font-mono">{agent?.worktree?.branch ?? project?.branch}</span>
+                {prAvailable && (
+                  <Button size="icon" variant="ghost" onClick={() => void openOrCreatePr()} disabled={creatingPr} className="ml-0.5 size-6" title={prUrl ? t('agents.detail.openPr') : t('agents.detail.createPr')}>
+                    {prUrl ? <ExternalLink className="size-3" /> : <GitPullRequest className="size-3" />}
+                  </Button>
+                )}
               </div>
             )}
             {activeRun && (thisAgentRunning || (!activeRun.isRunning && devManifestPath)) && (
@@ -419,7 +453,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
                 {thisAgentRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
               </Button>
             )}
-            {!agent?.worktree?.branch && agent && project?.hasGit && !isDraft && (
+            {!agent?.worktree?.branch && agent && project?.hasGit && !isDraft && filesModified > 0 && (
               <Button size="sm" variant="ghost" onClick={() => setPromoteOpen(true)} className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
                 <GitBranchPlus className="size-3 shrink-0" />
                 {t('agents.detail.promoteWorktree')}
