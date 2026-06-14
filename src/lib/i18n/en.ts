@@ -131,6 +131,7 @@ export const en = {
       notFoundInPath: 'not found in PATH',
       couldNotStart: 'Could not start agent',
       sharedBranchWarn: 'The working directory has uncommitted changes. The agent may overwrite or conflict with them.',
+      dismissWarning: 'Dismiss warning',
     },
     usage: {
       title: 'Claude usage',

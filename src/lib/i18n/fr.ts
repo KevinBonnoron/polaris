@@ -133,6 +133,7 @@ export const fr: Translation = {
       notFoundInPath: 'introuvable dans le PATH',
       couldNotStart: "Impossible de démarrer l'agent",
       sharedBranchWarn: "Le répertoire de travail contient des changements non commités. L'agent pourrait les écraser ou entrer en conflit.",
+      dismissWarning: "Ignorer l'avertissement",
     },
     usage: {
       title: 'Utilisation Claude',
