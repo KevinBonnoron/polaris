@@ -11,7 +11,7 @@
     "vite:build": "vite build && tsc --noEmit",
     "preview": "vite preview --port 5173",
     "typecheck": "tsc --noEmit",
-    "generate:bindings": "wails generate module",
+    "generate": "wails generate module",
     "format": "biome format . --write",
     "test": "bun test && go test ./..."
   },

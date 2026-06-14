@@ -330,6 +330,10 @@ export function ListNotifications() {
   return window['go']['main']['App']['ListNotifications']();
 }
 
+export function ListCliModels(arg1) {
+  return window['go']['main']['App']['ListCliModels'](arg1);
+}
+
 export function ListOpencodeModels() {
   return window['go']['main']['App']['ListOpencodeModels']();
 }

@@ -16,15 +16,16 @@ const (
 )
 
 var (
-	modelsCache   []ClaudeModel
+	modelsCache   []ModelInfo
 	modelsCacheAt time.Time
 	modelsCacheMu sync.Mutex
 )
 
-// ClaudeModel is the newest model of a Claude family, as advertised by the
-// OAuth-authenticated /v1/models endpoint. Value is the stable CLI alias
-// (opus|sonnet|haiku) passed to `claude --model`; Name is the API display name.
-type ClaudeModel struct {
+// ModelInfo describes a model discovered from a CLI or provider API.
+// Value is the identifier passed to the CLI (e.g. "opus", "mistral-medium-3.5").
+// Name is the human-readable display name. Family groups related models
+// (e.g. "opus", "sonnet", "haiku" for Claude; empty for CLIs that don't expose it).
+type ModelInfo struct {
 	Value  string `json:"value"`
 	Name   string `json:"name"`
 	Family string `json:"family"`
@@ -39,15 +40,7 @@ type modelsResponse struct {
 	Data []modelEntry `json:"data"`
 }
 
-// families orders the picker (opus first = default selection) and maps each id
-// prefix to the alias we send to the CLI.
-var families = []struct{ alias, prefix string }{
-	{"opus", "claude-opus-"},
-	{"sonnet", "claude-sonnet-"},
-	{"haiku", "claude-haiku-"},
-}
-
-func FetchClaudeModels(force bool) ([]ClaudeModel, error) {
+func FetchClaudeModels(force bool) ([]ModelInfo, error) {
 	modelsCacheMu.Lock()
 	defer modelsCacheMu.Unlock()
 
@@ -64,7 +57,7 @@ func FetchClaudeModels(force bool) ([]ClaudeModel, error) {
 	return models, nil
 }
 
-func fetchClaudeModelsLive() ([]ClaudeModel, error) {
+func fetchClaudeModelsLive() ([]ModelInfo, error) {
 	token, err := loadClaudeToken()
 	if err != nil {
 		return nil, err
@@ -101,16 +94,24 @@ func fetchClaudeModelsLive() ([]ClaudeModel, error) {
 		return nil, fmt.Errorf("decode models response: %w", err)
 	}
 
-	// The endpoint returns models newest-first, so the first match per family
-	// is the most recent one.
-	out := make([]ClaudeModel, 0, len(families))
-	for _, fam := range families {
-		for _, m := range data.Data {
-			if strings.HasPrefix(m.ID, fam.prefix) {
-				out = append(out, ClaudeModel{Value: fam.alias, Name: m.DisplayName, Family: fam.alias})
-				break
-			}
+	// The endpoint returns models newest-first. Keep the first (newest) model
+	// per family; family is the word between "claude-" and the version number.
+	seen := map[string]bool{}
+	var out []ModelInfo
+	for _, m := range data.Data {
+		rest, ok := strings.CutPrefix(m.ID, "claude-")
+		if !ok {
+			continue
 		}
+		family, _, ok := strings.Cut(rest, "-")
+		if !ok {
+			continue
+		}
+		if seen[family] {
+			continue
+		}
+		seen[family] = true
+		out = append(out, ModelInfo{Value: family, Name: m.DisplayName, Family: family})
 	}
 	return out, nil
 }
