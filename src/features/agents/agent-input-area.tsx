@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { toastError } from '@/lib/toast-error';
 import { useAgentClis } from '@/state/agent-clis';
@@ -69,6 +70,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   const [pendingQuestion, setPendingQuestion] = useState<{ toolUseId: string; payload: AskUserQuestionPayload } | null>(null);
   const [teleportSessions, setTeleportSessions] = useState<{ value: string; label: string }[]>([]);
   const [dirtyWorktree, setDirtyWorktree] = useState(false);
+  const [dirtyChecked, setDirtyChecked] = useState(false);
   const [warnDismissed, setWarnDismissed] = useState(false);
 
   useEffect(() => {
@@ -156,11 +158,30 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   useEffect(() => {
     if (!isDraft || isolated || !projectId) {
       setDirtyWorktree(false);
+      setDirtyChecked(true);
       return;
     }
+    let active = true;
+    setDirtyChecked(false);
+    const fallback = window.setTimeout(() => {
+      if (active) {
+        setDirtyWorktree(false);
+        setDirtyChecked(true);
+      }
+    }, 5000);
     GetProjectFileStatuses(projectId)
-      .then((files) => setDirtyWorktree(files.length > 0))
-      .catch(() => setDirtyWorktree(false));
+      .then((files) => active && setDirtyWorktree(files.length > 0))
+      .catch(() => active && setDirtyWorktree(false))
+      .finally(() => {
+        if (active) {
+          window.clearTimeout(fallback);
+          setDirtyChecked(true);
+        }
+      });
+    return () => {
+      active = false;
+      window.clearTimeout(fallback);
+    };
   }, [isDraft, isolated, projectId]);
 
   useEffect(() => {
@@ -437,52 +458,65 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
               ))}
             </div>
           )}
-          {dirtyWorktree && !warnDismissed && (
-            <div className="mt-2 flex shrink-0 items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-              <TriangleAlert className="size-3.5 shrink-0" />
-              <span className="flex-1">{t('agents.new.sharedBranchWarn')}</span>
-              <button type="button" onClick={() => setWarnDismissed(true)} className="shrink-0 rounded-sm opacity-70 hover:opacity-100">
-                <X className="size-3.5" />
-              </button>
-            </div>
+          {isDraft && !isolated && projectId && !dirtyChecked ? (
+            <>
+              <Skeleton className="mb-2 h-8 w-full shrink-0 rounded-md" />
+              <div className="flex items-start gap-2">
+                <Skeleton className="size-10 shrink-0 rounded-md" />
+                <Skeleton className="h-10 min-h-10 flex-1 rounded-md" />
+                <Skeleton className="size-10 shrink-0 rounded-md" />
+              </div>
+            </>
+          ) : (
+            <>
+              {dirtyWorktree && !warnDismissed && (
+                <div className="mb-2 flex shrink-0 items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                  <TriangleAlert className="size-3.5 shrink-0" />
+                  <span className="flex-1">{t('agents.new.sharedBranchWarn')}</span>
+                  <button type="button" aria-label={t('agents.new.dismissWarning')} onClick={() => setWarnDismissed(true)} className="shrink-0 rounded-sm opacity-70 hover:opacity-100">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-start gap-2">
+                <Button variant="outline" size="icon" title={t('agents.detail.attachFiles')} onClick={() => void pickFiles()} className="size-10 shrink-0">
+                  <Paperclip className="size-4" />
+                </Button>
+                <MentionTextarea
+                  inputRef={inputRef}
+                  placeholder={isDraft ? t('agents.new.taskPlaceholder') : t('agents.detail.sendPlaceholder')}
+                  value={message}
+                  onChange={setMessage}
+                  onAttach={(path) => void addAttachment(path)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void send();
+                    }
+                  }}
+                  disabled={sending}
+                  projectPath={project?.path}
+                  commands={slashCommands}
+                  onCommand={runCommand}
+                  className="max-h-48 min-h-10 resize-none field-sizing-content"
+                />
+                {speechRecognitionAvailable && (
+                  <Button variant={isRecording ? 'destructive' : 'outline'} size="icon" title={isRecording ? t('agents.detail.stopRecording') : t('agents.detail.recordVoice')} onClick={toggleRecording} className="size-10 shrink-0">
+                    <Mic className="size-4" />
+                  </Button>
+                )}
+                {message.trim() || attachments.length > 0 || !isWorking ? (
+                  <Button size="icon" title={t('agents.detail.send')} disabled={sending || (!message.trim() && attachments.length === 0) || (isDraft && !spawnModel)} onClick={() => void send()} className="size-10">
+                    <Send className="size-4" />
+                  </Button>
+                ) : (
+                  <Button variant="destructive" size="icon" title={t('agents.detail.stopAgent')} onClick={() => void cancel()} className="size-10">
+                    <Square className="size-3.5" />
+                  </Button>
+                )}
+              </div>
+            </>
           )}
-          <div className="flex items-start gap-2">
-            <Button variant="outline" size="icon" title={t('agents.detail.attachFiles')} onClick={() => void pickFiles()} className="size-10 shrink-0">
-              <Paperclip className="size-4" />
-            </Button>
-            <MentionTextarea
-              inputRef={inputRef}
-              placeholder={isDraft ? t('agents.new.taskPlaceholder') : t('agents.detail.sendPlaceholder')}
-              value={message}
-              onChange={setMessage}
-              onAttach={(path) => void addAttachment(path)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  void send();
-                }
-              }}
-              disabled={sending}
-              projectPath={project?.path}
-              commands={slashCommands}
-              onCommand={runCommand}
-              className="max-h-48 min-h-10 resize-none field-sizing-content"
-            />
-            {speechRecognitionAvailable && (
-              <Button variant={isRecording ? 'destructive' : 'outline'} size="icon" title={isRecording ? t('agents.detail.stopRecording') : t('agents.detail.recordVoice')} onClick={toggleRecording} className="size-10 shrink-0">
-                <Mic className="size-4" />
-              </Button>
-            )}
-            {message.trim() || attachments.length > 0 || !isWorking ? (
-              <Button size="icon" title={t('agents.detail.send')} disabled={sending || (!message.trim() && attachments.length === 0) || (isDraft && !spawnModel)} onClick={() => void send()} className="size-10">
-                <Send className="size-4" />
-              </Button>
-            ) : (
-              <Button variant="destructive" size="icon" title={t('agents.detail.stopAgent')} onClick={() => void cancel()} className="size-10">
-                <Square className="size-3.5" />
-              </Button>
-            )}
-          </div>
         </>
       )}
     </div>
