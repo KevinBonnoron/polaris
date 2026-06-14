@@ -162,12 +162,24 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     }
     let active = true;
     setDirtyChecked(false);
+    const fallback = window.setTimeout(() => {
+      if (active) {
+        setDirtyWorktree(false);
+        setDirtyChecked(true);
+      }
+    }, 5000);
     GetProjectFileStatuses(projectId)
       .then((files) => active && setDirtyWorktree(files.length > 0))
       .catch(() => active && setDirtyWorktree(false))
-      .finally(() => active && setDirtyChecked(true));
+      .finally(() => {
+        if (active) {
+          window.clearTimeout(fallback);
+          setDirtyChecked(true);
+        }
+      });
     return () => {
       active = false;
+      window.clearTimeout(fallback);
     };
   }, [isDraft, isolated, projectId]);
 
@@ -460,7 +472,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
                 <div className="mb-2 flex shrink-0 items-center gap-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
                   <TriangleAlert className="size-3.5 shrink-0" />
                   <span className="flex-1">{t('agents.new.sharedBranchWarn')}</span>
-                  <button type="button" onClick={() => setWarnDismissed(true)} className="shrink-0 rounded-sm opacity-70 hover:opacity-100">
+                  <button type="button" aria-label={t('agents.new.dismissWarning')} onClick={() => setWarnDismissed(true)} className="shrink-0 rounded-sm opacity-70 hover:opacity-100">
                     <X className="size-3.5" />
                   </button>
                 </div>
