@@ -1010,22 +1010,6 @@ export namespace polaris {
 		}
 	}
 	
-	export class ClaudeModel {
-	    value: string;
-	    name: string;
-	    family: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new ClaudeModel(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.value = source["value"];
-	        this.name = source["name"];
-	        this.family = source["family"];
-	    }
-	}
 	export class ClaudeSession {
 	    id: string;
 	    summary: string;
@@ -1354,6 +1338,22 @@ export namespace polaris {
 		    }
 		    return a;
 		}
+	}
+	export class ModelInfo {
+	    value: string;
+	    name: string;
+	    family: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ModelInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.name = source["name"];
+	        this.family = source["family"];
+	    }
 	}
 	
 	

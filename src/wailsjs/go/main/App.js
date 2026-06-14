@@ -302,6 +302,10 @@ export function ListClaudeCodeSessions(arg1) {
   return window['go']['main']['App']['ListClaudeCodeSessions'](arg1);
 }
 
+export function ListCliModels(arg1) {
+  return window['go']['main']['App']['ListCliModels'](arg1);
+}
+
 export function ListCustomProviders() {
   return window['go']['main']['App']['ListCustomProviders']();
 }

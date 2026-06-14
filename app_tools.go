@@ -1,31 +1,106 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"time"
+	"unicode"
 
+	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 	"github.com/KevinBonnoron/polaris/internal/terminal"
 )
+
+// ansiEscape matches ANSI/VT100 escape sequences produced by TUI-based CLIs.
+var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])`)
+
+func parseModelsOutput(raw string) []string {
+	clean := ansiEscape.ReplaceAllString(raw, "")
+	var models []string
+	for _, line := range strings.Split(clean, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		// Discard lines with spaces or non-printable characters — those are
+		// UI chrome, not model IDs.
+		valid := true
+		for _, r := range line {
+			if r == ' ' || !unicode.IsPrint(r) {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			models = append(models, line)
+		}
+	}
+	return models
+}
 
 func (app *App) ListOpencodeModels() []string {
 	_, path, ok := resolveAgentBinary([]string{"opencode"})
 	if !ok {
 		return []string{}
 	}
-	out, err := exec.Command(path, "models").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "models").Output()
 	if err != nil {
 		return []string{}
 	}
-	models := []string{}
-	for _, line := range strings.Split(string(out), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			models = append(models, line)
+	return parseModelsOutput(string(out))
+}
+
+// ListCliModels returns the available models for the given agent kind.
+// For providers with a known API (gemini, mistral), it reads stored credentials
+// and calls the provider API directly. For others, it tries `<binary> models`.
+func (app *App) ListCliModels(kind string) []polaris.ModelInfo {
+	switch kind {
+	case "gemini":
+		models, err := polaris.FetchGeminiModels()
+		if err != nil {
+			return []polaris.ModelInfo{}
 		}
+		return models
+	case "mistral":
+		models, err := polaris.FetchMistralModels()
+		if err != nil {
+			return []polaris.ModelInfo{}
+		}
+		return models
+	}
+
+	var binaries []string
+	for _, c := range agentCliCandidates {
+		if c.kind == kind {
+			binaries = c.binaries
+			break
+		}
+	}
+	if len(binaries) == 0 {
+		return []polaris.ModelInfo{}
+	}
+	_, path, ok := resolveAgentBinary(binaries)
+	if !ok {
+		return []polaris.ModelInfo{}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "models").Output()
+	if err != nil {
+		return []polaris.ModelInfo{}
+	}
+	ids := parseModelsOutput(string(out))
+	models := make([]polaris.ModelInfo, len(ids))
+	for i, id := range ids {
+		models[i] = polaris.ModelInfo{Value: id, Name: id, Family: ""}
 	}
 	return models
 }

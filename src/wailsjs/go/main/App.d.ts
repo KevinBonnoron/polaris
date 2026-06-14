@@ -95,7 +95,7 @@ export function DockerCapabilities():Promise<docker.Capabilities>;
 
 export function DockerImageHistory(arg1:string):Promise<Array<docker.Layer>>;
 
-export function FetchClaudeModels(arg1:boolean):Promise<Array<polaris.ClaudeModel>>;
+export function FetchClaudeModels(arg1:boolean):Promise<Array<polaris.ModelInfo>>;
 
 export function FetchClaudeUsage(arg1:boolean):Promise<polaris.ClaudeUsage>;
 
@@ -162,6 +162,8 @@ export function ListAutomationRuns(arg1:string,arg2:number):Promise<Array<polari
 export function ListAutomations():Promise<Array<polaris.Automation>>;
 
 export function ListClaudeCodeSessions(arg1:string):Promise<Array<polaris.ClaudeSession>>;
+
+export function ListCliModels(arg1:string):Promise<Array<polaris.ModelInfo>>;
 
 export function ListCustomProviders():Promise<Array<polaris.CustomProvider>>;
 
