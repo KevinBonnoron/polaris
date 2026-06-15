@@ -13,7 +13,7 @@ import { selectAgent } from '@/state/agent-selection';
 import { useCurrentProject } from '@/state/projects';
 import type { Agent } from '@/types';
 import { CancelAgent, ClearAgentLog, GetProjectFileStatuses, ListClaudeCodeSessions, PickFiles, ReadFileBase64, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, TeleportClaudeSession } from '@/wailsjs/go/main/App';
-import { EventsOff, EventsOn } from '@/wailsjs/runtime/runtime';
+import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
 import { stripFileMentions } from './file-mentions';
 import { MentionTextarea, type SlashCommand } from './mention-textarea';
@@ -107,8 +107,9 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       }
       setPendingQuestion({ toolUseId: payload.toolUseId, payload: payload.input });
     };
-    EventsOn(eventName, handler);
-    return () => EventsOff(eventName);
+    // EventsOn returns a per-listener unsubscribe; EventsOff(eventName) would
+    // drop every mounted card's handler for this event, not just this one.
+    return EventsOn(eventName, handler);
   }, [agentId]);
 
   const persistedQuestionId = agent?.pendingQuestion?.toolUseId ?? '';
