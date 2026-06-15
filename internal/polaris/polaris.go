@@ -492,6 +492,11 @@ type Service struct {
 
 	focusMu    sync.RWMutex
 	appFocused bool
+
+	// logEmitTimer coalesces high-frequency log appends into at most one
+	// frontend notification per agent per debounce window, keyed by agentId.
+	logEmitMu    sync.Mutex
+	logEmitTimer map[string]*time.Timer
 }
 
 func NewService(store *Store) *Service {

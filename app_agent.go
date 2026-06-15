@@ -66,6 +66,13 @@ func (app *App) ReadAgentLog(agentID string) ([]polaris.StreamEvent, error) {
 	return app.svc.ReadLogEvents(agentID)
 }
 
+func (app *App) ReadAgentLogFrom(agentID string, offset int64) (polaris.LogTail, error) {
+	if app.svc == nil {
+		return polaris.LogTail{Offset: offset}, fmt.Errorf("service not ready")
+	}
+	return app.svc.ReadLogEventsFrom(agentID, offset)
+}
+
 func (app *App) ClearAgentLog(agentID string) error {
 	if app.svc == nil {
 		return fmt.Errorf("service not ready")
