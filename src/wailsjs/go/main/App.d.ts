@@ -241,6 +241,8 @@ export function PushProject(arg1:string,arg2:boolean):Promise<void>;
 
 export function ReadAgentLog(arg1:string):Promise<Array<polaris.StreamEvent>>;
 
+export function ReadAgentLogFrom(arg1:string,arg2:number):Promise<polaris.LogTail>;
+
 export function ReadFileBase64(arg1:string):Promise<string>;
 
 export function ReadProjectFile(arg1:string,arg2:string):Promise<string>;

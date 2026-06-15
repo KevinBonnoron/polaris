@@ -23,8 +23,8 @@ import { useStatusBarBlocks } from '@/providers/theme-accent';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
 import { useCurrentProject } from '@/state/projects';
-import { CreatePRForAgent, PromoteAgentToWorktree, ReadAgentLog, SetAgentModel } from '@/wailsjs/go/main/App';
-import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
+import { CreatePRForAgent, PromoteAgentToWorktree, ReadAgentLogFrom, SetAgentModel } from '@/wailsjs/go/main/App';
+import { BrowserOpenURL, EventsOn } from '@/wailsjs/runtime/runtime';
 import type { polaris } from '@/wailsjs/go/models';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
@@ -189,48 +189,79 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   }, [agentId]);
 
   const [log, setLog] = useState<polaris.StreamEvent[]>([]);
+  const logOffset = useRef(0);
   const [logLoading, setLogLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('logs');
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
+  // The live log appends only the new tail (read incrementally by byte offset)
+  // whenever the backend signals an append, instead of re-reading and
+  // re-rendering the whole transcript on a timer. A fast-streaming agent could
+  // otherwise saturate the renderer and freeze the UI as its log grew.
   useEffect(() => {
     if (isDraft) {
+      setLog([]);
+      logOffset.current = 0;
       setLogLoading(false);
       return;
     }
 
     let active = true;
-    const tick = (first = false) => {
-      ReadAgentLog(agentId)
-        .then((evts) => {
-          if (active) {
-            setLog(evts ?? []);
-            if (first) {
-              setLogLoading(false);
-            }
+    let reading = false;
+    let pendingPull = false;
+    logOffset.current = 0;
+    setLog([]);
+    setLogLoading(true);
+    stickToBottom.current = true;
+
+    const pull = (first = false) => {
+      if (!active) {
+        return;
+      }
+      if (reading) {
+        // A signal arrived mid-read; coalesce it into a follow-up so the final
+        // tail is never dropped.
+        pendingPull = true;
+        return;
+      }
+      reading = true;
+      ReadAgentLogFrom(agentId, logOffset.current)
+        .then((tail) => {
+          if (!active) {
+            return;
+          }
+          logOffset.current = tail.offset;
+          const evts = tail.events ?? [];
+          if (evts.length > 0) {
+            setLog((prev) => [...prev, ...evts]);
           }
         })
-        .catch(() => {
+        .catch(() => {})
+        .finally(() => {
+          reading = false;
           if (active && first) {
             setLogLoading(false);
           }
+          if (active && pendingPull) {
+            pendingPull = false;
+            pull(false);
+          }
         });
     };
-    setLogLoading(true);
-    stickToBottom.current = true;
-    tick(true);
-    if (status !== 'working') {
-      return;
-    }
 
-    const id = window.setInterval(() => tick(false), 1000);
+    pull(true);
+    const unsubscribe = EventsOn('agent:log:appended', (payload: { agentId: string }) => {
+      if (payload.agentId === agentId) {
+        pull(false);
+      }
+    });
     return () => {
       active = false;
-      window.clearInterval(id);
+      unsubscribe();
     };
-  }, [agentId, status, isDraft]);
+  }, [agentId, isDraft]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: log is the trigger; body reads ref only
   useEffect(() => {
@@ -249,14 +280,21 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   }, []);
 
   const onLogRefresh = useCallback(() => {
-    ReadAgentLog(agentId)
-      .then(setLog)
+    logOffset.current = 0;
+    ReadAgentLogFrom(agentId, 0)
+      .then((tail) => {
+        logOffset.current = tail.offset;
+        setLog(tail.events ?? []);
+      })
       .catch(() => {});
   }, [agentId]);
 
   const onSetActiveTab = useCallback((tab: string) => setActiveTab(tab), []);
 
-  const onClearLog = useCallback(() => setLog([]), []);
+  const onClearLog = useCallback(() => {
+    logOffset.current = 0;
+    setLog([]);
+  }, []);
 
   const onPromoteConfirm = useCallback(async () => {
     if (!agent?.id || !promoteBranch.trim() || promoteLoading) {
