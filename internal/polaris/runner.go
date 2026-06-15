@@ -2,6 +2,7 @@ package polaris
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -1619,12 +1620,35 @@ func streamLines(reader io.Reader, sink io.Writer, onEvent func(StreamEvent)) {
 	}
 }
 
-// emitLogEvent pushes a StreamEvent to the frontend over the Wails event bus.
-func (service *Service) emitLogEvent(agentID string, evt StreamEvent) {
+// logEmitDebounce caps how often an agent's log notification reaches the
+// frontend. A fast-streaming agent appends many lines per second; without this
+// each append crossed the Wails bridge individually and the renderer re-read
+// and re-rendered the entire transcript, eventually starving the UI thread.
+const logEmitDebounce = 120 * time.Millisecond
+
+// emitLogEvent notifies the frontend that the agent's log grew. The event
+// carries only the agentId: subscribers read the new tail incrementally via
+// ReadLogEventsFrom, so the per-notification cost stays proportional to the new
+// output rather than the full log. Notifications are coalesced to at most one
+// per logEmitDebounce window per agent.
+func (service *Service) emitLogEvent(agentID string, _ StreamEvent) {
 	if service.store == nil {
 		return
 	}
-	service.store.Emit(agentLogEvent, map[string]any{"agentId": agentID, "event": evt})
+	service.logEmitMu.Lock()
+	defer service.logEmitMu.Unlock()
+	if service.logEmitTimer == nil {
+		service.logEmitTimer = make(map[string]*time.Timer)
+	}
+	if _, scheduled := service.logEmitTimer[agentID]; scheduled {
+		return
+	}
+	service.logEmitTimer[agentID] = time.AfterFunc(logEmitDebounce, func() {
+		service.logEmitMu.Lock()
+		delete(service.logEmitTimer, agentID)
+		service.logEmitMu.Unlock()
+		service.store.Emit(agentLogEvent, map[string]any{"agentId": agentID})
+	})
 }
 
 // appendAgentEvent writes a StreamEvent as JSONL to the agent's log file and
@@ -1686,6 +1710,59 @@ func (service *Service) ReadLogEvents(agentID string) ([]StreamEvent, error) {
 		}
 	}
 	return events, scanner.Err()
+}
+
+// LogTail is the incremental slice of an agent's log returned by
+// ReadLogEventsFrom: the events appended after the requested offset plus the
+// byte offset to pass on the next call.
+type LogTail struct {
+	Events []StreamEvent `json:"events"`
+	Offset int64         `json:"offset"`
+}
+
+// ReadLogEventsFrom returns the StreamEvents written to the agent's log after
+// the given byte offset, along with the offset to resume from next time. Only
+// complete lines (terminated by a newline) are consumed, so a partially written
+// trailing line is left for the following read. This lets the live view append
+// just the new output instead of re-reading and re-parsing the whole file.
+func (service *Service) ReadLogEventsFrom(agentID string, offset int64) (LogTail, error) {
+	if service.runner == nil {
+		return LogTail{Offset: offset}, errors.New("runner not initialised")
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	path := filepath.Join(service.runner.logsRoot, agentID+".log")
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return LogTail{Offset: offset}, nil
+		}
+		return LogTail{Offset: offset}, err
+	}
+	defer f.Close()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return LogTail{Offset: offset}, err
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return LogTail{Offset: offset}, err
+	}
+	end := bytes.LastIndexByte(data, '\n')
+	if end < 0 {
+		return LogTail{Offset: offset}, nil
+	}
+	consumed := data[:end+1]
+	var events []StreamEvent
+	for _, raw := range bytes.Split(consumed, []byte("\n")) {
+		if len(bytes.TrimSpace(raw)) == 0 {
+			continue
+		}
+		if evt, ok := parseLogLine(string(raw)); ok {
+			events = append(events, evt)
+		}
+	}
+	return LogTail{Events: events, Offset: offset + int64(len(consumed))}, nil
 }
 
 var legacyTimestampRe = regexp.MustCompile(`^\[(\d{2}:\d{2}:\d{2})\]\s*`)

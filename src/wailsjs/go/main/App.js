@@ -458,6 +458,10 @@ export function ReadAgentLog(arg1) {
   return window['go']['main']['App']['ReadAgentLog'](arg1);
 }
 
+export function ReadAgentLogFrom(arg1, arg2) {
+  return window['go']['main']['App']['ReadAgentLogFrom'](arg1, arg2);
+}
+
 export function ReadFileBase64(arg1) {
   return window['go']['main']['App']['ReadFileBase64'](arg1);
 }
