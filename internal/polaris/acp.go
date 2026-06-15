@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
@@ -174,11 +175,11 @@ func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntim
 }
 
 func (a *acpSession) bootstrap(workDir, resumeSessionID string) error {
-	initRes, err := a.call("initialize", map[string]any{
+	initRes, err := a.callWithin("initialize", map[string]any{
 		"protocolVersion":    1,
 		"clientCapabilities": map[string]any{"fs": map[string]any{"readTextFile": false, "writeTextFile": false}},
 		"clientInfo":         map[string]any{"name": "polaris", "version": "1"},
-	})
+	}, acpControlTimeout)
 	if err != nil {
 		return err
 	}
@@ -198,7 +199,7 @@ func (a *acpSession) bootstrap(workDir, resumeSessionID string) error {
 		a.mu.Lock()
 		a.loading = true
 		a.mu.Unlock()
-		_, err := a.call("session/load", map[string]any{"sessionId": resumeSessionID, "cwd": workDir, "mcpServers": []any{}})
+		_, err := a.callWithin("session/load", map[string]any{"sessionId": resumeSessionID, "cwd": workDir, "mcpServers": []any{}}, acpControlTimeout)
 		a.mu.Lock()
 		a.loading = false
 		a.mu.Unlock()
@@ -210,7 +211,7 @@ func (a *acpSession) bootstrap(workDir, resumeSessionID string) error {
 		return nil
 	}
 
-	res, err := a.call("session/new", map[string]any{"cwd": workDir, "mcpServers": []any{}})
+	res, err := a.callWithin("session/new", map[string]any{"cwd": workDir, "mcpServers": []any{}}, acpControlTimeout)
 	if err != nil {
 		return err
 	}
@@ -236,7 +237,7 @@ func (a *acpSession) applyMode() {
 	if a.mode == "" {
 		return
 	}
-	_, _ = a.call("session/set_mode", map[string]any{"sessionId": a.sessionID, "modeId": a.mode})
+	_, _ = a.callWithin("session/set_mode", map[string]any{"sessionId": a.sessionID, "modeId": a.mode}, acpControlTimeout)
 }
 
 // runTurn sends a prompt and blocks until the turn ends, then drains any queued
@@ -349,7 +350,20 @@ func (a *acpSession) deliverResponse(id int, m acpMessage) {
 	}
 }
 
+// acpControlTimeout bounds the JSON-RPC handshake/setup calls so a provider that
+// hangs during startup (never answering initialize/session/new/load) surfaces an
+// error instead of leaving the agent stuck forever. session/prompt is exempt:
+// an agent turn can legitimately run for minutes.
+const acpControlTimeout = 60 * time.Second
+
 func (a *acpSession) call(method string, params any) (json.RawMessage, error) {
+	return a.callWithin(method, params, 0)
+}
+
+// callWithin sends a JSON-RPC request and waits for its response. A timeout of 0
+// waits indefinitely; a positive timeout abandons the pending request and returns
+// an error if no response arrives in time.
+func (a *acpSession) callWithin(method string, params any, timeout time.Duration) (json.RawMessage, error) {
 	a.mu.Lock()
 	if a.closed {
 		a.mu.Unlock()
@@ -362,14 +376,33 @@ func (a *acpSession) call(method string, params any) (json.RawMessage, error) {
 	a.mu.Unlock()
 
 	if err := a.write(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
+		a.mu.Lock()
+		delete(a.pending, id)
+		a.mu.Unlock()
 		return nil, err
 	}
 
-	msg := <-ch
+	if timeout <= 0 {
+		return acpCallResult(<-ch)
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case msg := <-ch:
+		return acpCallResult(msg)
+	case <-timer.C:
+		a.mu.Lock()
+		delete(a.pending, id)
+		a.mu.Unlock()
+		return nil, fmt.Errorf("%s timed out after %s", method, timeout)
+	}
+}
+
+func acpCallResult(msg acpMessage) (json.RawMessage, error) {
 	if msg.Error != nil {
 		return nil, fmt.Errorf("%s", string(msg.Error))
 	}
-
 	return msg.Result, nil
 }
 
