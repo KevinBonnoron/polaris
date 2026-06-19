@@ -257,6 +257,7 @@ export const fr: Translation = {
       couldNotSetModel: 'Impossible de changer de modèle',
       couldNotSaveImage: "Impossible d'enregistrer l'image",
       couldNotPasteImage: "Impossible de coller l'image",
+      imageUnavailable: 'Image non disponible',
       send: 'Envoyer le message',
       couldNotSend: "Impossible d'envoyer le message",
       thinking: 'Réflexion en cours...',

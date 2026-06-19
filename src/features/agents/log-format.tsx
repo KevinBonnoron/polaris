@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { polaris } from '@/wailsjs/go/models';
-import { highlightSegments } from './file-mentions';
+import { UserMessageContent } from './user-message';
 
 type StreamEvent = polaris.StreamEvent;
 
@@ -557,11 +557,7 @@ export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true
           return <AgentGroup key={block.key} description={block.description} subagentType={block.subagentType} children={block.children} toolStatus={block.toolStatus} toolId={block.toolId} resultLines={block.resultLines} />;
         }
         if (block.type === 'user-message') {
-          return (
-            <div key={block.key} className="col-span-2 my-1 whitespace-pre-wrap break-words rounded-md bg-muted/50 px-3 py-2 text-sm text-foreground/80">
-              {highlightSegments(block.content, { requireAt: true })}
-            </div>
-          );
+          return <UserMessageContent key={block.key} content={block.content} />;
         }
         if (block.type === 'thinking') {
           return <ThinkingGroup key={block.key} lines={block.lines} />;
