@@ -178,6 +178,13 @@ export function getTicketsEntry(cfg: ConnectedTicketsConfig): Entry {
     inflight = (async () => {
       try {
         const sprint = await FetchTicketsSprint(tickets.Config.createFrom(cfg));
+        if (!sprint) {
+          entry.meta = null;
+          const empty = tickets.Sprint.createFrom({});
+          syncIssues(empty);
+          syncStatuses(empty);
+          throw new Error('no active sprint');
+        }
         entry.meta = { name: sprint.name, boardId: sprint.boardId, boardUrl: sprint.boardUrl ?? '', columns: sprint.columns ?? [] };
         syncIssues(sprint);
         syncStatuses(sprint);

@@ -113,6 +113,9 @@ export function TicketsIssueDetailModal({ config, issueKey, children, onAssigned
     try {
       const cfg = tickets.Config.createFrom(config);
       const user = await GetTicketsCurrentUser(cfg);
+      if (!user) {
+        throw new Error('could not resolve current user');
+      }
       await AssignTicketsIssue(cfg, issueKey, user.accountId);
       const updated = await FetchTicketsIssueDetail(cfg, issueKey);
       setDetail(updated);

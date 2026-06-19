@@ -367,9 +367,9 @@ async function detectRepository(projectPath: string): Promise<IntegrationConfig 
 
   if (config.provider === 'github' || config.provider === 'gitlab') {
     try {
-      const { token } = await DetectProviderToken(String(config.provider));
-      if (token) {
-        config.token = token;
+      const detected = await DetectProviderToken(String(config.provider));
+      if (detected?.token) {
+        config.token = detected.token;
       }
     } catch {
       /* token discovery is best-effort */
@@ -414,7 +414,10 @@ async function detectNode(projectPath: string): Promise<IntegrationConfig | Inte
     return null;
   }
 
-  const configs = projects.map((p) => {
+  const configs = projects.flatMap((p) => {
+    if (!p) {
+      return [];
+    }
     const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: p.packageManager };
     if (p.runEnv) {
       c.runEnv = p.runEnv;
@@ -432,7 +435,7 @@ async function detectNode(projectPath: string): Promise<IntegrationConfig | Inte
     if (build) {
       c.buildScript = build;
     }
-    return c;
+    return [c];
   });
   return configs.length === 1 ? configs[0] : configs;
 }
@@ -456,7 +459,10 @@ async function detectPython(projectPath: string): Promise<IntegrationConfig | In
     return null;
   }
 
-  const configs = projects.map((p) => {
+  const configs = projects.flatMap((p) => {
+    if (!p) {
+      return [];
+    }
     const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: p.packageManager };
     if (p.runEnv) {
       c.runEnv = p.runEnv;
@@ -474,7 +480,7 @@ async function detectPython(projectPath: string): Promise<IntegrationConfig | In
     if (build) {
       c.buildScript = build;
     }
-    return c;
+    return [c];
   });
   return configs.length === 1 ? configs[0] : configs;
 }
@@ -498,12 +504,15 @@ async function detectCSharp(projectPath: string): Promise<IntegrationConfig | In
     return null;
   }
 
-  const configs = projects.map((p) => {
+  const configs = projects.flatMap((p) => {
+    if (!p) {
+      return [];
+    }
     const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: p.packageManager || 'dotnet', startScript: 'run', testScript: 'test', buildScript: 'build' };
     if (p.runEnv) {
       c.runEnv = p.runEnv;
     }
-    return c;
+    return [c];
   });
   return configs.length === 1 ? configs[0] : configs;
 }
@@ -514,7 +523,7 @@ async function detectDocker(projectPath: string): Promise<IntegrationConfig | In
     return null;
   }
 
-  const configs = projects.map((p) => ({ dockerfilePath: p.dockerfilePath, composePath: p.composePath }));
+  const configs = projects.flatMap((p) => (p ? [{ dockerfilePath: p.dockerfilePath, composePath: p.composePath }] : []));
   return configs.length === 1 ? configs[0] : configs;
 }
 

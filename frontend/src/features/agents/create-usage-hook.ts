@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export function createUsageHook<T>(fetchFn: (force: boolean) => Promise<T>) {
+export function createUsageHook<T>(fetchFn: (force: boolean) => PromiseLike<T | null>) {
   let cache: T | null = null;
 
   return function useUsage() {
@@ -13,6 +13,11 @@ export function createUsageHook<T>(fetchFn: (force: boolean) => Promise<T>) {
       setError(null);
       try {
         const data = await fetchFn(force);
+        if (data == null) {
+          cache = null;
+          setUsage(null);
+          return;
+        }
         const fetchError = (data as { error?: string }).error;
         if (fetchError) {
           setError(fetchError);

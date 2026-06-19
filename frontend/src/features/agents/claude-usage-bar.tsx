@@ -18,7 +18,7 @@ interface UsageData {
   sessionResetAt?: string;
   weeklyPercentUsed: number;
   weeklyResetAt?: string;
-  weeklyByModel?: Record<string, ModelUsage>;
+  weeklyByModel?: Record<string, ModelUsage | undefined>;
 }
 
 function barColor(pct: number): string {
