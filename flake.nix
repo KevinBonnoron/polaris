@@ -11,6 +11,39 @@
 
       version = "0.0.0";
 
+      # Wails v3 CLI, packaged so the build is self-contained (offline) and
+      # `wails3 generate bindings` can run inside the derivation.
+      wails3 = pkgs.buildGoModule {
+        pname = "wails3";
+        version = "3.0.0-alpha.102";
+        src = pkgs.fetchFromGitHub {
+          owner = "wailsapp";
+          repo = "wails";
+          rev = "e9afa58bb3cc0372123a5a4bf876f9caf77d4625";
+          hash = "sha256-os19NyyBhyVpPgUDkHLWIkd8u8b6747MiGKlVV4p2Es=";
+        };
+        modRoot = "v3";
+        subPackages = [ "cmd/wails3" ];
+        vendorHash = "sha256-cFAwRPI10xk0AcjJ7aqrm65c4Wy+WQpUV/CEB2Ll2eo=";
+        proxyVendor = true;
+        env.GOWORK = "off";
+        nativeBuildInputs = [ pkgs.pkg-config ];
+        buildInputs = guiDeps;
+        doCheck = false;
+      };
+
+      guiDeps = with pkgs; [
+        gtk4
+        webkitgtk_6_0
+        libsoup_3
+        glib
+        cairo
+        pango
+        gdk-pixbuf
+        graphene
+        harfbuzz
+      ];
+
       bunDeps = pkgs.stdenv.mkDerivation {
         pname = "polaris-bun-deps";
         inherit version;
@@ -18,8 +51,8 @@
         src = lib.fileset.toSource {
           root = ./.;
           fileset = lib.fileset.unions [
-            ./package.json
-            ./bun.lock
+            ./frontend/package.json
+            ./frontend/bun.lock
           ];
         };
 
@@ -30,6 +63,7 @@
 
         buildPhase = ''
           export HOME=$TMPDIR
+          cd frontend
           bun install --frozen-lockfile --no-progress --ignore-scripts
         '';
 
@@ -40,38 +74,9 @@
 
         outputHashMode = "recursive";
         outputHashAlgo = "sha256";
-        outputHash = "sha256-yJqMaDhScAQwQL76U+Fhh8ZVsug35x1eVVn+8AD0J1k=";
+        outputHash = "sha256-f0IsVR04C4bBUHjUnqzGo5ZJUmKDVjPAUXKMniEAms4=";
       };
 
-      frontend = pkgs.stdenv.mkDerivation {
-        pname = "polaris-frontend";
-        inherit version;
-
-        src = ./.;
-
-        nativeBuildInputs = [ pkgs.bun pkgs.nodejs_22 ];
-
-        configurePhase = ''
-          runHook preConfigure
-          cp -R ${bunDeps}/node_modules ./node_modules
-          chmod -R u+w node_modules
-          patchShebangs node_modules
-          runHook postConfigure
-        '';
-
-        buildPhase = ''
-          runHook preBuild
-          bun run vite:build
-          runHook postBuild
-        '';
-
-        installPhase = ''
-          runHook preInstall
-          mkdir -p $out
-          cp -R frontend/dist $out/dist
-          runHook postInstall
-        '';
-      };
       desktopItem = pkgs.makeDesktopItem {
         name = "polaris";
         desktopName = "Polaris";
@@ -83,41 +88,61 @@
       };
     in
     {
-      packages.${system}.default = pkgs.buildGoModule {
-        pname = "polaris";
-        inherit version;
+      packages.${system} = {
+        wails3 = wails3;
+        default = pkgs.buildGoModule {
+          pname = "polaris";
+          inherit version;
 
-        src = ./.;
+          src = ./.;
 
-        vendorHash = "sha256-jKMO1SmqRjoBfh7fQXeYx0P15iaZRfgHxgqX9ZBnkPM=";
+          vendorHash = "sha256-8tmyLK8NJGjhueOF4owc4Hthel945PDXdP0Y23jorGQ=";
+          proxyVendor = true;
+          env.GOWORK = "off";
 
-        subPackages = [ "." ];
+          subPackages = [ "." ];
 
-        tags = [ "desktop" "production" "webkit2_41" ];
+          # Without the production tag, Wails v3 compiles the dev variant
+          # (devtools, dev logging). production = standalone embedded build.
+          tags = [ "production" ];
 
-        ldflags = [ "-s" "-w" ];
+          ldflags = [ "-s" "-w" ];
 
-        nativeBuildInputs = with pkgs; [ pkg-config wrapGAppsHook3 copyDesktopItems ];
-        buildInputs = with pkgs; [ gtk3 webkitgtk_4_1 nss ];
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            wrapGAppsHook4
+            copyDesktopItems
+            wails3
+            bun
+            nodejs_22
+          ];
+          buildInputs = guiDeps;
 
-        desktopItems = [ desktopItem ];
+          desktopItems = [ desktopItem ];
 
-        preBuild = ''
-          mkdir -p frontend/dist
-          cp -R ${frontend}/dist/. frontend/dist/
-        '';
+          # Generate the v3 TypeScript bindings, then build the frontend, before
+          # the Go build embeds frontend/dist via //go:embed.
+          preBuild = ''
+            export HOME=$TMPDIR
+            cp -R ${bunDeps}/node_modules frontend/node_modules
+            chmod -R u+w frontend/node_modules
+            patchShebangs frontend/node_modules
+            wails3 generate bindings -ts -clean -d frontend/bindings
+            (cd frontend && bun run vite:build)
+          '';
 
-        postInstall = ''
-          for size in 16 24 32 48 64 128 256 512; do
-            install -Dm644 build/appicon.png \
-              $out/share/icons/hicolor/''${size}x''${size}/apps/polaris.png
-          done
-        '';
+          postInstall = ''
+            for size in 16 24 32 48 64 128 256 512; do
+              install -Dm644 build/appicon.png \
+                $out/share/icons/hicolor/''${size}x''${size}/apps/polaris.png
+            done
+          '';
 
-        meta = {
-          description = "Polaris";
-          mainProgram = "polaris";
-          platforms = [ "x86_64-linux" ];
+          meta = {
+            description = "Polaris";
+            mainProgram = "polaris";
+            platforms = [ "x86_64-linux" ];
+          };
         };
       };
 
@@ -131,13 +156,16 @@
           delve
           gotools
 
-          wails
+          wails3
+          go-task
           pkg-config
-          gtk3
-          webkitgtk_4_1
-          nss
           wl-clipboard
-        ];
+          nss
+        ] ++ guiDeps;
+
+        shellHook = ''
+          export WEBKIT_DISABLE_DMABUF_RENDERER=1
+        '';
       };
     };
 }
