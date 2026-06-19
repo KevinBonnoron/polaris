@@ -199,7 +199,7 @@ export function AppSidebar() {
           <SidebarMenuItem className="relative">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton size="lg" className="data-[state=open]:bg-sidebar-accent">
+                <SidebarMenuButton size="lg" className="focus-visible:ring-0 data-[state=open]:bg-sidebar-accent">
                   <ProjectAvatar project={currentProject} className="aspect-square size-8" textClassName="text-xs" />
                   <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="truncate font-semibold">{currentProject?.name ?? t('sidebar.noProject')}</span>
@@ -210,9 +210,10 @@ export function AppSidebar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right" sideOffset={4} className="w-64">
                 {sortedProjects.map((p) => (
-                  <DropdownMenuItem key={p.id} onClick={() => setProjectId(p.id)} className="gap-2">
+                  <DropdownMenuItem key={p.id} onClick={() => requestAnimationFrame(() => setProjectId(p.id))} className="gap-2">
                     <ProjectAvatar project={p} className="size-5 rounded" textClassName="text-[9px]" />
                     <span className="flex-1">{p.name}</span>
+                    {p.id === currentProject?.id && <Check className="size-4" />}
                   </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
