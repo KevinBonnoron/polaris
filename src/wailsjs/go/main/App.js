@@ -26,6 +26,22 @@ export function CancelRepoWorkflowRun(arg1, arg2, arg3) {
   return window['go']['main']['App']['CancelRepoWorkflowRun'](arg1, arg2, arg3);
 }
 
+export function CheckCSharpOutdatedPackages(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CheckCSharpOutdatedPackages'](arg1, arg2, arg3);
+}
+
+export function CheckCSharpPackagesInstalled(arg1, arg2) {
+  return window['go']['main']['App']['CheckCSharpPackagesInstalled'](arg1, arg2);
+}
+
+export function CheckCSharpUnusedPackages(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CheckCSharpUnusedPackages'](arg1, arg2, arg3, arg4);
+}
+
+export function CheckCSharpVulnerabilities(arg1, arg2, arg3) {
+  return window['go']['main']['App']['CheckCSharpVulnerabilities'](arg1, arg2, arg3);
+}
+
 export function CheckForUpdate(arg1) {
   return window['go']['main']['App']['CheckForUpdate'](arg1);
 }
@@ -110,6 +126,10 @@ export function DetectAgentClis() {
   return window['go']['main']['App']['DetectAgentClis']();
 }
 
+export function DetectAllCSharpProjects(arg1) {
+  return window['go']['main']['App']['DetectAllCSharpProjects'](arg1);
+}
+
 export function DetectAllDockerProjects(arg1) {
   return window['go']['main']['App']['DetectAllDockerProjects'](arg1);
 }
@@ -120,6 +140,10 @@ export function DetectAllNodeProjects(arg1) {
 
 export function DetectAllPythonProjects(arg1) {
   return window['go']['main']['App']['DetectAllPythonProjects'](arg1);
+}
+
+export function DetectCSharpProject(arg1) {
+  return window['go']['main']['App']['DetectCSharpProject'](arg1);
 }
 
 export function DetectDockerProject(arg1) {
@@ -296,6 +320,18 @@ export function ListAutomationRuns(arg1, arg2) {
 
 export function ListAutomations() {
   return window['go']['main']['App']['ListAutomations']();
+}
+
+export function ListCSharpPackages(arg1, arg2) {
+  return window['go']['main']['App']['ListCSharpPackages'](arg1, arg2);
+}
+
+export function ListCSharpScripts(arg1) {
+  return window['go']['main']['App']['ListCSharpScripts'](arg1);
+}
+
+export function ListCSharpWorkspaces(arg1, arg2) {
+  return window['go']['main']['App']['ListCSharpWorkspaces'](arg1, arg2);
 }
 
 export function ListClaudeCodeSessions(arg1) {
@@ -490,6 +526,10 @@ export function RespondToAgentQuestion(arg1, arg2, arg3) {
   return window['go']['main']['App']['RespondToAgentQuestion'](arg1, arg2, arg3);
 }
 
+export function RunCSharpCommand(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['RunCSharpCommand'](arg1, arg2, arg3, arg4);
+}
+
 export function RunDokployAction(arg1, arg2, arg3) {
   return window['go']['main']['App']['RunDokployAction'](arg1, arg2, arg3);
 }
@@ -534,6 +574,10 @@ export function SetAppFocused(arg1) {
   return window['go']['main']['App']['SetAppFocused'](arg1);
 }
 
+export function SetCSharpDependencyVersion(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetCSharpDependencyVersion'](arg1, arg2, arg3);
+}
+
 export function SetNodeDependencyVersion(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetNodeDependencyVersion'](arg1, arg2, arg3);
 }
@@ -570,6 +614,10 @@ export function StageProjectFiles(arg1, arg2) {
   return window['go']['main']['App']['StageProjectFiles'](arg1, arg2);
 }
 
+export function StartCSharpScript(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['StartCSharpScript'](arg1, arg2, arg3, arg4);
+}
+
 export function StartNodeScript(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['StartNodeScript'](arg1, arg2, arg3, arg4);
 }
@@ -580,6 +628,10 @@ export function StartPythonScript(arg1, arg2, arg3, arg4) {
 
 export function StartShell(arg1) {
   return window['go']['main']['App']['StartShell'](arg1);
+}
+
+export function StopCSharpScript(arg1) {
+  return window['go']['main']['App']['StopCSharpScript'](arg1);
 }
 
 export function StopNodeScript(arg1) {

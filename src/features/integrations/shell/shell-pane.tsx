@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ClipboardGetText } from '@/wailsjs/runtime/runtime';
+import { useCSharpRun } from '../csharp/csharp-run-context';
 import { useNodejsRun } from '../nodejs/nodejs-run-context';
 import { usePythonRun } from '../python/python-run-context';
 import { patchScrollToBottom } from '../terminal-scroll-fix';
@@ -19,6 +20,7 @@ export function ShellPane() {
   const { sessions, activeSessionId, setActiveSessionId, activeKind, setActiveKind, startSession, closeSession, paneOpen, setPaneOpen, paneHeight: height, setPaneHeight: setHeight } = useShellRun();
   const { run: nodejsRun, isRunning: nodejsRunning, stop: nodejsStop, restart: nodejsRestart, clear: nodejsClear } = useNodejsRun();
   const { run: pythonRun, isRunning: pythonRunning, stop: pythonStop, restart: pythonRestart, clear: pythonClear } = usePythonRun();
+  const { run: csharpRun, isRunning: csharpRunning, stop: csharpStop, restart: csharpRestart, clear: csharpClear } = useCSharpRun();
   const { t } = useTranslation();
 
   const prevNodejsRunId = useRef<string | undefined>(nodejsRun?.runId);
@@ -45,17 +47,32 @@ export function ShellPane() {
     }
   }, [pythonRun, setActiveKind, setPaneOpen]);
 
+  const prevCsharpRunId = useRef<string | undefined>(csharpRun?.runId);
+  useEffect(() => {
+    if (csharpRun && prevCsharpRunId.current !== csharpRun.runId) {
+      prevCsharpRunId.current = csharpRun.runId;
+      setActiveKind('csharp');
+      setPaneOpen(true);
+    }
+    if (!csharpRun) {
+      prevCsharpRunId.current = undefined;
+    }
+  }, [csharpRun, setActiveKind, setPaneOpen]);
+
   useEffect(() => {
     if (activeKind === 'nodejs' && !nodejsRun) {
-      setActiveKind(pythonRun ? 'python' : 'shell');
+      setActiveKind(pythonRun ? 'python' : csharpRun ? 'csharp' : 'shell');
     }
     if (activeKind === 'python' && !pythonRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : csharpRun ? 'csharp' : 'shell');
+    }
+    if (activeKind === 'csharp' && !csharpRun) {
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : 'shell');
     }
     if (activeKind === 'shell' && !activeSessionId && sessions.length > 0) {
       setActiveSessionId(sessions[sessions.length - 1].sessionId);
     }
-  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, setActiveKind, setActiveSessionId]);
+  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, csharpRun, setActiveKind, setActiveSessionId]);
 
   const onDragStart = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -70,7 +87,7 @@ export function ShellPane() {
     window.addEventListener('pointerup', onUp);
   };
 
-  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun;
+  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun;
   const visible = paneOpen && hasAnything;
 
   const activeShellSession = activeKind === 'shell' ? (sessions.find((s) => s.sessionId === activeSessionId) ?? sessions[0] ?? null) : null;
@@ -146,6 +163,36 @@ export function ShellPane() {
             </>
           )}
 
+          {activeKind === 'csharp' && csharpRun && (
+            <>
+              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border/50 px-3">
+                {csharpRunning ? (
+                  <Badge variant="secondary" className="h-4 gap-1 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-400">
+                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                    {t('integrations.csharp.running')}
+                  </Badge>
+                ) : csharpRun.exited ? (
+                  <Badge variant={csharpRun.exited.code === 0 ? 'secondary' : 'destructive'} className={cn('h-4 px-1.5 text-[10px]', csharpRun.exited.code === 0 && 'bg-emerald-500/10 text-emerald-400')}>
+                    {csharpRun.exited.code === 0 ? t('integrations.csharp.exitOk') : t('integrations.csharp.exitCode', { code: csharpRun.exited.code })}
+                  </Badge>
+                ) : null}
+                <div className="flex-1" />
+                <Button size="icon" variant="ghost" className="size-6" onClick={() => void csharpRestart()}>
+                  <RotateCcw className="size-3" />
+                </Button>
+                {csharpRunning && (
+                  <Button size="icon" variant="ghost" className="size-6" onClick={() => void csharpStop()}>
+                    <Square className="size-3 text-destructive" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <TerminalView runId={csharpRun.runId} lines={csharpRun.lines} />
+              </div>
+              {csharpRun.exited?.error && <div className="shrink-0 px-3 py-1.5 font-mono text-xs text-red-400">{csharpRun.exited.error}</div>}
+            </>
+          )}
+
           {activeKind === 'shell' && <div className="flex-1 overflow-hidden">{activeShellSession ? <ShellTerminal key={activeShellSession.sessionId} session={activeShellSession} /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('integrations.shell.newSession')}</div>}</div>}
         </div>
 
@@ -198,6 +245,19 @@ export function ShellPane() {
                 onSelect={() => setActiveKind('python')}
                 onDelete={() => {
                   pythonClear();
+                  setActiveKind('shell');
+                }}
+              />
+            )}
+            {csharpRun && (
+              <SessionItem
+                label={csharpRun.scriptName}
+                active={activeKind === 'csharp'}
+                running={csharpRunning}
+                exited={csharpRun.exited}
+                onSelect={() => setActiveKind('csharp')}
+                onDelete={() => {
+                  csharpClear();
                   setActiveKind('shell');
                 }}
               />

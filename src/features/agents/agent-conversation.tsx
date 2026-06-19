@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
 import { isSeparator, isUsageBlock, sepGlyph, usageMode } from '@/features/settings/status-bar-settings';
@@ -117,7 +118,8 @@ export function AgentConversation({ agentId }: { agentId: string }) {
 
   const nodejs = useNodejsRun();
   const python = usePythonRun();
-  const activeRun = nodejs.isRunning ? nodejs : python.isRunning ? python : nodejs.config?.startScript ? nodejs : python.config?.startScript ? python : null;
+  const csharp = useCSharpRun();
+  const activeRun = nodejs.isRunning ? nodejs : python.isRunning ? python : csharp.isRunning ? csharp : nodejs.config?.startScript ? nodejs : python.config?.startScript ? python : csharp.config?.startScript ? csharp : null;
 
   const devManifestPath = useMemo(() => {
     const manifest = activeRun?.config?.manifestPath;

@@ -12,7 +12,7 @@ export interface ShellSession {
   exited?: { code: number };
 }
 
-type TerminalKind = 'shell' | 'nodejs' | 'python';
+type TerminalKind = 'shell' | 'nodejs' | 'python' | 'csharp';
 
 interface ShellContextValue {
   sessions: ShellSession[];
