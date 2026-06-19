@@ -1158,6 +1158,7 @@
   border-radius: 0;
   box-shadow: none;
   padding: 6px 10px;
+  scrollbar-width: none;
   --term-font-family:
     "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro",
     "Ubuntu Mono", "DejaVu Sans Mono", "Liberation Mono", ui-monospace,

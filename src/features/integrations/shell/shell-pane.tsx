@@ -5,11 +5,15 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ClipboardGetText } from '@/wailsjs/runtime/runtime';
 import { useNodejsRun } from '../nodejs/nodejs-run-context';
 import { usePythonRun } from '../python/python-run-context';
+import { patchScrollToBottom } from '../terminal-scroll-fix';
+import { TerminalScrollbar } from '../terminal-scrollbar';
+import { TerminalView } from '../terminal-view';
+import { useTerminalAutoscroll } from '../use-terminal-autoscroll';
 import type { ShellSession } from './shell-context';
 import { useShellRun } from './shell-context';
-import { TerminalView } from '../terminal-view';
 
 export function ShellPane() {
   const { sessions, activeSessionId, setActiveSessionId, activeKind, setActiveKind, startSession, closeSession, paneOpen, setPaneOpen, paneHeight: height, setPaneHeight: setHeight } = useShellRun();
@@ -255,9 +259,12 @@ function ShellTerminal({ session }: { session: ShellSession }) {
   const { ref, write } = useTerminal();
   const outerRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const countRef = useRef(0);
   const chunksRef = useRef(session.chunks);
   chunksRef.current = session.chunks;
+
+  useTerminalAutoscroll(scroller);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once on ready
   useEffect(() => {
@@ -268,12 +275,6 @@ function ShellTerminal({ session }: { session: ShellSession }) {
       write(cleanChunk(chunk));
     }
     countRef.current = chunksRef.current.length;
-    requestAnimationFrame(() => {
-      const inst = ref.current?.instance;
-      if (inst) {
-        inst.element.scrollTop = inst.element.scrollHeight;
-      }
-    });
   }, [ready]);
 
   const chunkCount = session.chunks.length;
@@ -306,6 +307,7 @@ function ShellTerminal({ session }: { session: ShellSession }) {
   }, []);
 
   // Intercept Tab in capture phase so WebKitGTK can't steal it for focus navigation.
+  // Paste is read through Wails since WebKitGTK's DOM clipboardData is unreliable.
   // biome-ignore lint/correctness/useExhaustiveDependencies: stable refs
   useEffect(() => {
     const el = outerRef.current;
@@ -317,6 +319,24 @@ function ShellTerminal({ session }: { session: ShellSession }) {
         e.preventDefault();
         e.stopPropagation();
         sendInput(session.sessionId, '\t');
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        e.stopPropagation();
+        void ClipboardGetText()
+          .then((text) => {
+            if (!text) {
+              return;
+            }
+            const bridge = (ref.current?.instance as { bridge?: { bracketedPaste?: () => boolean } } | null)?.bridge;
+            if (bridge?.bracketedPaste?.()) {
+              sendInput(session.sessionId, `\x1b[200~${text.replace(/\x1b/g, '')}\x1b[201~`);
+            } else {
+              sendInput(session.sessionId, text);
+            }
+          })
+          .catch(() => {});
       }
     };
     el.addEventListener('keydown', onKeyDown, { capture: true });
@@ -324,7 +344,7 @@ function ShellTerminal({ session }: { session: ShellSession }) {
   }, [ready]);
 
   return (
-    <div ref={outerRef} className="h-full w-full" onClick={() => ref.current?.focus()}>
+    <div ref={outerRef} className="relative h-full w-full" onClick={() => ref.current?.focus()}>
       <Terminal
         ref={ref}
         className="h-full w-full"
@@ -337,10 +357,12 @@ function ShellTerminal({ session }: { session: ShellSession }) {
         }}
         onReady={() => {
           setReady(true);
+          setScroller(patchScrollToBottom(ref.current?.instance));
           ref.current?.focus();
         }}
         onData={(data) => sendInput(session.sessionId, data)}
       />
+      <TerminalScrollbar scroller={scroller} />
     </div>
   );
 }
