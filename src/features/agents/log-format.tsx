@@ -236,8 +236,14 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
       case 'user_message':
         flushText();
         flushThinking();
+        // A human message interrupts any in-flight sub-agents: mark them killed
+        // and stop nesting so the message lands at the top level.
+        for (const a of agentStack) {
+          a.block.toolStatus = 'error';
+        }
+        agentStack.length = 0;
         if (evt.content) {
-          target().push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` });
+          out.push({ type: 'user-message', content: evt.content, key: `user-${blockIndex++}-${i}` });
         }
         break;
       case 'system': {
@@ -329,12 +335,14 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
   const label = subagentType ? `Agent · ${subagentType}` : 'Agent';
 
   return (
-    <div className="col-span-2 my-0.5">
-      <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full items-center gap-1.5 text-left font-mono text-xs', canExpand && 'cursor-pointer')}>
-        <span className={cn('mt-px size-1.5 shrink-0 rounded-full', dotClass)} />
-        <span className="text-violet-400">{label}</span>
-        {description && <span className="text-muted-foreground/50">{description}</span>}
-        {canExpand && (open ? <ChevronDown className="ml-auto size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="ml-auto size-3 shrink-0 text-muted-foreground/40" />)}
+    <div className="col-start-2 my-0.5 min-w-0">
+      <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
+        <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
+        <span className="min-w-0 flex-1 break-words">
+          <span className="text-violet-400">{label}</span>
+          {description && <span className="ml-1.5 text-muted-foreground/50">{description}</span>}
+        </span>
+        {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
       {open && canExpand && (
         <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
@@ -389,7 +397,7 @@ const TODO_RE = /^\[([ x~])\] /;
 
 function TodoResultPanel({ lines }: { lines: string[] }) {
   return (
-    <ScrollArea className="mt-1 max-h-64 rounded border border-border/60 bg-muted/30 text-muted-foreground/80">
+    <ScrollArea className="mt-1 rounded border border-border/60 bg-muted/30 text-muted-foreground/80" viewportProps={{ className: 'max-h-64' }}>
       <div className="flex flex-col gap-0.5 px-2 py-1.5 text-[11px] leading-relaxed">
         {lines.map((l, i) => {
           const m = l.match(TODO_RE);
@@ -423,7 +431,7 @@ function ToolResultPanel({ lines, toolName }: { lines: string[]; toolName?: stri
   }
 
   return (
-    <ScrollArea className="mt-1 max-h-64 rounded border border-border/60 bg-muted/30 text-muted-foreground/80">
+    <ScrollArea className="mt-1 rounded border border-border/60 bg-muted/30 text-muted-foreground/80" viewportProps={{ className: 'max-h-64' }}>
       <pre className="whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[11px] leading-relaxed">
         {isDiff
           ? display.map((l, i) => (
