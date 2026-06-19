@@ -208,6 +208,8 @@ export const en = {
       generateCommitMessageFailed: 'Could not generate commit message',
       commitMessageRequired: 'Commit summary is required',
       discardFile: 'Discard changes',
+      discardAll: 'Discard all changes',
+      discardAllConfirm: 'Discard all changes? This cannot be undone.',
       discardFileConfirm: 'Discard changes to {{name}}? This cannot be undone.',
       discardDirConfirm: 'Discard all changes in {{name}}? This cannot be undone.',
       discardFailed: 'Could not discard changes',

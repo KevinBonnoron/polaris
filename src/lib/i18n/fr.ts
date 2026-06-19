@@ -210,6 +210,8 @@ export const fr: Translation = {
       generateCommitMessageFailed: 'Impossible de générer le message de commit',
       commitMessageRequired: 'Le résumé du commit est requis',
       discardFile: 'Annuler les modifications',
+      discardAll: 'Annuler toutes les modifications',
+      discardAllConfirm: 'Annuler tous les changements ? Cette action est irréversible.',
       discardFileConfirm: 'Annuler les modifications de {{name}} ? Cette action est irréversible.',
       discardDirConfirm: 'Annuler toutes les modifications dans {{name}} ? Cette action est irréversible.',
       discardFailed: "Impossible d'annuler les modifications",

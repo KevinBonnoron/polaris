@@ -322,13 +322,21 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
 
   const approveAll = () =>
     runWith(async () => {
-      await ops.stageAll();
+      if (needle) {
+        await ops.stageFiles(pending.map((f) => f.path));
+      } else {
+        await ops.stageAll();
+      }
       toast.success(t('agents.detail.approveSuccess'));
     }, 'agents.detail.approveFailed');
 
   const unapproveAll = () =>
     runWith(async () => {
-      await ops.unstageAll();
+      if (needle) {
+        await ops.unstageFiles(approved.map((f) => f.path));
+      } else {
+        await ops.unstageAll();
+      }
     }, 'agents.detail.unapproveFailed');
 
   const stageDir = (node: TreeNode) =>
@@ -349,6 +357,18 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
       return;
     }
     runWith(() => ops.discardFile!(path, untracked), 'agents.detail.discardFailed');
+  };
+
+  const discardAll = () => {
+    if (!ops.discardFiles || pending.length === 0) {
+      return;
+    }
+    if (!window.confirm(t('agents.detail.discardAllConfirm'))) {
+      return;
+    }
+    const tracked = pending.filter((f) => f.status !== '?').map((f) => f.path);
+    const untracked = pending.filter((f) => f.status === '?').map((f) => f.path);
+    runWith(() => ops.discardFiles!(tracked, untracked), 'agents.detail.discardFailed');
   };
 
   const discardDir = (node: TreeNode) => {
@@ -512,7 +532,7 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
               </button>
             </div>
             <ScrollArea className="h-0 flex-1">
-              <div className="flex flex-col gap-0.5 p-1">
+              <div className="flex flex-col py-1">
                 <SectionHeader
                   label={t('agents.detail.filesApprovedSection', { count: approved.length })}
                   tone="approved"
@@ -520,9 +540,9 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
                   onToggle={() => setApprovedCollapsed((v) => !v)}
                   action={
                     approved.length > 0 && (
-                      <Button type="button" size="icon" variant="ghost" onClick={() => void unapproveAll()} disabled={busy} title={t('agents.detail.unapproveFile')} className="size-6 text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={() => void unapproveAll()} disabled={busy} title={t('agents.detail.unapproveFile')} className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30">
                         <Undo2 className="size-3.5" />
-                      </Button>
+                      </button>
                     )
                   }
                 />
@@ -543,9 +563,16 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
                     onToggle={() => setPendingCollapsed((v) => !v)}
                     action={
                       pending.length > 0 && (
-                        <Button type="button" size="icon" variant="ghost" onClick={() => void approveAll()} disabled={busy} title={t('agents.detail.approveAll')} className="size-6 text-muted-foreground hover:text-emerald-400">
-                          <Check className="size-3.5" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          {ops.discardFiles && (
+                            <button type="button" onClick={() => discardAll()} disabled={busy} title={t('agents.detail.discardAll')} className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-red-500/20 hover:text-red-400 disabled:opacity-30">
+                              <Trash2 className="size-3.5" />
+                            </button>
+                          )}
+                          <button type="button" onClick={() => void approveAll()} disabled={busy} title={t('agents.detail.approveAll')} className="shrink-0 rounded-sm p-0.5 text-muted-foreground hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-30">
+                            <Plus className="size-3.5" />
+                          </button>
+                        </div>
                       )
                     }
                   />
@@ -683,28 +710,43 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
   );
 }
 
-function FileRow({ file, selected, onSelect, onStage, onUnstage, onDiscard, busy, t, indent = 0 }: { file: FileStatus; selected: boolean; onSelect: () => void; onStage?: () => void; onUnstage?: () => void; onDiscard?: () => void; busy: boolean; t: (key: string) => string; indent?: number }) {
+function FileRow({ file, selected, onSelect, onStage, onUnstage, onDiscard, busy, t, level }: { file: FileStatus; selected: boolean; onSelect: () => void; onStage?: () => void; onUnstage?: () => void; onDiscard?: () => void; busy: boolean; t: (key: string) => string; level?: number }) {
   const { name, dir } = splitPath(file.path);
   const status = statusLabel(file.status);
+  const tree = level !== undefined;
   return (
-    <button type="button" onClick={onSelect} style={{ paddingLeft: `${0.5 + indent * 0.75}rem` }} className={cn('group flex w-full items-center gap-2 rounded-sm py-1 pr-1.5 text-left text-xs hover:bg-muted/60', selected && 'bg-muted')}>
+    // biome-ignore lint/a11y/useSemanticElements: row hosts action <button>s, so it cannot be a <button> (no nested interactive elements)
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      style={{ paddingLeft: `${0.5 + (level ?? 0) * 0.75}rem` }}
+      className={cn('group flex w-full items-center gap-1 py-0.5 pr-1.5 text-left text-xs hover:bg-muted/60', selected && 'bg-muted')}
+    >
+      {tree && <span className="size-3.5 shrink-0" />}
       <span className="flex min-w-0 flex-1 items-baseline gap-2">
         <span className="shrink-0 font-medium text-foreground">{name}</span>
-        {dir && <span className="min-w-0 truncate text-[10px] text-muted-foreground">{dir}</span>}
+        {dir && !tree && <span className="min-w-0 truncate text-[10px] text-muted-foreground">{dir}</span>}
       </span>
-      <span className={cn('shrink-0 font-mono text-[10px]', STATUS_CLASS[status] ?? 'text-muted-foreground')}>{status}</span>
-      {onStage && (
+      <span className={cn('mr-1 inline-flex h-3.5 shrink-0 translate-y-px items-center font-mono text-[10px] leading-none', STATUS_CLASS[status] ?? 'text-muted-foreground')}>{status}</span>
+      {onDiscard && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onStage();
+            onDiscard();
           }}
           disabled={busy}
-          title={t('agents.detail.approveFile')}
-          className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-emerald-500/20 hover:text-emerald-400 group-hover:opacity-100 disabled:opacity-30"
+          title={t('agents.detail.discardFile')}
+          className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100 disabled:opacity-30"
         >
-          <Plus className="size-3.5" />
+          <Trash2 className="size-3.5" />
         </button>
       )}
       {onUnstage && (
@@ -721,21 +763,21 @@ function FileRow({ file, selected, onSelect, onStage, onUnstage, onDiscard, busy
           <Undo2 className="size-3.5" />
         </button>
       )}
-      {onDiscard && (
+      {onStage && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onDiscard();
+            onStage();
           }}
           disabled={busy}
-          title={t('agents.detail.discardFile')}
-          className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100 disabled:opacity-30"
+          title={t('agents.detail.approveFile')}
+          className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-emerald-500/20 hover:text-emerald-400 group-hover:opacity-100 disabled:opacity-30"
         >
-          <Trash2 className="size-3.5" />
+          <Plus className="size-3.5" />
         </button>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -828,21 +870,35 @@ function TreeView({
       if (isDir) {
         const dirNode = child;
         rows.push(
-          <button key={`d:${child.fullPath}`} type="button" onClick={() => setOpen((prev) => ({ ...prev, [child.fullPath]: !isOpen }))} style={{ paddingLeft: `${0.5 + level * 0.75}rem` }} className="group flex w-full items-center gap-1 rounded-sm py-1 pr-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60">
+          // biome-ignore lint/a11y/useSemanticElements: row hosts action <button>s, so it cannot be a <button> (no nested interactive elements)
+          <div
+            key={`d:${child.fullPath}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => setOpen((prev) => ({ ...prev, [child.fullPath]: !isOpen }))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setOpen((prev) => ({ ...prev, [child.fullPath]: !isOpen }));
+              }
+            }}
+            style={{ paddingLeft: `${0.5 + level * 0.75}rem` }}
+            className="group flex w-full items-center gap-1 py-0.5 pr-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60"
+          >
             {isOpen ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
             <span className="min-w-0 flex-1 truncate">{child.name}</span>
-            {showStage && onStageDir && (
+            {showStage && onDiscardDir && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onStageDir(dirNode);
+                  onDiscardDir(dirNode);
                 }}
                 disabled={busy}
-                title={t('agents.detail.approveFile')}
-                className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-emerald-500/20 hover:text-emerald-400 group-hover:opacity-100 disabled:opacity-30"
+                title={t('agents.detail.discardFile')}
+                className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100 disabled:opacity-30"
               >
-                <Plus className="size-3.5" />
+                <Trash2 className="size-3.5" />
               </button>
             )}
             {!showStage && onUnstageDir && (
@@ -859,21 +915,21 @@ function TreeView({
                 <Undo2 className="size-3.5" />
               </button>
             )}
-            {showStage && onDiscardDir && (
+            {showStage && onStageDir && (
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onDiscardDir(dirNode);
+                  onStageDir(dirNode);
                 }}
                 disabled={busy}
-                title={t('agents.detail.discardFile')}
-                className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100 disabled:opacity-30"
+                title={t('agents.detail.approveFile')}
+                className="shrink-0 rounded-sm p-0.5 text-muted-foreground opacity-0 hover:bg-emerald-500/20 hover:text-emerald-400 group-hover:opacity-100 disabled:opacity-30"
               >
-                <Trash2 className="size-3.5" />
+                <Plus className="size-3.5" />
               </button>
             )}
-          </button>,
+          </div>,
         );
         if (isOpen) {
           walk(child, level + 1);
@@ -891,7 +947,7 @@ function TreeView({
             onDiscard={showStage && onDiscard ? () => onDiscard(f.path, f.status === '?') : undefined}
             busy={busy}
             t={t}
-            indent={level + 1.5}
+            level={level}
           />,
         );
       }
@@ -903,7 +959,7 @@ function TreeView({
 
 function SectionHeader({ label, tone, action, collapsed, onToggle }: { label: string; tone: 'approved' | 'pending'; action?: React.ReactNode; collapsed?: boolean; onToggle?: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-2 pr-1">
+    <div className="flex items-center justify-between gap-2 pr-1.5">
       <button type="button" onClick={onToggle} className="flex flex-1 items-center gap-1 px-1.5 py-1 text-left hover:bg-muted/40">
         {collapsed ? <ChevronRight className="size-3 text-muted-foreground" /> : <ChevronDown className="size-3 text-muted-foreground" />}
         <span className={cn('text-[10px] font-semibold uppercase tracking-wider', tone === 'approved' ? 'text-emerald-400' : 'text-amber-400')}>{label}</span>
