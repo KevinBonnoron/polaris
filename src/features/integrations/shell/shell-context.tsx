@@ -61,14 +61,19 @@ export function ShellRunProvider({ children }: { children: ReactNode }) {
     });
 
     const cancelExit = EventsOn('shell:exit', (payload: { sessionId: string; code: number }) => {
+      orphanChunksRef.current.delete(payload.sessionId);
       setSessions((prev) => {
-        const idx = prev.findIndex((s) => s.sessionId === payload.sessionId);
-        if (idx !== -1) {
-          const updated = [...prev];
-          updated[idx] = { ...prev[idx], exited: { code: payload.code } };
-          return updated;
+        const remaining = prev.filter((s) => s.sessionId !== payload.sessionId);
+        if (remaining.length === prev.length) {
+          return prev;
         }
-        return prev;
+        setActiveSessionIdRaw((current) => {
+          if (current !== payload.sessionId) {
+            return current;
+          }
+          return remaining.length > 0 ? remaining[remaining.length - 1].sessionId : null;
+        });
+        return remaining;
       });
     });
 
