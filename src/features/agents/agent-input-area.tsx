@@ -299,11 +299,10 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
         if (spawned) {
           setMessage('');
           setAttachments([]);
-          try {
-            await agentsCollection.insert(spawned as unknown as Agent);
-          } catch {
-            // already synced via agents:changed event
-          }
+          // The backend already persisted the spawned agent and emitted a change
+          // event, so the collection syncs it in on its own. Re-inserting it here
+          // would re-upsert the (intentionally empty) summary and race with — and
+          // clobber — the title the backend generates asynchronously.
           try {
             await agentsCollection.delete(agent.id);
           } catch {
