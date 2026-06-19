@@ -1,5 +1,8 @@
 import { Terminal, useTerminal } from '@wterm/react';
 import { useEffect, useRef, useState } from 'react';
+import { patchScrollToBottom } from './terminal-scroll-fix';
+import { TerminalScrollbar } from './terminal-scrollbar';
+import { useTerminalAutoscroll } from './use-terminal-autoscroll';
 
 interface RunLine {
   line: string;
@@ -15,11 +18,14 @@ interface TerminalViewProps {
 export function TerminalView({ runId, lines }: TerminalViewProps) {
   const { ref, write } = useTerminal();
   const [resized, setResized] = useState(false);
+  const [scroller, setScroller] = useState<HTMLElement | null>(null);
   const firstResizeRef = useRef(false);
   const countRef = useRef(0);
   const linesRef = useRef(lines);
   linesRef.current = lines;
   const mountedRef = useRef(false);
+
+  useTerminalAutoscroll(scroller);
 
   // Replay on first resize (correct terminal dimensions)
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once on resized
@@ -58,19 +64,23 @@ export function TerminalView({ runId, lines }: TerminalViewProps) {
   }, [runId]);
 
   return (
-    <Terminal
-      ref={ref}
-      className="h-full w-full"
-      rows={1}
-      autoResize
-      cursorBlink={false}
-      onResize={() => {
-        if (!firstResizeRef.current) {
-          firstResizeRef.current = true;
-          setResized(true);
-        }
-      }}
-    />
+    <div className="relative h-full w-full">
+      <Terminal
+        ref={ref}
+        className="h-full w-full"
+        rows={1}
+        autoResize
+        cursorBlink={false}
+        onResize={() => {
+          if (!firstResizeRef.current) {
+            firstResizeRef.current = true;
+            setResized(true);
+            setScroller(patchScrollToBottom(ref.current?.instance));
+          }
+        }}
+      />
+      <TerminalScrollbar scroller={scroller} />
+    </div>
   );
 }
 
