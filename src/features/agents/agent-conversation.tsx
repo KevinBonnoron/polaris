@@ -325,7 +325,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
     };
 
   const providerLabel = provider?.name ?? (cliCfg ? (findAgentKind(agent?.kind ?? '')?.label ?? cliCfg.id) : null);
-  const duration = agent && !isDraft ? (agent.updatedAt ?? Date.now()) - agent.startedAt : 0;
+  const duration = agent && !isDraft ? (agent.updatedAt ?? agent.startedAt) - agent.startedAt : 0;
   const { usage: claudeUsage } = useClaudeUsage();
 
   const blockRenderers: Record<string, () => ReactNode> = useMemo(

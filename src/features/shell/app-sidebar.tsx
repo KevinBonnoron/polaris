@@ -19,6 +19,7 @@ import { useShellRun } from '@/features/integrations/shell/shell-context';
 import { AddProjectModal } from '@/features/projects/add-project-modal';
 import { ProjectAvatar } from '@/features/projects/project-avatar';
 import { ProjectSettingsModal } from '@/features/projects/project-settings-modal';
+import { sortProjects, useProjectSort } from '@/features/projects/project-sort';
 import { cn } from '@/lib/utils';
 import { useCurrentProject, useProjects } from '@/state/projects';
 import { NotificationPopoverContent } from './notification-popover';
@@ -38,21 +39,6 @@ const NAV_ROUTES: Record<string, string> = {
 };
 
 const SIDEBAR_ORDER_KEY = 'polaris:sidebar-nav-order';
-const PROJECT_SORT_KEY = 'polaris:project-sort';
-
-type ProjectSort = 'recent' | 'alphabetical';
-
-function readStoredProjectSort(): ProjectSort {
-  if (typeof window === 'undefined') {
-    return 'recent';
-  }
-  try {
-    const raw = window.localStorage.getItem(PROJECT_SORT_KEY);
-    return raw === 'alphabetical' ? 'alphabetical' : 'recent';
-  } catch {
-    return 'recent';
-  }
-}
 
 type NavItem = { id: string; to: string; label: string; icon: ComponentType<{ className?: string }> };
 
@@ -129,33 +115,9 @@ export function AppSidebar() {
     }
   };
 
-  const [projectSort, setProjectSort] = useState<ProjectSort>(() => readStoredProjectSort());
-  const updateProjectSort = useCallback((mode: ProjectSort) => {
-    setProjectSort(mode);
-    try {
-      window.localStorage.setItem(PROJECT_SORT_KEY, mode);
-    } catch {
-      // ignore quota errors
-    }
-  }, []);
+  const [projectSort, updateProjectSort] = useProjectSort();
 
-  const sortedProjects = useMemo(() => {
-    const collator = new Intl.Collator(undefined, { sensitivity: 'base' });
-    if (projectSort === 'alphabetical') {
-      return [...projects].sort((a, b) => collator.compare(a.name, b.name));
-    }
-    const lastActivity = new Map<string, number>();
-    for (const a of agents) {
-      const prev = lastActivity.get(a.projectId) ?? 0;
-      if (a.startedAt > prev) {
-        lastActivity.set(a.projectId, a.startedAt);
-      }
-    }
-    return [...projects].sort((a, b) => {
-      const diff = (lastActivity.get(b.id) ?? 0) - (lastActivity.get(a.id) ?? 0);
-      return diff !== 0 ? diff : collator.compare(a.name, b.name);
-    });
-  }, [projects, agents, projectSort]);
+  const sortedProjects = useMemo(() => sortProjects(projects, agents, projectSort), [projects, agents, projectSort]);
 
   const connected = getIntegrations(currentProject);
   const hasGit = currentProject?.hasGit === true;
