@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/creack/pty"
@@ -40,10 +43,7 @@ func NewRunner(emit Emitter) *Runner {
 }
 
 func (r *Runner) Start(workDir string) (string, error) {
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/bash"
-	}
+	shell := resolveShell()
 
 	id := newID()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -174,6 +174,53 @@ func stripReadlineMarkers(b []byte) string {
 		}
 	}
 	return string(out)
+}
+
+// resolveShell picks an interactive shell. The login shell from the user
+// database is preferred over $SHELL because $SHELL is often inherited from a
+// build/dev context and can point to a non-interactive build (e.g. NixOS ships
+// a readline-less `bash` derivation distinct from `bashInteractive`), which
+// leaves the terminal stuck in cooked mode with no line editing.
+func resolveShell() string {
+	for _, c := range []string{loginShell(), os.Getenv("SHELL"), "/run/current-system/sw/bin/bash", "/bin/bash", "/bin/sh"} {
+		if usableShell(c) {
+			return c
+		}
+	}
+	return "/bin/sh"
+}
+
+func usableShell(p string) bool {
+	if p == "" {
+		return false
+	}
+	base := filepath.Base(p)
+	if strings.Contains(base, "nologin") || base == "false" {
+		return false
+	}
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return info.Mode().Perm()&0o111 != 0
+}
+
+func loginShell() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	data, err := os.ReadFile("/etc/passwd")
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) >= 7 && fields[0] == u.Username {
+			return fields[6]
+		}
+	}
+	return ""
 }
 
 func newID() string {
