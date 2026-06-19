@@ -273,14 +273,7 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 	// when PatchAgent emits. Generated once, at launch only. If generation fails,
 	// the truncated first line is used as a fallback — but only on failure, never
 	// while it is still pending.
-	fallbackSummary := task
-	if idx := strings.IndexAny(fallbackSummary, "\r\n"); idx >= 0 {
-		fallbackSummary = fallbackSummary[:idx]
-	}
-	if len(fallbackSummary) > 200 {
-		fallbackSummary = fallbackSummary[:197] + "..."
-	}
-	go service.applyGeneratedTitle(created.ID, task, fallbackSummary)
+	go service.applyGeneratedTitle(created.ID, task, summaryFromTask(task))
 
 	if isACP {
 		_ = service.appendAgentEvent(created.ID, StreamEvent{Type: "user_message", Content: task})
