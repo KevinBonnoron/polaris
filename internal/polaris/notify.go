@@ -6,6 +6,10 @@ import (
 	"github.com/gen2brain/beeep"
 )
 
+func init() {
+	beeep.AppName = "Polaris"
+}
+
 // dispatchOSNotification surfaces a native toast for n, picking between the
 // silent variant and the sound-enabled one based on the user's settings.
 // Errors are swallowed (logged only): notification failures must never bubble
