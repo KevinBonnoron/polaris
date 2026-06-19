@@ -25,47 +25,64 @@ const (
 
 const commitGenSystem = "You generate git commit messages following the Conventional Commits specification. Output only the subject line — no explanation, no quotes, no trailing period."
 
-// GenerateCommitMessage routes to the user-configured provider when one is set
-// (opencode default model → custom provider lookup), then falls back to the
-// Anthropic API.
+// oneShotPrompt is a single stateless completion request shared by every
+// short-lived generation (commit messages, conversation titles).
+type oneShotPrompt struct {
+	system    string
+	user      string
+	maxTokens int
+}
+
+// GenerateCommitMessage builds a commit-message prompt and routes it through
+// completeOneShot.
 func (s *Service) GenerateCommitMessage(diff string) (string, error) {
 	if len(diff) > commitGenMaxDiffBytes {
 		diff = diff[:commitGenMaxDiffBytes] + "\n... (diff truncated)"
 	}
+	return s.completeOneShot(oneShotPrompt{
+		system:    commitGenSystem,
+		user:      "Generate a commit message for this diff:\n\n" + diff,
+		maxTokens: commitGenMaxToks,
+	})
+}
 
+// completeOneShot routes a prompt to the user-configured provider when one is
+// set (opencode default model → custom provider lookup), then falls back to the
+// Anthropic API.
+func (s *Service) completeOneShot(p oneShotPrompt) (string, error) {
 	defaults, _ := s.store.GetAgentDefaultModels()
 	if model := defaults["opencode"]; model != "" {
 		if idx := strings.Index(model, "/"); idx > 0 {
 			providerID := model[:idx]
 			modelName := model[idx+1:]
-			if p, err := s.store.GetCustomProvider(providerID); err == nil && p != nil {
-				return generateWithCustomProvider(p, modelName, diff)
+			if prov, err := s.store.GetCustomProvider(providerID); err == nil && prov != nil {
+				return generateWithCustomProvider(prov, modelName, p)
 			}
 		}
 	}
 
-	return generateWithAnthropic(diff)
+	return generateWithAnthropic(p)
 }
 
-func generateWithCustomProvider(p *CustomProvider, model, diff string) (string, error) {
-	if p.APIType == "Anthropic-compatible" {
-		return generateAnthropicMessages(strings.TrimRight(p.Endpoint, "/")+"/messages", p.APIKey, model, diff)
+func generateWithCustomProvider(prov *CustomProvider, model string, p oneShotPrompt) (string, error) {
+	if prov.APIType == "Anthropic-compatible" {
+		return generateAnthropicMessages(strings.TrimRight(prov.Endpoint, "/")+"/messages", prov.APIKey, model, p)
 	}
-	return generateOpenAIChat(strings.TrimRight(p.Endpoint, "/")+"/chat/completions", p.APIKey, model, diff)
+	return generateOpenAIChat(strings.TrimRight(prov.Endpoint, "/")+"/chat/completions", prov.APIKey, model, p)
 }
 
 // generateWithAnthropic calls the public Anthropic API, using ANTHROPIC_API_KEY
 // or the Claude OAuth token.
-func generateWithAnthropic(diff string) (string, error) {
+func generateWithAnthropic(p oneShotPrompt) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))
 	if apiKey != "" {
-		return generateAnthropicMessages(messagesEndpoint, apiKey, commitGenModel, diff)
+		return generateAnthropicMessages(messagesEndpoint, apiKey, commitGenModel, p)
 	}
 	tok, err := loadClaudeToken()
 	if err != nil {
 		return "", fmt.Errorf("no Anthropic credentials found (set ANTHROPIC_API_KEY or run `claude` to authenticate): %w", err)
 	}
-	return generateAnthropicMessagesOAuth(messagesEndpoint, tok, diff)
+	return generateAnthropicMessagesOAuth(messagesEndpoint, tok, p)
 }
 
 type messagesRequest struct {
@@ -90,12 +107,12 @@ type messagesResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func generateAnthropicMessages(endpoint, apiKey, model, diff string) (string, error) {
+func generateAnthropicMessages(endpoint, apiKey, model string, p oneShotPrompt) (string, error) {
 	body, err := json.Marshal(messagesRequest{
 		Model:     model,
-		MaxTokens: commitGenMaxToks,
-		System:    commitGenSystem,
-		Messages:  []messagesMessage{{Role: "user", Content: "Generate a commit message for this diff:\n\n" + diff}},
+		MaxTokens: p.maxTokens,
+		System:    p.system,
+		Messages:  []messagesMessage{{Role: "user", Content: p.user}},
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
@@ -112,12 +129,12 @@ func generateAnthropicMessages(endpoint, apiKey, model, diff string) (string, er
 	return doMessagesRequest(req)
 }
 
-func generateAnthropicMessagesOAuth(endpoint, token, diff string) (string, error) {
+func generateAnthropicMessagesOAuth(endpoint, token string, p oneShotPrompt) (string, error) {
 	body, err := json.Marshal(messagesRequest{
 		Model:     commitGenModel,
-		MaxTokens: commitGenMaxToks,
-		System:    commitGenSystem,
-		Messages:  []messagesMessage{{Role: "user", Content: "Generate a commit message for this diff:\n\n" + diff}},
+		MaxTokens: p.maxTokens,
+		System:    p.system,
+		Messages:  []messagesMessage{{Role: "user", Content: p.user}},
 	})
 	if err != nil {
 		return "", fmt.Errorf("marshal request: %w", err)
@@ -175,13 +192,13 @@ type openAIChatResponse struct {
 	} `json:"error,omitempty"`
 }
 
-func generateOpenAIChat(endpoint, apiKey, model, diff string) (string, error) {
+func generateOpenAIChat(endpoint, apiKey, model string, p oneShotPrompt) (string, error) {
 	body, err := json.Marshal(openAIChatRequest{
 		Model:     model,
-		MaxTokens: commitGenMaxToks,
+		MaxTokens: p.maxTokens,
 		Messages: []openAIChatMsg{
-			{Role: "system", Content: commitGenSystem},
-			{Role: "user", Content: "Generate a commit message for this diff:\n\n" + diff},
+			{Role: "system", Content: p.system},
+			{Role: "user", Content: p.user},
 		},
 	})
 	if err != nil {

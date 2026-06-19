@@ -243,18 +243,11 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 			return nil, berr
 		}
 	}
-	summary := task
-	if idx := strings.IndexAny(summary, "\r\n"); idx >= 0 {
-		summary = summary[:idx]
-	}
-	if len(summary) > 200 {
-		summary = summary[:197] + "..."
-	}
 	now := time.Now()
 	created, err := service.store.UpsertAgent(Agent{
 		ProjectID: in.ProjectID,
 		Kind:      in.Kind,
-		Summary:   summary,
+		Summary:   "",
 		Status:    "working",
 		StartedAt: now.Unix(),
 		SessionID: sessionID,
@@ -274,6 +267,20 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 		cleanupWorktree()
 		return nil, fmt.Errorf("create agent record: %w", err)
 	}
+
+	// The summary starts empty and is filled by an AI-generated title describing
+	// the request. Async so the spawn returns immediately; the UI updates live
+	// when PatchAgent emits. Generated once, at launch only. If generation fails,
+	// the truncated first line is used as a fallback — but only on failure, never
+	// while it is still pending.
+	fallbackSummary := task
+	if idx := strings.IndexAny(fallbackSummary, "\r\n"); idx >= 0 {
+		fallbackSummary = fallbackSummary[:idx]
+	}
+	if len(fallbackSummary) > 200 {
+		fallbackSummary = fallbackSummary[:197] + "..."
+	}
+	go service.applyGeneratedTitle(created.ID, task, fallbackSummary)
 
 	if isACP {
 		_ = service.appendAgentEvent(created.ID, StreamEvent{Type: "user_message", Content: task})
