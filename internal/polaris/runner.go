@@ -2188,7 +2188,7 @@ func (service *Service) notifyAgentEvent(agentID, kind, detail string) {
 		ProjectID:     agent.ProjectID,
 		Type:          NotifTypeAgent,
 		Severity:      severity,
-		TitleTemplate: agentNotificationTitle(agent, event, severity, detail),
+		TitleTemplate: agentNotificationTitle(service, agent, event, severity, detail),
 		Payload:       map[string]any{"agentId": agent.ID, "event": string(event)},
 	})
 }
@@ -2206,7 +2206,12 @@ func agentEventFromKind(kind string) (AgentEvent, NotificationSeverity) {
 	}
 }
 
-func agentKindLabel(agent *Agent) string {
+func agentKindLabel(service *Service, agent *Agent) string {
+	if agent.ProviderID != "" && service != nil && service.store != nil {
+		if prov, err := service.store.GetCustomProvider(agent.ProviderID); err == nil && prov != nil && strings.TrimSpace(prov.Name) != "" {
+			return prov.Name
+		}
+	}
 	switch agent.Kind {
 	case "claude-code":
 		return "Claude Code"
@@ -2225,12 +2230,12 @@ func agentKindLabel(agent *Agent) string {
 	}
 }
 
-func agentNotificationTitle(agent *Agent, event AgentEvent, severity NotificationSeverity, detail string) string {
+func agentNotificationTitle(service *Service, agent *Agent, event AgentEvent, severity NotificationSeverity, detail string) string {
 	task := strings.TrimSpace(agent.Summary)
 	if len(task) > 80 {
 		task = task[:77] + "..."
 	}
-	label := agentKindLabel(agent)
+	label := agentKindLabel(service, agent)
 
 	switch {
 	case event == AgentEventCompleted && severity == SeverityError:
