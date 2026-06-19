@@ -105,7 +105,9 @@ export function AppSidebar() {
   const route = useRouterState({ select: (s) => s.location.pathname });
 
   const { data: notifs = [] } = useLiveQuery((q) => q.from({ n: notificationsCollection }));
-  const waitingCount = notifs.filter((n) => !n.read && ((n.type === 'agent' && n.payload?.event === 'waiting') || n.severity === 'error')).length;
+  const unreadCount = notifs.filter((n) => !n.read).length;
+  const hasUrgentUnread = notifs.some((n) => !n.read && ((n.type === 'agent' && n.payload?.event === 'waiting') || n.severity === 'error'));
+  const unreadBadgeColor = hasUrgentUnread ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground';
 
   const { data: agents = [] } = useLiveQuery((q) => q.from({ a: agentsCollection }));
   const currentAgentsCount = currentProject ? agents.filter((a) => a.projectId === currentProject.id).length : 0;
@@ -385,16 +387,16 @@ export function AppSidebar() {
                 <SidebarMenuButton tooltip={t('sidebar.inbox')}>
                   <div className="relative inline-flex shrink-0">
                     <Bell />
-                    {waitingCount > 0 && <span className="absolute -top-0.5 -right-0.5 hidden size-2 rounded-full bg-destructive group-data-[collapsible=icon]:block" />}
+                    {unreadCount > 0 && <span className={cn('absolute -bottom-1.5 -right-1.5 hidden h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] font-medium leading-none tabular-nums group-data-[collapsible=icon]:flex', unreadBadgeColor)}>{unreadCount > 99 ? '99+' : unreadCount}</span>}
                   </div>
                   <span>{t('sidebar.inbox')}</span>
-                  {waitingCount > 0 && <SidebarMenuBadge>{waitingCount}</SidebarMenuBadge>}
                 </SidebarMenuButton>
               </PopoverTrigger>
               <PopoverContent side="right" align="end" sideOffset={8} className="w-[420px] p-3">
                 <NotificationPopoverContent onClose={() => setNotifOpen(false)} />
               </PopoverContent>
             </Popover>
+            {unreadCount > 0 && <SidebarMenuBadge className={cn('top-1/2! -translate-y-1/2', unreadBadgeColor)}>{unreadCount > 99 ? '99+' : unreadCount}</SidebarMenuBadge>}
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton asChild isActive={route === '/dashboard'} tooltip={t('sidebar.dashboard')}>
