@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
 import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
+import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { getIntegrations, isIntegrationConnected } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
@@ -29,6 +30,7 @@ const NAV_ROUTES: Record<string, string> = {
   repository: '/repository',
   nodejs: '/nodejs',
   python: '/python',
+  csharp: '/csharp',
   docker: '/docker',
   resend: '/resend',
   sentry: '/sentry',
@@ -102,8 +104,9 @@ export function AppSidebar() {
   const { sessions, paneOpen, setPaneOpen, startSession } = useShellRun();
   const { run: nodejsRun } = useNodejsRun();
   const { run: pythonRun } = usePythonRun();
-  const hasTerminalError = sessions.some((s) => s.exited && s.exited.code !== 0) || (nodejsRun?.exited?.code !== undefined && nodejsRun.exited.code !== 0) || (pythonRun?.exited?.code !== undefined && pythonRun.exited.code !== 0);
-  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun;
+  const { run: csharpRun } = useCSharpRun();
+  const hasTerminalError = sessions.some((s) => s.exited && s.exited.code !== 0) || (nodejsRun?.exited?.code !== undefined && nodejsRun.exited.code !== 0) || (pythonRun?.exited?.code !== undefined && pythonRun.exited.code !== 0) || (csharpRun?.exited?.code !== undefined && csharpRun.exited.code !== 0);
+  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun;
 
   const handleTerminalToggle = async () => {
     if (paneOpen && hasAnything) {

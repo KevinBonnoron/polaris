@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
-import { Boxes, Bug, Container, Mail, Package, Rocket } from 'lucide-react';
+import { Boxes, Bug, Container, Hash, Mail, Package, Rocket } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { BitbucketIcon, DiscordIcon, GitHubIcon, GitLabIcon, JiraIcon, LinearIcon, SlackIcon, TelegramIcon } from '@/components/brand-icons';
 import type { IntegrationConfig } from '@/types';
-import { DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectGitRemote, DetectProviderToken, ListDokployProjectNames, ListNodeScripts, ListPythonScripts } from '@/wailsjs/go/main/App';
+import { DetectAllCSharpProjects, DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectGitRemote, DetectProviderToken, ListCSharpScripts, ListDokployProjectNames, ListNodeScripts, ListPythonScripts } from '@/wailsjs/go/main/App';
 import { dokploy } from '@/wailsjs/go/models';
 
 export type IntegrationFieldType = 'text' | 'password' | 'url' | 'number' | 'select' | 'autocomplete';
@@ -188,6 +188,39 @@ export const INTEGRATIONS: Integration[] = [
       { key: 'buildScript', label: 'Build command', type: 'autocomplete', placeholder: 'build', loadOptions: loadPythonScriptOptions },
     ],
     detect: detectPython,
+  },
+  {
+    id: 'csharp',
+    name: 'C#',
+    icon: Hash,
+    tint: 'text-purple-400 bg-purple-500/10',
+    multi: true,
+    instanceLabel: (config, projectPath) => relativePath(String(config.manifestPath ?? ''), projectPath),
+    fields: [
+      {
+        key: 'packageManager',
+        label: 'Tooling',
+        type: 'select',
+        defaultValue: 'dotnet',
+        options: [{ value: 'dotnet', label: '.NET CLI' }],
+      },
+      {
+        key: 'runEnv',
+        label: 'Run environment',
+        type: 'select',
+        defaultValue: 'direct',
+        options: [
+          { value: 'direct', label: 'Direct (PATH)' },
+          { value: 'nix', label: 'Nix develop' },
+          { value: 'devcontainer', label: 'Devcontainer' },
+        ],
+      },
+      { key: 'manifestPath', label: 'Project path', type: 'text', placeholder: '/path/to/App.csproj' },
+      { key: 'startScript', label: 'Start command', type: 'autocomplete', placeholder: 'run', loadOptions: loadCSharpScriptOptions },
+      { key: 'testScript', label: 'Test command', type: 'autocomplete', placeholder: 'test', loadOptions: loadCSharpScriptOptions },
+      { key: 'buildScript', label: 'Build command', type: 'autocomplete', placeholder: 'build', loadOptions: loadCSharpScriptOptions },
+    ],
+    detect: detectCSharp,
   },
   {
     id: 'docker',
@@ -440,6 +473,35 @@ async function detectPython(projectPath: string): Promise<IntegrationConfig | In
     }
     if (build) {
       c.buildScript = build;
+    }
+    return c;
+  });
+  return configs.length === 1 ? configs[0] : configs;
+}
+
+async function loadCSharpScriptOptions(values: Record<string, string>): Promise<IntegrationFieldOption[]> {
+  if (!values.manifestPath) {
+    return [];
+  }
+
+  try {
+    const scripts = await ListCSharpScripts(values.manifestPath);
+    return (scripts ?? []).map((s) => ({ value: s.name, label: s.name }));
+  } catch {
+    return [];
+  }
+}
+
+async function detectCSharp(projectPath: string): Promise<IntegrationConfig | IntegrationConfig[] | null> {
+  const projects = await DetectAllCSharpProjects(projectPath);
+  if (!projects?.length) {
+    return null;
+  }
+
+  const configs = projects.map((p) => {
+    const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: p.packageManager || 'dotnet', startScript: 'run', testScript: 'test', buildScript: 'build' };
+    if (p.runEnv) {
+      c.runEnv = p.runEnv;
     }
     return c;
   });

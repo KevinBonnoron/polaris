@@ -8,6 +8,8 @@ import { startDraftAgent } from '@/features/agents/start-draft-agent';
 import { projectHasAutomatable } from '@/features/automations/eligibility';
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
 import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
+import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
+import { installArgs as csharpInstallArgs } from '@/features/integrations/csharp/types';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { getIntegrations, isIntegrationConnected } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
@@ -26,6 +28,7 @@ const INTEGRATION_ROUTES: Record<string, string> = {
   repository: '/repository',
   nodejs: '/nodejs',
   python: '/python',
+  csharp: '/csharp',
   docker: '/docker',
   sentry: '/sentry',
 };
@@ -122,6 +125,13 @@ export function CommandPalette({ open, onOpenChange }: Props) {
     { key: 'start', label: t('integrations.python.startAction'), script: pythonConfig?.startScript, icon: Play },
     { key: 'test', label: t('integrations.python.testAction'), script: pythonConfig?.testScript, icon: TestTube },
     { key: 'build', label: t('integrations.python.buildAction'), script: pythonConfig?.buildScript, icon: Hammer },
+  ].filter((a) => a.script);
+
+  const { config: csharpConfig, isRunning: csharpRunning, startScript: csharpStart, runCommand: csharpRunCommand, stop: csharpStop } = useCSharpRun();
+  const csharpActions = [
+    { key: 'start', label: t('integrations.csharp.startAction'), script: csharpConfig?.startScript, icon: Play },
+    { key: 'test', label: t('integrations.csharp.testAction'), script: csharpConfig?.testScript, icon: TestTube },
+    { key: 'build', label: t('integrations.csharp.buildAction'), script: csharpConfig?.buildScript, icon: Hammer },
   ].filter((a) => a.script);
 
   const goTo = (to: string) => navigate({ to });
@@ -248,6 +258,31 @@ export function CommandPalette({ open, onOpenChange }: Props) {
                     <CommandItem value="python install packages" onSelect={run(() => pythonRunCommand(installArgs(pythonConfig?.packageManager ?? 'pip'), t('integrations.python.installAll')))} disabled={pythonRunning}>
                       <Download />
                       <span>{t('integrations.python.installAll')}</span>
+                    </CommandItem>
+                  </CommandGroup>
+                </>
+              )}
+
+              {csharpConfig?.manifestPath && (csharpActions.length > 0 || csharpRunning) && (
+                <>
+                  <CommandSeparator />
+                  <CommandGroup heading="C#">
+                    {csharpActions.map((action) => (
+                      <CommandItem key={action.key} value={`csharp ${action.key} ${action.script}`} onSelect={run(() => csharpStart(action.script!))} disabled={csharpRunning}>
+                        <action.icon />
+                        <span>{action.label}</span>
+                        <span className="ml-auto font-mono text-xs text-muted-foreground">{action.script}</span>
+                      </CommandItem>
+                    ))}
+                    {csharpRunning && (
+                      <CommandItem value="csharp stop" onSelect={run(() => csharpStop())}>
+                        <Square />
+                        <span>{t('integrations.csharp.stop')}</span>
+                      </CommandItem>
+                    )}
+                    <CommandItem value="csharp restore packages" onSelect={run(() => csharpRunCommand(csharpInstallArgs(csharpConfig?.packageManager ?? 'dotnet'), t('integrations.csharp.installAll')))} disabled={csharpRunning}>
+                      <Download />
+                      <span>{t('integrations.csharp.installAll')}</span>
                     </CommandItem>
                   </CommandGroup>
                 </>

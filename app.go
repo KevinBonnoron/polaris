@@ -15,6 +15,7 @@ import (
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"github.com/KevinBonnoron/polaris/internal/polaris"
+	"github.com/KevinBonnoron/polaris/internal/providers/csharp"
 	"github.com/KevinBonnoron/polaris/internal/providers/nodejs"
 	"github.com/KevinBonnoron/polaris/internal/providers/python"
 	"github.com/KevinBonnoron/polaris/internal/providers/shell"
@@ -123,6 +124,7 @@ type App struct {
 	dokployStore    *dokploystore.Store
 	nodeRunner      *nodejs.Runner
 	pythonRunner    *python.Runner
+	csharpRunner    *csharp.Runner
 	shellRunner     *shell.Runner
 
 	statusMu sync.RWMutex
@@ -218,6 +220,7 @@ func (app *App) startup(ctx context.Context) {
 
 	app.nodeRunner = nodejs.NewRunner(wailsEmitter{ctx: ctx})
 	app.pythonRunner = python.NewRunner(wailsEmitter{ctx: ctx})
+	app.csharpRunner = csharp.NewRunner(wailsEmitter{ctx: ctx})
 	app.shellRunner = shell.NewRunner(wailsEmitter{ctx: ctx})
 
 	app.setReady(true)
