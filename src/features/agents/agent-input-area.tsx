@@ -2,11 +2,11 @@ import { useLiveQuery } from '@tanstack/react-db';
 import { Mic, Paperclip, Send, Square, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { toastError } from '@/lib/toast-error';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
@@ -18,6 +18,7 @@ import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
 import { stripFileMentions } from './file-mentions';
 import { MentionTextarea, type SlashCommand } from './mention-textarea';
+import { basename, ImageZoom } from './user-message';
 
 const answeredQuestions = new Set<string>();
 const questionKey = (agentId: string, toolUseId: string) => `${agentId}:${toolUseId}`;
@@ -449,8 +450,8 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((att, i) => (
                 <div key={att.path} className="group relative">
-                  {att.preview ? <img src={att.preview} alt="" className="h-20 rounded-md border object-cover" /> : <div className="flex h-20 w-24 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">{att.path.split('/').pop()}</div>}
-                  <button type="button" onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                  {att.preview ? <ImageZoom src={att.preview} name={basename(att.path)} /> : <div className="flex h-20 w-24 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">{basename(att.path)}</div>}
+                  <button type="button" onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
                     <X className="size-3" />
                   </button>
                 </div>

@@ -255,6 +255,7 @@ export const en = {
       couldNotSetModel: 'Could not switch model',
       couldNotSaveImage: 'Could not save image',
       couldNotPasteImage: 'Could not paste image',
+      imageUnavailable: 'Image no longer available',
       send: 'Send message',
       couldNotSend: 'Could not send message',
       thinking: 'Thinking…',
