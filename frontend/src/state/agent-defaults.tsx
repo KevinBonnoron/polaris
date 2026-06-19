@@ -9,7 +9,7 @@ type State = {
 const Ctx = createContext<State | null>(null);
 
 export function AgentDefaultsProvider({ children }: { children: ReactNode }) {
-  const [map, setMap] = useState<Record<string, string>>({});
+  const [map, setMap] = useState<Record<string, string | undefined>>({});
 
   useEffect(() => {
     GetAgentDefaultModels()

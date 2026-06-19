@@ -2,26 +2,23 @@ package main
 
 import (
 	"embed"
+	"log"
 	"os"
 	goruntime "runtime"
 
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	"github.com/wailsapp/wails/v2/pkg/options/linux"
-	"github.com/wailsapp/wails/v2/pkg/options/mac"
-	"github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
-
-// GDK_BACKEND is forced to x11 on Wayland via a cgo constructor in
-// env_linux.go — setting it from main() runs too late, after cgo
-// libraries have already cached the value.
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 //go:embed build/appicon.png
 var appIcon []byte
+
+// appRef is the running application, used by the event emitter, dialogs and the
+// browser opener. Set once in main() before Run().
+var appRef *application.App
 
 func main() {
 	if goruntime.GOOS == "linux" {
@@ -35,36 +32,30 @@ func main() {
 
 	app := NewApp()
 
-	err := wails.Run(&options.App{
-		Title:  "Polaris",
-		Width:  1440,
-		Height: 900,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
+	appRef = application.New(application.Options{
+		Name:        "Polaris",
+		Description: "Desktop cockpit to orchestrate multiple AI coding agents",
+		Icon:        appIcon,
+		Services: []application.Service{
+			application.NewService(app),
 		},
-		BackgroundColour: &options.RGBA{R: 11, G: 12, B: 16, A: 1},
-		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
-		Bind: []interface{}{
-			app,
-		},
-		Linux: &linux.Options{
-			Icon:             appIcon,
-			ProgramName:      "Polaris",
-			WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand,
-		},
-		Windows: &windows.Options{
-			Theme: windows.Dark,
-		},
-		Mac: &mac.Options{
-			About: &mac.AboutInfo{
-				Title: "Polaris",
-				Icon:  appIcon,
-			},
+		Assets: application.AssetOptions{
+			Handler: application.AssetFileServerFS(assets),
 		},
 	})
 
-	if err != nil {
-		println("Error:", err.Error())
+	window := appRef.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:            "Polaris",
+		Width:            1440,
+		Height:           900,
+		BackgroundColour: application.NewRGB(11, 12, 16),
+		URL:              "/",
+	})
+	window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		appRef.Quit()
+	})
+
+	if err := appRef.Run(); err != nil {
+		log.Fatalln("Error:", err.Error())
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/csharp"
@@ -136,14 +136,16 @@ func NewApp() *App {
 	return &App{}
 }
 
-// wailsEmitter adapts Wails' runtime event API to polaris.Emitter.
-type wailsEmitter struct{ ctx context.Context }
+// wailsEmitter adapts Wails' v3 event API to polaris.Emitter. EventManager.Emit
+// already collapses a single payload (len(data)==1) into the event's data, which
+// is what the frontend reads as e.data, so we forward the variadic unchanged.
+type wailsEmitter struct{}
 
-func (w wailsEmitter) Emit(event string, data ...any) {
-	if w.ctx == nil {
+func (wailsEmitter) Emit(event string, data ...any) {
+	if appRef == nil {
 		return
 	}
-	wailsruntime.EventsEmit(w.ctx, event, data...)
+	appRef.Event.Emit(event, data...)
 }
 
 func (app *App) setReady(ready bool) {
@@ -162,14 +164,17 @@ func (app *App) setError(err error) {
 	}
 }
 
-func (app *App) startup(ctx context.Context) {
+// ServiceStartup implements the v3 service lifecycle. It returns nil even on
+// failure so the window still loads and the UI surfaces the error via
+// BackendStatus, matching the v2 graceful-degraded behaviour.
+func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions) error {
 	app.ctx = ctx
 
 	dataDir, err := resolveDataDir()
 	if err != nil {
 		log.Printf("polaris: cannot resolve data dir: %v", err)
 		app.setError(fmt.Errorf("resolve data dir: %w", err))
-		return
+		return nil
 	}
 	log.Printf("polaris: using data dir %s", dataDir)
 
@@ -177,9 +182,9 @@ func (app *App) startup(ctx context.Context) {
 	if err != nil {
 		log.Printf("polaris: open store failed: %v", err)
 		app.setError(fmt.Errorf("open store: %w", err))
-		return
+		return nil
 	}
-	store.SetEmitter(wailsEmitter{ctx: ctx})
+	store.SetEmitter(wailsEmitter{})
 	app.store = store
 
 	logsDir := filepath.Join(dataDir, "logs")
@@ -218,16 +223,18 @@ func (app *App) startup(ctx context.Context) {
 		log.Printf("polaris: start automation manager: %v", err)
 	}
 
-	app.nodeRunner = nodejs.NewRunner(wailsEmitter{ctx: ctx})
-	app.pythonRunner = python.NewRunner(wailsEmitter{ctx: ctx})
-	app.csharpRunner = csharp.NewRunner(wailsEmitter{ctx: ctx})
-	app.shellRunner = shell.NewRunner(wailsEmitter{ctx: ctx})
+	app.nodeRunner = nodejs.NewRunner(wailsEmitter{})
+	app.pythonRunner = python.NewRunner(wailsEmitter{})
+	app.csharpRunner = csharp.NewRunner(wailsEmitter{})
+	app.shellRunner = shell.NewRunner(wailsEmitter{})
 
 	app.setReady(true)
 	app.setError(nil)
+	return nil
 }
 
-func (app *App) shutdown(ctx context.Context) {
+// ServiceShutdown implements the v3 service lifecycle (called on app quit).
+func (app *App) ServiceShutdown() error {
 	if app.automation != nil {
 		app.automation.Stop()
 	}
@@ -244,8 +251,11 @@ func (app *App) shutdown(ctx context.Context) {
 		app.dokployStore.Stop()
 	}
 	if app.store != nil {
-		_ = app.store.Close()
+		if err := app.store.Close(); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func (app *App) BackendStatus() BackendStatus {
@@ -269,11 +279,15 @@ func (app *App) CheckForUpdate(force bool) (*polaris.UpdateInfo, error) {
 	return polaris.CheckForUpdate(force)
 }
 
-func (app *App) OpenExternalURL(url string) {
-	if app.ctx == nil {
+func (app *App) OpenExternalURL(rawURL string) {
+	if appRef == nil {
 		return
 	}
-	wailsruntime.BrowserOpenURL(app.ctx, url)
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return
+	}
+	_ = appRef.Browser.OpenURL(rawURL)
 }
 
 func (app *App) FetchClaudeUsage(force bool) (*polaris.ClaudeUsage, error) {

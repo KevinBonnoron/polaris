@@ -13,10 +13,16 @@ frontend/dist/*
 !frontend/dist/.gitkeep
 
 # tanstack router generated tree
-src/routeTree.gen.ts
+frontend/src/routeTree.gen.ts
+
+# wails v3 generated bindings
+frontend/bindings
 
 # nix build result symlink
 result
+
+# go install target (mod-manager devShell GOBIN)
+.gobin
 
 # direnv / turbo
 .direnv

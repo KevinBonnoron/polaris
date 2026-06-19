@@ -9,8 +9,6 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type CodeEntry struct {
@@ -31,9 +29,14 @@ var skipDirs = map[string]bool{
 }
 
 func (app *App) PickFiles(defaultDir string) ([]string, error) {
-	return wailsruntime.OpenMultipleFilesDialog(app.ctx, wailsruntime.OpenDialogOptions{
-		DefaultDirectory: defaultDir,
-	})
+	if appRef == nil {
+		return nil, fmt.Errorf("application not ready")
+	}
+	return appRef.Dialog.OpenFile().
+		CanChooseFiles(true).
+		CanChooseDirectories(false).
+		SetDirectory(defaultDir).
+		PromptForMultipleSelection()
 }
 
 func (app *App) SaveTempImage(base64Data, ext string) (string, error) {
@@ -169,7 +172,12 @@ func (app *App) OpenDirectory(title string) (string, error) {
 	if title == "" {
 		title = "Choose project folder"
 	}
-	return wailsruntime.OpenDirectoryDialog(app.ctx, wailsruntime.OpenDialogOptions{
-		Title: title,
-	})
+	if appRef == nil {
+		return "", fmt.Errorf("application not ready")
+	}
+	return appRef.Dialog.OpenFile().
+		CanChooseDirectories(true).
+		CanChooseFiles(false).
+		SetTitle(title).
+		PromptForSingleSelection()
 }

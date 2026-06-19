@@ -405,6 +405,9 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
         }
         void TeleportClaudeSession(agent.projectId, args)
           .then(async (imported) => {
+            if (!imported) {
+              return;
+            }
             try {
               await agentsCollection.insert(imported as unknown as Agent);
             } catch {
