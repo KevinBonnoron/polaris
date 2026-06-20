@@ -229,6 +229,7 @@ export const en = {
       protectedBranchWarn: 'You are on the protected branch {{branch}}.',
       sendPlaceholder: 'Send additional context or instructions...',
       attachFiles: 'Attach files',
+      removeAttachment: 'Remove attachment {{name}}',
       recordVoice: 'Record voice input',
       stopRecording: 'Stop recording',
       speechNotSupported: 'Speech recognition is not supported in this browser.',

@@ -231,6 +231,7 @@ export const fr: Translation = {
       protectedBranchWarn: 'Tu es sur la branche protégée {{branch}}.',
       sendPlaceholder: 'Envoyer du contexte ou des instructions supplémentaires...',
       attachFiles: 'Joindre des fichiers',
+      removeAttachment: 'Supprimer la pièce jointe {{name}}',
       recordVoice: 'Dicter un message',
       stopRecording: 'Arrêter la dictée',
       speechNotSupported: "La reconnaissance vocale n'est pas prise en charge dans ce navigateur.",
