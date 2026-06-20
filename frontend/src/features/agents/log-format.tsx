@@ -1,6 +1,6 @@
 import 'highlight.js/styles/github-dark.css';
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -542,13 +542,13 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   em: ({ children }) => <em className="italic">{children}</em>,
 };
 
-export function Markdown({ children }: { children: string }) {
+export const Markdown = memo(function Markdown({ children }: { children: string }) {
   return (
     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={mdComponents}>
       {children}
     </ReactMarkdown>
   );
-}
+});
 
 interface LogBlocksGridProps {
   blocks: LogBlock[];

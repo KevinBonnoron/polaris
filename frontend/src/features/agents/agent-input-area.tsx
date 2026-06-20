@@ -13,12 +13,12 @@ import { useAgentDefaults } from '@/state/agent-defaults';
 import { selectAgent } from '@/state/agent-selection';
 import { useCurrentProject } from '@/state/projects';
 import type { Agent } from '@/types';
-import { CancelAgent, ClearAgentLog, GetProjectFileStatuses, ListClaudeCodeSessions, PickFiles, ReadFileBase64, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, TeleportClaudeSession } from '@/wailsjs/go/main/App';
+import { CancelAgent, ClearAgentLog, GetProjectFileStatuses, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, TeleportClaudeSession } from '@/wailsjs/go/main/App';
 import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
+import { type Attachment, AttachmentPreviews, loadAttachment } from './attachments';
 import { stripFileMentions } from './file-mentions';
 import { MentionTextarea, type SlashCommand } from './mention-textarea';
-import { basename, ImageZoom } from './user-message';
 
 const answeredQuestions = new Set<string>();
 const questionKey = (agentId: string, toolUseId: string) => `${agentId}:${toolUseId}`;
@@ -31,7 +31,7 @@ export const TOOL_PRESETS: Record<string, string[]> = {
   'no-tools': [NO_TOOLS_SENTINEL],
 };
 const speechRecognitionAvailable = 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window;
-type DraftState = { message: string; attachments: { path: string; preview: string }[] };
+type DraftState = { message: string; attachments: Attachment[] };
 const drafts = new Map<string, DraftState>();
 
 interface Props {
@@ -64,7 +64,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   const isolated = project?.isolatedDefault ?? false;
 
   const [message, setMessage] = useState(() => drafts.get(agentId)?.message ?? '');
-  const [attachments, setAttachments] = useState<{ path: string; preview: string }[]>(() => drafts.get(agentId)?.attachments ?? []);
+  const [attachments, setAttachments] = useState<Attachment[]>(() => drafts.get(agentId)?.attachments ?? []);
   const [sending, setSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<{ stop(): void } | null>(null);
@@ -205,12 +205,8 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   };
 
   const addAttachment = async (path: string) => {
-    try {
-      const b64 = await ReadFileBase64(path);
-      setAttachments((prev) => [...prev, { path, preview: `data:image/png;base64,${b64}` }]);
-    } catch {
-      setAttachments((prev) => [...prev, { path, preview: '' }]);
-    }
+    const att = await loadAttachment(path);
+    setAttachments((prev) => [...prev, att]);
   };
 
   const cancel = async () => {
@@ -449,18 +445,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       ) : (
         <>
           {isDraft && models.length === 0 && <p className="mb-2 text-xs text-destructive">{t('agents.new.noModels')}</p>}
-          {attachments.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-2">
-              {attachments.map((att, i) => (
-                <div key={att.path} className="group relative">
-                  {att.preview ? <ImageZoom src={att.preview} name={basename(att.path)} /> : <div className="flex h-20 w-24 items-center justify-center rounded-md border bg-muted text-xs text-muted-foreground">{basename(att.path)}</div>}
-                  <button type="button" onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="absolute -right-1.5 -top-1.5 z-10 flex size-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
-                    <X className="size-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <AttachmentPreviews attachments={attachments} onRemove={(i) => setAttachments((prev) => prev.filter((_, j) => j !== i))} />
           {isDraft && !isolated && projectId && !dirtyChecked ? (
             <>
               <Skeleton className="mb-2 h-8 w-full shrink-0 rounded-md" />

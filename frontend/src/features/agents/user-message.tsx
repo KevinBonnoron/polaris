@@ -23,7 +23,7 @@ function isImagePath(line: string): boolean {
   return IMAGE_EXT_RE.test(token);
 }
 
-function mimeForPath(path: string): string {
+export function mimeForPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
   switch (ext) {
     case 'jpg':

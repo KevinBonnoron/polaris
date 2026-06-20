@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { type Attachment, AttachmentPreviews, loadAttachment } from './attachments';
 import { Markdown } from './log-format';
 import { MentionTextarea } from './mention-textarea';
 
@@ -38,6 +39,7 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
   const [single, setSingle] = useState<Record<number, string>>({});
   const [multi, setMulti] = useState<Record<number, Set<string>>>({});
   const [other, setOther] = useState<Record<number, string>>({});
+  const [attachments, setAttachments] = useState<Record<number, Attachment[]>>({});
 
   const total = payload.questions.length;
   const current = payload.questions[step];
@@ -57,6 +59,8 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onCancel]);
 
+  const hasOtherContent = (idx: number) => Boolean((other[idx] ?? '').trim()) || (attachments[idx]?.length ?? 0) > 0;
+
   const isAnswered = (idx: number) => {
     const q = payload.questions[idx];
     if (q.multiSelect) {
@@ -64,7 +68,7 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
       if (!picked || picked.size === 0) {
         return false;
       }
-      if (picked.has(OTHER_KEY) && !(other[idx] ?? '').trim()) {
+      if (picked.has(OTHER_KEY) && !hasOtherContent(idx)) {
         return false;
       }
       return true;
@@ -73,7 +77,7 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
     if (!choice) {
       return false;
     }
-    if (choice === OTHER_KEY && !(other[idx] ?? '').trim()) {
+    if (choice === OTHER_KEY && !hasOtherContent(idx)) {
       return false;
     }
     return true;
@@ -91,19 +95,24 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
     });
   };
 
+  const otherAnswer = (idx: number) => {
+    const parts = [(other[idx] ?? '').trim(), ...(attachments[idx] ?? []).map((a) => a.path)].filter(Boolean);
+    return `Other: ${parts.join('\n')}`;
+  };
+
   const submit = () => {
     const answers = payload.questions.map((q, idx) => {
       if (q.multiSelect) {
         const picked = Array.from(multi[idx] ?? []);
         if (picked.includes(OTHER_KEY)) {
-          const replaced = picked.map((p) => (p === OTHER_KEY ? `Other: ${other[idx] ?? ''}` : p));
+          const replaced = picked.map((p) => (p === OTHER_KEY ? otherAnswer(idx) : p));
           return { question: q.question, answer: replaced };
         }
         return { question: q.question, answer: picked };
       }
       const choice = single[idx];
       if (choice === OTHER_KEY) {
-        return { question: q.question, answer: `Other: ${other[idx] ?? ''}` };
+        return { question: q.question, answer: otherAnswer(idx) };
       }
       return { question: q.question, answer: choice ?? '' };
     });
@@ -174,7 +183,18 @@ export function AskUserQuestionPanel({ payload, projectPath, onSubmit, onCancel 
             })}
           </div>
           {((current.multiSelect && multi[step]?.has(OTHER_KEY)) || (!current.multiSelect && single[step] === OTHER_KEY)) && (
-            <MentionTextarea autoFocus placeholder={t('agents.askUserQuestion.otherPlaceholder')} value={other[step] ?? ''} onChange={(value) => setOther((prev) => ({ ...prev, [step]: value }))} projectPath={projectPath} className="max-h-48 min-h-10 resize-none field-sizing-content" />
+            <div className="flex flex-col">
+              <AttachmentPreviews attachments={attachments[step] ?? []} onRemove={(i) => setAttachments((prev) => ({ ...prev, [step]: (prev[step] ?? []).filter((_, j) => j !== i) }))} />
+              <MentionTextarea
+                autoFocus
+                placeholder={t('agents.askUserQuestion.otherPlaceholder')}
+                value={other[step] ?? ''}
+                onChange={(value) => setOther((prev) => ({ ...prev, [step]: value }))}
+                onAttach={(path) => void loadAttachment(path).then((att) => setAttachments((prev) => ({ ...prev, [step]: [...(prev[step] ?? []), att] })))}
+                projectPath={projectPath}
+                className="max-h-48 min-h-10 resize-none field-sizing-content"
+              />
+            </div>
           )}
         </div>
       </ScrollArea>
