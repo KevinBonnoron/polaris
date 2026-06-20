@@ -88,7 +88,7 @@ export function AgentsPage() {
       ) : (
         <div className="flex min-h-0 flex-1 gap-4">
           <ScrollArea className="w-80 shrink-0">
-            <div className="flex w-80 flex-col gap-1 pr-2">
+            <div className="flex w-80 flex-col gap-0.5 pr-2">
               {activeStatuses.length > 1 && (
                 <div className="mb-1 flex flex-wrap gap-1 px-1">
                   <button onClick={() => setStatusFilter(null)} className={cn('rounded px-2 py-0.5 text-xs transition-colors', effectiveFilter === null ? 'bg-foreground/10 font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}>
@@ -120,7 +120,7 @@ export function AgentsPage() {
                 </div>
               ))}
 
-              <NewAgentButton variant="ghost" size="sm" className="mt-1 h-auto w-full justify-center gap-2 rounded-md border border-dashed border-border px-3 py-4 font-normal text-muted-foreground hover:bg-accent/50 hover:text-foreground" />
+              <NewAgentButton variant="ghost" size="sm" className="h-auto w-full justify-center gap-2 rounded-md border border-dashed border-border px-3 py-4 font-normal text-muted-foreground hover:bg-accent/50 hover:text-foreground" />
             </div>
           </ScrollArea>
 
