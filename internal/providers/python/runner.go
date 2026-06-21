@@ -121,7 +121,15 @@ func (runner *Runner) launch(manifestPath, runEnv, name string, args []string) (
 			runner.mu.Unlock()
 		}
 
-		cmd := BuildCommand(ctx, workDir, runEnv, name, args)
+		cmd, err := BuildCommand(ctx, workDir, runEnv, name, args)
+		if err != nil {
+			runner.emit.Emit(EventExit, map[string]any{"runId": runID, "code": -1, "error": err.Error()})
+			runner.mu.Lock()
+			delete(runner.runs, runID)
+			runner.mu.Unlock()
+			cancel()
+			return
+		}
 		cmd.Env = os.Environ()
 		sysexec.Hide(cmd)
 		sysexec.SetProcessGroup(cmd)
