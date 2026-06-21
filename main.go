@@ -50,9 +50,20 @@ func main() {
 		Height:           900,
 		BackgroundColour: application.NewRGB(11, 12, 16),
 		URL:              "/",
+		EnableFileDrop:   true,
 	})
 	window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		appRef.Quit()
+	})
+	// Without EnableFileDrop the webview navigates to dropped files, blanking the
+	// window. With it on, the native layer captures the drop and fires this event
+	// only when it lands on a [data-file-drop-target] element; we relay the paths
+	// (plus that element's attributes, which carry the target agent id) to the UI.
+	window.OnWindowEvent(events.Common.WindowFilesDropped, func(e *application.WindowEvent) {
+		appRef.Event.Emit("files:dropped", map[string]any{
+			"files":   e.Context().DroppedFiles(),
+			"details": e.Context().DropTargetDetails(),
+		})
 	})
 
 	if err := appRef.Run(); err != nil {
