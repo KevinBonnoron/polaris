@@ -57,7 +57,10 @@ func TestDiscoverSkipsVendored(t *testing.T) {
 	wanted := filepath.Join(root, "api", "pyproject.toml")
 	writeFile(t, wanted)
 
-	got := discoverManifests(root)
+	got, err := discoverManifests(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != 1 || got[0] != wanted {
 		t.Fatalf("discoverManifests() = %v, want [%s]", got, wanted)
 	}

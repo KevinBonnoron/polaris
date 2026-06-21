@@ -168,7 +168,10 @@ func (runner *Runner) launch(manifestPath, runEnv string, commands [][]string) (
 // when the command could not be started or exited non-zero (so the sequence
 // stops).
 func (runner *Runner) runOne(ctx context.Context, runID, workDir, runEnv string, args []string) (int, string, bool) {
-	cmd := BuildCommand(ctx, workDir, runEnv, "dotnet", args)
+	cmd, err := BuildCommand(ctx, workDir, runEnv, "dotnet", args)
+	if err != nil {
+		return -1, err.Error(), false
+	}
 	cmd.Env = os.Environ()
 	sysexec.Hide(cmd)
 	sysexec.SetProcessGroup(cmd)

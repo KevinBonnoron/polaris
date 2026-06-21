@@ -59,7 +59,11 @@ func Detect(projectPath string) (*Project, error) {
 	}
 	manifest := manifestInDir(projectPath)
 	if manifest == "" {
-		if found := discoverManifests(projectPath); len(found) > 0 {
+		found, err := discoverManifests(projectPath)
+		if err != nil {
+			return nil, err
+		}
+		if len(found) > 0 {
 			manifest = found[0]
 		}
 	}
@@ -81,7 +85,10 @@ func DetectAll(projectPath string) ([]*Project, error) {
 	if projectPath == "" {
 		return nil, fmt.Errorf("empty project path")
 	}
-	all := discoverManifests(projectPath)
+	all, err := discoverManifests(projectPath)
+	if err != nil {
+		return nil, err
+	}
 	if len(all) == 0 {
 		return nil, nil
 	}
@@ -112,7 +119,10 @@ func manifestInDir(dir string) string {
 
 // discoverManifests does a depth-limited walk from root and returns every
 // .csproj found, ordered shallowest-first then alphabetically.
-func discoverManifests(root string) []string {
+func discoverManifests(root string) ([]string, error) {
+	if _, err := os.ReadDir(root); err != nil {
+		return nil, err
+	}
 	var found []string
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
@@ -139,7 +149,7 @@ func discoverManifests(root string) []string {
 		}
 		return found[i] < found[j]
 	})
-	return found
+	return found, nil
 }
 
 // appendManifests adds every .csproj sitting directly in dir to found.
@@ -467,7 +477,10 @@ func CheckOutdatedPackages(manifestPath, packageManager, runEnv string) ([]Outda
 		return nil, fmt.Errorf("empty manifest path")
 	}
 	workDir := filepath.Dir(manifestPath)
-	cmd := BuildCommand(context.Background(), workDir, runEnv, "dotnet", []string{"list", "package", "--outdated"})
+	cmd, err := BuildCommand(context.Background(), workDir, runEnv, "dotnet", []string{"list", "package", "--outdated"})
+	if err != nil {
+		return nil, nil
+	}
 	cmd.Env = os.Environ()
 	out, _ := cmd.Output()
 	if len(out) == 0 {
@@ -510,7 +523,10 @@ func CheckVulnerabilities(manifestPath, packageManager, runEnv string) ([]Vulner
 		return nil, fmt.Errorf("empty manifest path")
 	}
 	workDir := filepath.Dir(manifestPath)
-	cmd := BuildCommand(context.Background(), workDir, runEnv, "dotnet", []string{"list", "package", "--vulnerable"})
+	cmd, err := BuildCommand(context.Background(), workDir, runEnv, "dotnet", []string{"list", "package", "--vulnerable"})
+	if err != nil {
+		return nil, err
+	}
 	cmd.Env = os.Environ()
 	out, _ := cmd.Output()
 	if len(out) == 0 {
@@ -579,28 +595,32 @@ func CheckPackagesInstalled(projectPath, manifestPath string) (bool, error) {
 
 // BuildCommand creates an exec.Cmd that runs `name args...` from workDir,
 // optionally wrapped by the project's run environment (nix develop, devcontainer).
-func BuildCommand(ctx context.Context, workDir, runEnv, name string, args []string) *exec.Cmd {
+func BuildCommand(ctx context.Context, workDir, runEnv, name string, args []string) (*exec.Cmd, error) {
 	switch runEnv {
 	case "nix":
 		nixArgs := append([]string{"develop", workDir, "--command", name}, args...)
 		cmd := exec.CommandContext(ctx, "nix", nixArgs...)
 		cmd.Dir = workDir
-		return cmd
+		return cmd, nil
 	case "devcontainer":
-		if containerID, wsFolder := devcontainerInfo(workDir); containerID != "" {
+		containerID, wsFolder, err := devcontainerInfo(workDir)
+		if err != nil {
+			return nil, err
+		}
+		if containerID != "" {
 			dockerArgs := append([]string{"exec", "-i", "-w", wsFolder, containerID, name}, args...)
 			cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
 			cmd.Dir = workDir
-			return cmd
+			return cmd, nil
 		}
 		dcArgs := append([]string{"exec", "--workspace-folder", workDir, "--", name}, args...)
 		cmd := exec.CommandContext(ctx, "devcontainer", dcArgs...)
 		cmd.Dir = workDir
-		return cmd
+		return cmd, nil
 	default:
 		cmd := exec.CommandContext(ctx, name, args...)
 		cmd.Dir = workDir
-		return cmd
+		return cmd, nil
 	}
 }
 

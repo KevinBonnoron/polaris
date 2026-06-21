@@ -18,11 +18,17 @@ func ensureDevcontainerUp(workDir string) (containerID string, weStarted bool, e
 		absDir = workDir
 	}
 	filter := "label=devcontainer.local_folder=" + absDir
-	out, _ := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
-	if id := strings.TrimSpace(string(out)); id != "" {
-		return id, false, nil
+	out, err := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
+	if err != nil {
+		return "", false, fmt.Errorf("docker ps failed: %w", err)
 	}
-	out, _ = exec.Command("docker", "ps", "-a", "--filter", filter, "-q").Output()
+	if ids := strings.Fields(string(out)); len(ids) > 0 {
+		return ids[0], false, nil
+	}
+	out, err = exec.Command("docker", "ps", "-a", "--filter", filter, "-q").Output()
+	if err != nil {
+		return "", false, fmt.Errorf("docker ps -a failed: %w", err)
+	}
 	if ids := strings.Fields(string(out)); len(ids) > 0 {
 		if err := exec.Command("docker", "start", ids[0]).Run(); err != nil {
 			return "", false, err
@@ -35,34 +41,48 @@ func ensureDevcontainerUp(workDir string) (containerID string, weStarted bool, e
 		if err := cmd.Run(); err != nil {
 			return "", false, err
 		}
-		out2, _ := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
-		return strings.TrimSpace(string(out2)), true, nil
+		out2, err := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
+		if err != nil {
+			return "", false, err
+		}
+		ids := strings.Fields(string(out2))
+		if len(ids) == 0 {
+			return "", false, fmt.Errorf("devcontainer started but no running container matched %q", filter)
+		}
+		return ids[0], true, nil
 	}
 	return "", false, fmt.Errorf("no devcontainer found for this project; open it in VS Code first or install the devcontainer CLI")
 }
 
 // devcontainerInfo returns the container ID and workspace folder path inside the
-// container for the devcontainer associated with workDir. Returns ("", "") when
-// no running container is found.
-func devcontainerInfo(workDir string) (containerID, wsFolder string) {
-	absDir, err := filepath.Abs(workDir)
-	if err != nil {
+// container for the devcontainer associated with workDir. Returns ("", "", nil)
+// when no running container is found, and a non-nil error when a docker command
+// fails.
+func devcontainerInfo(workDir string) (containerID, wsFolder string, err error) {
+	absDir, absErr := filepath.Abs(workDir)
+	if absErr != nil {
 		absDir = workDir
 	}
-	idOut, _ := exec.Command("docker", "ps",
+	idOut, err := exec.Command("docker", "ps",
 		"--filter", "label=devcontainer.local_folder="+absDir,
 		"-q",
 	).Output()
+	if err != nil {
+		return "", "", fmt.Errorf("docker ps failed: %w", err)
+	}
 	ids := strings.Fields(string(idOut))
 	if len(ids) == 0 {
-		return "", ""
+		return "", "", nil
 	}
 	containerID = ids[0]
-	wsfOut, _ := exec.Command("docker", "inspect", containerID,
+	wsfOut, err := exec.Command("docker", "inspect", containerID,
 		"--format", `{{index .Config.Labels "devcontainer.workspace_folder"}}`).Output()
+	if err != nil {
+		return "", "", fmt.Errorf("docker inspect failed: %w", err)
+	}
 	wsFolder = strings.TrimSpace(string(wsfOut))
 	if wsFolder == "" {
 		wsFolder = "/workspaces/" + filepath.Base(workDir)
 	}
-	return containerID, wsFolder
+	return containerID, wsFolder, nil
 }
