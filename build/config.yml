@@ -1,0 +1,44 @@
+# Configuration for `wails3 dev` / `wails3 build`.
+version: '3'
+
+info:
+  companyName: "Polaris"
+  productName: "Polaris"
+  productIdentifier: "com.kevinbonnoron.polaris"
+  description: "Desktop cockpit to orchestrate multiple AI coding agents"
+  copyright: "(c) 2026, Kevin Bonnoron"
+  comments: ""
+  version: "0.0.0"
+
+# Dev mode: rebuild the Go binary on .go changes, run the Vite dev server in the
+# background, and (re)launch the app. The frontend dir is excluded from the Go
+# watcher because Vite handles its own HMR.
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - .direnv
+      - .task
+      - .gobin
+      - node_modules
+      - frontend
+      - bin
+      - result
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 task run
+      type: primary
