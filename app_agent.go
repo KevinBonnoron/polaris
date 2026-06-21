@@ -38,6 +38,34 @@ func (app *App) SendToAgent(agentID, message string) error {
 	return app.svc.Send(agentID, message)
 }
 
+// InterruptAndSendToAgent aborts the agent's in-flight turn and applies the
+// message immediately, instead of queueing it until the current turn finishes.
+func (app *App) InterruptAndSendToAgent(agentID, message string) error {
+	if app.svc == nil {
+		return fmt.Errorf("service not ready")
+	}
+	return app.svc.InterruptAndSend(agentID, message)
+}
+
+// ClearAgentQueuedMessage drops the agent's pending follow-up (the queued chip),
+// used when the user pulls it back into the input to edit it.
+func (app *App) ClearAgentQueuedMessage(agentID string) error {
+	if app.svc == nil {
+		return fmt.Errorf("service not ready")
+	}
+	return app.svc.ClearQueuedMessage(agentID)
+}
+
+// StopAndRetractLastMessage stops the agent and, when its current turn had no
+// response yet, removes the user's last message from the log and returns it so
+// the UI can drop it back into the input. Returns "" if nothing was retracted.
+func (app *App) StopAndRetractLastMessage(agentID string) (string, error) {
+	if app.svc == nil {
+		return "", fmt.Errorf("service not ready")
+	}
+	return app.svc.StopAndRetractLast(agentID)
+}
+
 func (app *App) RespondToAgentQuestion(agentID, toolUseID, answer string) error {
 	if app.svc == nil {
 		return fmt.Errorf("service not ready")

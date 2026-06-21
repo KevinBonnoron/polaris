@@ -64,6 +64,7 @@ export type Agent = {
   providerId?: string;
   pendingQuestion?: AgentPendingQuestion;
   allowedTools?: string[];
+  queuedMessage?: string;
 };
 
 export type NotificationSeverity = 'info' | 'success' | 'warning' | 'error';

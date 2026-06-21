@@ -20,7 +20,11 @@ func streamCursorJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 	return streamClaudeJSON(reader, sink, onEvent, nil, onTok, nil)
 }
 
-func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent), onAsk onAskUserQuestion, onTok onTokens, onResult func()) streamTurnStats {
+// onResult fires once per turn boundary (each stream-json `result` event), with
+// the stats accumulated so far. The persistent claude session uses it to close
+// the turn (persist per-turn stats, drain the next queued message) without the
+// process exiting; the one-shot path uses it to close stdin so the process ends.
+func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent), onAsk onAskUserQuestion, onTok onTokens, onResult func(streamTurnStats)) streamTurnStats {
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 
@@ -60,7 +64,8 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 			onTok(stats.Tokens, stats.Parts, stats.CostUSD)
 		}
 		if kind, _ := evt["type"].(string); kind == "result" && onResult != nil && len(askPending) == 0 {
-			onResult()
+			stats.FilesModified = len(filesSet)
+			onResult(stats)
 		}
 	}
 

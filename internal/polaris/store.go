@@ -111,7 +111,8 @@ func (store *Store) migrate() error {
 			toolsUsed INTEGER NOT NULL DEFAULT 0,
 			worktreeJson TEXT NOT NULL DEFAULT '',
 			pendingQuestionJson TEXT NOT NULL DEFAULT '',
-			allowedToolsJson TEXT NOT NULL DEFAULT ''
+			allowedToolsJson TEXT NOT NULL DEFAULT '',
+			queuedMessage TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE INDEX IF NOT EXISTS agents_projectId_startedAt ON agents (projectId, startedAt DESC)`,
 		`CREATE TABLE IF NOT EXISTS notifications (
@@ -206,6 +207,7 @@ func (store *Store) migrate() error {
 
 	additiveCurrent := []string{
 		`ALTER TABLE agents ADD COLUMN allowedToolsJson TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE agents ADD COLUMN queuedMessage TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE agents ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0`,
 		`UPDATE agents SET updatedAt = startedAt WHERE updatedAt = 0`,
 		`ALTER TABLE custom_providers ADD COLUMN icon TEXT NOT NULL DEFAULT ''`,
@@ -420,7 +422,7 @@ func (store *Store) DeleteProject(id string) error {
 
 // agentColumns is the canonical SELECT column list for the agents table, kept
 // in sync with scanAgent's Scan order.
-const agentColumns = `id, projectId, kind, source, summary, status, startedAt, updatedAt, pid, sessionId, model, providerId, tokensJson, costUsd, filesModified, toolsUsed, worktreeJson, pendingQuestionJson, allowedToolsJson`
+const agentColumns = `id, projectId, kind, source, summary, status, startedAt, updatedAt, pid, sessionId, model, providerId, tokensJson, costUsd, filesModified, toolsUsed, worktreeJson, pendingQuestionJson, allowedToolsJson, queuedMessage`
 
 func (store *Store) ListAgents(projectID string) ([]Agent, error) {
 	var (
@@ -609,6 +611,19 @@ func (store *Store) PatchAgent(id string, fields map[string]any) error {
 		case "projectId", "kind", "summary", "status", "startedAt", "sessionId", "source", "costUsd", "filesModified", "toolsUsed", "model", "providerId", "pid":
 			cols = append(cols, k+" = ?")
 			args = append(args, v)
+		case "queuedMessage":
+			// nil clears the queue; a string sets it. Reject anything else so a
+			// caller bug can't silently wipe the column.
+			switch tv := v.(type) {
+			case nil:
+				cols = append(cols, "queuedMessage = ?")
+				args = append(args, "")
+			case string:
+				cols = append(cols, "queuedMessage = ?")
+				args = append(args, tv)
+			default:
+				return fmt.Errorf("agent field %q expects string or nil", k)
+			}
 		case "tokens":
 			t, ok := v.(TokenUsage)
 			if !ok {
@@ -829,7 +844,7 @@ type rowScanner interface {
 func scanAgent(r rowScanner) (Agent, error) {
 	var a Agent
 	var tokensJSON, worktreeJSON, pendingQuestionJSON, allowedToolsJSON string
-	err := r.Scan(&a.ID, &a.ProjectID, &a.Kind, &a.Source, &a.Summary, &a.Status, &a.StartedAt, &a.UpdatedAt, &a.PID, &a.SessionID, &a.Model, &a.ProviderID, &tokensJSON, &a.CostUSD, &a.FilesModified, &a.ToolsUsed, &worktreeJSON, &pendingQuestionJSON, &allowedToolsJSON)
+	err := r.Scan(&a.ID, &a.ProjectID, &a.Kind, &a.Source, &a.Summary, &a.Status, &a.StartedAt, &a.UpdatedAt, &a.PID, &a.SessionID, &a.Model, &a.ProviderID, &tokensJSON, &a.CostUSD, &a.FilesModified, &a.ToolsUsed, &worktreeJSON, &pendingQuestionJSON, &allowedToolsJSON, &a.QueuedMessage)
 	if err != nil {
 		return a, err
 	}

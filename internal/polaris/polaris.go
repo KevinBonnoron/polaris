@@ -87,6 +87,11 @@ type Agent struct {
 	// system prompt. Empty means all tools (no restriction). Only honoured
 	// for the claude-code kind; other backends manage their own tool lists.
 	AllowedTools []string `json:"allowedTools,omitempty"`
+	// QueuedMessage holds a single follow-up the user sent while a claude-code
+	// turn was in flight. It is surfaced in the UI as a pending chip (not yet in
+	// the log) and is moved into the log only when the next turn picks it up. A
+	// second send replaces it; empty when nothing is queued.
+	QueuedMessage string `json:"queuedMessage,omitempty"`
 }
 
 // TokenUsage breaks an agent's token consumption into its categories. The total

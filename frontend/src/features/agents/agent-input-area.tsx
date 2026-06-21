@@ -1,5 +1,5 @@
 import { useLiveQuery } from '@tanstack/react-db';
-import { Mic, Paperclip, Send, Square, TriangleAlert, X } from 'lucide-react';
+import { Clock, Mic, Paperclip, Send, Square, TriangleAlert, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -13,7 +13,7 @@ import { useAgentDefaults } from '@/state/agent-defaults';
 import { selectAgent } from '@/state/agent-selection';
 import { useCurrentProject } from '@/state/projects';
 import type { Agent } from '@/types';
-import { CancelAgent, ClearAgentLog, GetProjectFileStatuses, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, TeleportClaudeSession } from '@/wailsjs/go/main/App';
+import { CancelAgent, ClearAgentLog, ClearAgentQueuedMessage, GetProjectFileStatuses, InterruptAndSendToAgent, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, StopAndRetractLastMessage, TeleportClaudeSession } from '@/wailsjs/go/main/App';
 import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
 import { type Attachment, AttachmentPreviews, loadAttachment } from './attachments';
@@ -55,6 +55,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   const status = agent?.status;
   const isDraft = status === 'draft';
   const isWorking = status === 'working';
+  const queuedMessage = agent?.queuedMessage ?? '';
 
   const provider = providers.find((p) => p.id === agent?.providerId) ?? undefined;
   const cliCfg = agent && !agent.providerId ? (agent.kind === 'opencode' ? opencode : cliKinds.find((k) => k.id === agent.kind)) : undefined;
@@ -68,6 +69,12 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   const [sending, setSending] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<{ stop(): void } | null>(null);
+  // Last message sent to this agent, recalled into the input with ArrowUp. Reset
+  // on agent switch so ArrowUp never recalls a different agent's message.
+  const lastSentRef = useRef('');
+  useEffect(() => {
+    lastSentRef.current = '';
+  }, [agentId]);
   const [pendingQuestion, setPendingQuestion] = useState<{ toolUseId: string; payload: AskUserQuestionPayload } | null>(null);
   const [teleportSessions, setTeleportSessions] = useState<{ value: string; label: string }[]>([]);
   const [dirtyWorktree, setDirtyWorktree] = useState(false);
@@ -242,19 +249,98 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     }
   };
 
-  useEffect(() => {
-    if (!isWorking) {
-      return;
+  // Drop text into the input and place the caret at the end, ready to edit.
+  const recallIntoInput = useCallback(
+    (text: string) => {
+      setMessage(text);
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(text.length, text.length);
+        }
+      });
+    },
+    [inputRef],
+  );
+
+  // Clear the queued message on the backend, surfacing failures: callers that
+  // recall it for editing must not proceed if it's still live, or it would be
+  // sent again at the next turn.
+  const clearQueued = useCallback(async (): Promise<boolean> => {
+    try {
+      await ClearAgentQueuedMessage(agentId);
+      return true;
+    } catch (err) {
+      toastError({ title: t('agents.detail.couldNotClearQueued'), err });
+      return false;
     }
+  }, [agentId, t]);
+
+  // Escape and ArrowUp are handled at the window level so they work the same way
+  // regardless of which control has focus (ArrowUp still requires the input to be
+  // focused and empty, so it never hijacks caret movement or list navigation).
+  useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      const el = inputRef.current;
+      if (e.key === 'Escape' && isWorking) {
         e.preventDefault();
-        CancelAgent(agentId).catch((err) => toastError({ title: t('agents.detail.couldNotStop'), err }));
+        // A queued message would be dropped by the stop, so bring it back into the
+        // input to edit; the in-flight (logged) message stays as history.
+        if (queuedMessage) {
+          const queued = queuedMessage;
+          // Clear the queue explicitly (CancelAgent also clears it on success, but
+          // surface a failure), then stop and bring the message back to edit.
+          void clearQueued();
+          CancelAgent(agentId).catch((err) => toastError({ title: t('agents.detail.couldNotStop'), err }));
+          recallIntoInput(queued);
+          return;
+        }
+        // No queue: stop, and when the turn hadn't responded yet the backend
+        // retracts the last logged message and returns it so we can edit it.
+        void (async () => {
+          try {
+            const retracted = await StopAndRetractLastMessage(agentId);
+            if (retracted) {
+              recallIntoInput(retracted);
+              onLogRefresh();
+            }
+          } catch (err) {
+            toastError({ title: t('agents.detail.couldNotStop'), err });
+          }
+        })();
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        const active = document.activeElement as HTMLElement | null;
+        // Don't steal ArrowUp from another text field, or while editing our own.
+        const inOtherField = !!active && active !== el && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || !!active.isContentEditable);
+        if (inOtherField || (el && el.value.trim())) {
+          return;
+        }
+        // A queued message is recalled like Escape — regardless of focus — since
+        // that is the explicit "edit the pending message" gesture. The last-sent
+        // fallback only fires when the input itself is focused, so it never
+        // hijacks ArrowUp used to scroll elsewhere.
+        if (queuedMessage) {
+          e.preventDefault();
+          const queued = queuedMessage;
+          // Agent keeps working here, so only recall once the queue is actually
+          // cleared — otherwise it would be sent again at the next turn.
+          void (async () => {
+            if (await clearQueued()) {
+              recallIntoInput(queued);
+            }
+          })();
+        } else if (active === el && lastSentRef.current) {
+          e.preventDefault();
+          recallIntoInput(lastSentRef.current);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isWorking, agentId, t]);
+  }, [isWorking, agentId, t, onLogRefresh, queuedMessage, recallIntoInput, clearQueued, inputRef]);
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -299,9 +385,14 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     setIsRecording(true);
   };
 
-  const send = async () => {
+  const send = async (interrupt = false) => {
     const parts = [stripFileMentions(message).trim(), ...attachments.map((a) => a.path)];
-    const text = parts.filter(Boolean).join('\n');
+    let text = parts.filter(Boolean).join('\n');
+    // The interrupt button can fire with an empty input to apply the already
+    // queued message right now instead of waiting for the turn to end.
+    if (!text && interrupt && queuedMessage) {
+      text = queuedMessage;
+    }
     if (!text || sending) {
       return;
     }
@@ -340,8 +431,9 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       return;
     }
     setSending(true);
+    lastSentRef.current = text;
     try {
-      await SendToAgent(agentId, text);
+      await (interrupt ? InterruptAndSendToAgent(agentId, text) : SendToAgent(agentId, text));
       setMessage('');
       setAttachments([]);
       onLogRefresh();
@@ -491,6 +583,29 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
                   </button>
                 </div>
               )}
+              {queuedMessage && (
+                <div className="mb-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs text-muted-foreground">
+                  <Clock className="size-3.5 shrink-0" />
+                  <button
+                    type="button"
+                    title={t('agents.detail.editQueued')}
+                    onClick={() => {
+                      const queued = queuedMessage;
+                      void (async () => {
+                        if (await clearQueued()) {
+                          recallIntoInput(queued);
+                        }
+                      })();
+                    }}
+                    className="flex-1 truncate text-left hover:text-foreground"
+                  >
+                    <span className="font-medium text-foreground/80">{t('agents.detail.queuedLabel')}</span> {queuedMessage}
+                  </button>
+                  <button type="button" aria-label={t('agents.detail.cancelQueued')} onClick={() => void clearQueued()} className="shrink-0 rounded-sm opacity-70 hover:opacity-100">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              )}
               <div className="flex items-start gap-2">
                 <Button variant="outline" size="icon" title={t('agents.detail.attachFiles')} onClick={() => void pickFiles()} className="size-10 shrink-0">
                   <Paperclip className="size-4" />
@@ -516,6 +631,11 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
                 {speechRecognitionAvailable && (
                   <Button variant={isRecording ? 'destructive' : 'outline'} size="icon" title={isRecording ? t('agents.detail.stopRecording') : t('agents.detail.recordVoice')} onClick={toggleRecording} className="size-10 shrink-0">
                     <Mic className="size-4" />
+                  </Button>
+                )}
+                {isWorking && agent?.kind === 'claude-code' && (message.trim() || attachments.length > 0 || queuedMessage) && (
+                  <Button variant="destructive" size="icon" title={t('agents.detail.interruptAndSend')} disabled={sending} onClick={() => void send(true)} className="size-10 shrink-0">
+                    <Zap className="size-4" />
                   </Button>
                 )}
                 {message.trim() || attachments.length > 0 || !isWorking ? (
