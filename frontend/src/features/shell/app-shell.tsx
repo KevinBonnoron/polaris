@@ -5,6 +5,7 @@ import { CSharpRunProvider } from '@/features/integrations/csharp/csharp-run-con
 import { NodejsRunProvider } from '@/features/integrations/nodejs/nodejs-run-context';
 import { PythonRunProvider } from '@/features/integrations/python/python-run-context';
 import { ShellRunProvider } from '@/features/integrations/shell/shell-context';
+import { TaskfileRunProvider } from '@/features/integrations/taskfile/taskfile-run-context';
 import { ShortcutsProvider } from '@/providers/shortcuts';
 import { AgentClisProvider } from '@/state/agent-clis';
 import { AgentDefaultsProvider } from '@/state/agent-defaults';
@@ -48,13 +49,15 @@ export function AppShell({ children }: Props) {
             <NodejsRunProvider>
               <PythonRunProvider>
                 <CSharpRunProvider>
-                  <ShellRunProvider>
-                    <ShortcutsProvider>
-                      <ShellBody>{children}</ShellBody>
-                      <BackendHealthCheck />
-                      <Toaster position="bottom-right" richColors />
-                    </ShortcutsProvider>
-                  </ShellRunProvider>
+                  <TaskfileRunProvider>
+                    <ShellRunProvider>
+                      <ShortcutsProvider>
+                        <ShellBody>{children}</ShellBody>
+                        <BackendHealthCheck />
+                        <Toaster position="bottom-right" richColors />
+                      </ShortcutsProvider>
+                    </ShellRunProvider>
+                  </TaskfileRunProvider>
                 </CSharpRunProvider>
               </PythonRunProvider>
             </NodejsRunProvider>

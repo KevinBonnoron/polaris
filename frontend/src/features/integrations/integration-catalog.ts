@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
-import { Boxes, Bug, Container, Hash, Mail, Package, Rocket } from 'lucide-react';
+import { Boxes, Bug, Container, Hash, ListChecks, Mail, Package, Rocket } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { BitbucketIcon, DiscordIcon, GitHubIcon, GitLabIcon, JiraIcon, LinearIcon, SlackIcon, TelegramIcon } from '@/components/brand-icons';
 import type { IntegrationConfig } from '@/types';
-import { DetectAllCSharpProjects, DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectGitRemote, DetectProviderToken, ListCSharpScripts, ListDokployProjectNames, ListNodeScripts, ListPythonScripts } from '@/wailsjs/go/main/App';
+import { DetectAllCSharpProjects, DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectAllTaskfileProjects, DetectGitRemote, DetectProviderToken, ListCSharpScripts, ListDokployProjectNames, ListNodeScripts, ListPythonScripts, ListTaskfileTasks } from '@/wailsjs/go/main/App';
 import { dokploy } from '@/wailsjs/go/models';
 
 export type IntegrationFieldType = 'text' | 'password' | 'url' | 'number' | 'select' | 'autocomplete';
@@ -221,6 +221,32 @@ export const INTEGRATIONS: Integration[] = [
       { key: 'buildScript', label: 'Build command', type: 'autocomplete', placeholder: 'build', loadOptions: loadCSharpScriptOptions },
     ],
     detect: detectCSharp,
+  },
+  {
+    id: 'taskfile',
+    name: 'Taskfile',
+    icon: ListChecks,
+    tint: 'text-cyan-400 bg-cyan-500/10',
+    multi: true,
+    instanceLabel: (config, projectPath) => relativePath(String(config.manifestPath ?? ''), projectPath),
+    fields: [
+      {
+        key: 'runEnv',
+        label: 'Run environment',
+        type: 'select',
+        defaultValue: 'direct',
+        options: [
+          { value: 'direct', label: 'Direct (PATH)' },
+          { value: 'nix', label: 'Nix develop' },
+          { value: 'devcontainer', label: 'Devcontainer' },
+        ],
+      },
+      { key: 'manifestPath', label: 'Taskfile path', type: 'text', placeholder: '/path/to/Taskfile.yml' },
+      { key: 'startTask', label: 'Start task', type: 'autocomplete', placeholder: 'dev', loadOptions: loadTaskfileTaskOptions },
+      { key: 'testTask', label: 'Test task', type: 'autocomplete', placeholder: 'test', loadOptions: loadTaskfileTaskOptions },
+      { key: 'buildTask', label: 'Build task', type: 'autocomplete', placeholder: 'build', loadOptions: loadTaskfileTaskOptions },
+    ],
+    detect: detectTaskfile,
   },
   {
     id: 'docker',
@@ -511,6 +537,51 @@ async function detectCSharp(projectPath: string): Promise<IntegrationConfig | In
     const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: p.packageManager || 'dotnet', startScript: 'run', testScript: 'test', buildScript: 'build' };
     if (p.runEnv) {
       c.runEnv = p.runEnv;
+    }
+    return [c];
+  });
+  return configs.length === 1 ? configs[0] : configs;
+}
+
+async function loadTaskfileTaskOptions(values: Record<string, string>): Promise<IntegrationFieldOption[]> {
+  if (!values.manifestPath) {
+    return [];
+  }
+
+  try {
+    const tasks = await ListTaskfileTasks(values.manifestPath);
+    return (tasks ?? []).map((s) => ({ value: s.name, label: s.name }));
+  } catch {
+    return [];
+  }
+}
+
+async function detectTaskfile(projectPath: string): Promise<IntegrationConfig | IntegrationConfig[] | null> {
+  const projects = await DetectAllTaskfileProjects(projectPath);
+  if (!projects?.length) {
+    return null;
+  }
+
+  const configs = projects.flatMap((p) => {
+    if (!p) {
+      return [];
+    }
+    const c: IntegrationConfig = { manifestPath: p.manifestPath, packageManager: 'task' };
+    if (p.runEnv) {
+      c.runEnv = p.runEnv;
+    }
+    const names = (p.scripts ?? []).map((s) => s.name);
+    const start = pickScript(names, ['dev', 'start', 'serve', 'run', 'develop']);
+    const test = pickScript(names, ['test']);
+    const build = pickScript(names, ['build']);
+    if (start) {
+      c.startTask = start;
+    }
+    if (test) {
+      c.testTask = test;
+    }
+    if (build) {
+      c.buildTask = build;
     }
     return [c];
   });
