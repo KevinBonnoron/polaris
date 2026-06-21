@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { polaris } from '@/wailsjs/go/models';
+import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
 import { UserMessageContent } from './user-message';
 
 type StreamEvent = polaris.StreamEvent;
@@ -516,7 +517,18 @@ const mdComponents: React.ComponentProps<typeof ReactMarkdown>['components'] = {
   ol: ({ children }) => <ol className="mb-2 list-decimal pl-6 last:mb-0 [&>li]:mb-0.5">{children}</ol>,
   li: ({ children }) => <li className="text-foreground/85">{children}</li>,
   a: ({ href, children }) => (
-    <a href={href} className="text-blue-400 underline" target="_blank" rel="noopener noreferrer">
+    <a
+      href={href}
+      className="text-blue-400 underline"
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => {
+        if (href) {
+          e.preventDefault();
+          BrowserOpenURL(href);
+        }
+      }}
+    >
       {children}
     </a>
   ),
