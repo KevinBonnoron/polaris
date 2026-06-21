@@ -1,6 +1,6 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import { Mic, Paperclip, Send, Square, TriangleAlert, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { agentsCollection } from '@/collections/agents.collection';
@@ -191,6 +191,22 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     };
   }, []);
 
+  const addFilePaths = useCallback(
+    (files: string[]) => {
+      if (!files.length) {
+        return;
+      }
+      const norm = (p: string) => p.replace(/\\/g, '/');
+      const base = project?.path ? norm(project.path).replace(/\/?$/, '/') : '';
+      const refs = files.map((f) => {
+        const fNorm = norm(f);
+        return base && fNorm.startsWith(base) ? fNorm.slice(base.length) : f;
+      });
+      setMessage((prev) => (prev ? `${prev}\n${refs.join('\n')}` : refs.join('\n')));
+    },
+    [project?.path],
+  );
+
   const pickFiles = async () => {
     const files = await PickFiles(project?.path ?? '').catch((err: unknown) => {
       toastError({ title: t('agents.detail.pickerUnavailable'), err });
@@ -199,9 +215,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     if (!files?.length) {
       return;
     }
-    const base = project?.path ? project.path.replace(/\/?$/, '/') : '';
-    const refs = files.map((f) => (base && f.startsWith(base) ? f.slice(base.length) : f));
-    setMessage((prev) => (prev ? `${prev}\n${refs.join('\n')}` : refs.join('\n')));
+    addFilePaths(files);
   };
 
   const addAttachment = async (path: string) => {
@@ -212,6 +226,17 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       setAttachments((prev) => [...prev, { path, preview: '' }]);
     }
   };
+
+  // Native file drop. main.go relays only drops landing on the conversation's
+  // [data-file-drop-target] element; route to this card via the agent id it carries.
+  useEffect(() => {
+    return EventsOn('files:dropped', (payload: { files?: string[]; details?: { attributes?: Record<string, string> } }) => {
+      if (payload?.details?.attributes?.['data-agent-id'] !== agentId) {
+        return;
+      }
+      addFilePaths(payload.files ?? []);
+    });
+  }, [agentId, addFilePaths]);
 
   const cancel = async () => {
     try {
