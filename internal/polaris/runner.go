@@ -68,6 +68,7 @@ type Runner struct {
 	mu            sync.Mutex
 	procs         map[string]*runningProc
 	acp           map[string]*acpSession
+	claude        map[string]*claudeSession
 	pending       map[string][]string
 	awaiting      map[string]bool
 	logsRoot      string
@@ -78,6 +79,7 @@ func NewRunner(logsRoot, worktreesRoot string) *Runner {
 	return &Runner{
 		procs:         make(map[string]*runningProc),
 		acp:           make(map[string]*acpSession),
+		claude:        make(map[string]*claudeSession),
 		pending:       make(map[string][]string),
 		awaiting:      make(map[string]bool),
 		logsRoot:      logsRoot,
@@ -284,11 +286,16 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 		return &created, nil
 	}
 
-	var writeInitial func(io.Writer) error
-	if in.Kind == "claude-code" && task != "" {
-		writeInitial = func(w io.Writer) error { return writeClaudeUserText(w, task) }
+	// claude-code runs as a long-lived persistent session (see claudeSession);
+	// the spawn args are rebuilt there from the agent record.
+	if in.Kind == "claude-code" {
+		if err := service.runner.startClaudeSession(service, &created, runDir, task, task, false, false); err != nil {
+			service.markAgentError(created.ID, fmt.Sprintf("start claude-code: %v", err))
+		}
+		return &created, nil
 	}
-	go service.runner.run(service, created.ID, in.Kind, binary, args, runDir, task, false, nil, writeInitial)
+
+	go service.runner.run(service, created.ID, in.Kind, binary, args, runDir, task, false, nil, nil)
 	return &created, nil
 }
 
@@ -485,6 +492,90 @@ func relocateClaudeSession(srcDir, dstDir, sessionID string) {
 	_ = os.Rename(src, dst)
 }
 
+// forgetClaudeMessage rewinds Claude Code's own session transcript so a retracted
+// message and its aborted turn are gone from the model's context on the next
+// --resume, not just from the Polaris log. It removes everything from the last
+// user line whose text matches onward — a clean suffix trim that keeps the
+// parentUuid chain intact. Best-effort: the claude session process must already
+// be stopped (no concurrent writes), and a no-match leaves the file untouched.
+func forgetClaudeMessage(workDir, sessionID, text string) {
+	dir := claudeProjectDir(workDir)
+	if dir == "" || sessionID == "" {
+		return
+	}
+	path := filepath.Join(dir, sessionID+".jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	want := normalizeClaudeText(text)
+	if want == "" {
+		return
+	}
+	cut := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		var l struct {
+			Type    string `json:"type"`
+			Message struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal([]byte(lines[i]), &l) != nil {
+			continue
+		}
+		if l.Type != "user" || l.Message.Role != "user" {
+			continue
+		}
+		if normalizeClaudeText(claudeContentText(l.Message.Content)) == want {
+			cut = i
+			break
+		}
+	}
+	if cut < 0 {
+		return
+	}
+	out := ""
+	if cut > 0 {
+		out = strings.Join(lines[:cut], "\n") + "\n"
+	}
+	_ = os.WriteFile(path, []byte(out), 0o644)
+}
+
+// claudeContentText flattens a session message's content (a JSON string, or an
+// array of content blocks) down to its plain text for matching.
+func claudeContentText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(raw, &blocks) == nil {
+		var parts []string
+		for _, b := range blocks {
+			if b.Type == "text" && b.Text != "" {
+				parts = append(parts, b.Text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
+}
+
+// normalizeClaudeText strips the invisible leading marker escapeLeadingSlash adds
+// and surrounding whitespace, so the Polaris-logged text matches what Claude
+// recorded for the same message.
+func normalizeClaudeText(s string) string {
+	return strings.TrimSpace(strings.TrimPrefix(s, "\u200b"))
+}
+
 // agentRunDir picks the working directory for a follow-up turn. When the
 // agent was spawned with an isolated worktree we honour it (the live tree
 // still exists on disk); otherwise we fall back to the project root.
@@ -564,26 +655,22 @@ func (service *Service) autoResumeAgent(a Agent) error {
 	if service.runner == nil {
 		return errors.New("runner not initialised")
 	}
+	if a.SessionID == "" {
+		return errors.New("agent has no session id; cannot resume")
+	}
 	project, err := service.store.GetProject(a.ProjectID)
 	if err != nil {
 		return err
 	}
 	const resumePrompt = "..."
-	binary, args, env, err := service.buildResume(&a, resumePrompt)
-	if err != nil {
-		return err
-	}
 	if err := service.store.PatchAgent(a.ID, map[string]any{"status": "working"}); err != nil {
 		return err
 	}
 	_ = service.appendAgentEvent(a.ID, StreamEvent{Type: "system", Content: "(auto-resumed after app restart)"})
 	workDir := agentRunDir(&a, project)
-	var writeInitial func(io.Writer) error
-	if a.Kind == "claude-code" && resumePrompt != "" {
-		writeInitial = func(w io.Writer) error { return writeClaudeUserText(w, resumePrompt) }
-	}
-	go service.runner.run(service, a.ID, a.Kind, binary, args, workDir, "", true, env, writeInitial)
-	return nil
+	// RecoverInterruptedAgents only calls this for claude-code (the one kind that
+	// resumes by session id), which now runs as a persistent session.
+	return service.runner.startClaudeSession(service, &a, workDir, resumePrompt, "", true, true)
 }
 
 func (service *Service) Send(agentID, message string) error {
@@ -612,7 +699,8 @@ func (service *Service) Send(agentID, message string) error {
 	// A new user message supersedes any pending AskUserQuestion: the user
 	// chose to answer via free text instead of the choices, so drop the
 	// persisted question so the panel disappears.
-	if agent.PendingQuestion != nil {
+	hadPending := agent.PendingQuestion != nil
+	if hadPending {
 		_ = service.store.PatchAgent(agentID, map[string]any{"pendingQuestion": nil})
 	}
 
@@ -634,10 +722,34 @@ func (service *Service) Send(agentID, message string) error {
 		return nil
 	}
 
+	// claude-code also runs over a persistent session: a follow-up is a new user
+	// turn on the same process (queued if a turn is in flight), respawned with
+	// --resume only when the process is gone (finished / app restart).
+	if agent.Kind == "claude-code" {
+		service.runner.mu.Lock()
+		c := service.runner.claude[agentID]
+		service.runner.mu.Unlock()
+		if c == nil {
+			return service.resumeClaude(agent, message)
+		}
+		_ = service.store.PatchAgent(agentID, map[string]any{"status": "working"})
+		// The session decides whether this is logged now (immediate) or queued as a
+		// pending chip and logged when picked up — so the message is not appended
+		// here. Superseding a pending AskUserQuestion: the turn is blocked waiting
+		// for a tool_result, so close the question (dismissal tool_result) to
+		// unblock it; the new message then drains as the next turn.
+		if hadPending && agent.PendingQuestion != nil {
+			c.supersedeQuestion(agent.PendingQuestion.ToolUseID, message)
+		} else {
+			c.sendOrQueue(message)
+		}
+		return nil
+	}
+
 	// 1. If the agent is already running, try to deliver the message to the live process.
 	if service.runner.isRunning(agentID) {
-		// Turn-based agents (claude-code, cursor) use a queue.
-		if agent.Kind == "claude-code" || agent.Kind == "cursor" {
+		// Turn-based cursor uses a queue.
+		if agent.Kind == "cursor" {
 			_ = service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message})
 			service.runner.queueIfRunning(agentID, message)
 			return nil
@@ -683,13 +795,171 @@ func (service *Service) Send(agentID, message string) error {
 		return fmt.Errorf("update status: %w", err)
 	}
 
-	var writeInitial func(io.Writer) error
-	if agent.Kind == "claude-code" && message != "" {
-		writeInitial = func(w io.Writer) error { return writeClaudeUserText(w, message) }
-	}
 	// startMsg empty: we already wrote it above before queueing/spawning.
-	go service.runner.run(service, agentID, agent.Kind, binary, args, workDir, "", true, env, writeInitial)
+	// claude-code never reaches here (handled by its persistent-session branch).
+	go service.runner.run(service, agentID, agent.Kind, binary, args, workDir, "", true, env, nil)
 	return nil
+}
+
+// resumeClaude respawns a finished claude-code session as a fresh persistent
+// process via --resume and delivers message as its first turn. Mirrors resumeACP.
+func (service *Service) resumeClaude(agent *Agent, message string) error {
+	if agent.SessionID == "" {
+		return errors.New("agent has no session id; cannot resume")
+	}
+	project, err := service.store.GetProject(agent.ProjectID)
+	if err != nil {
+		return fmt.Errorf("find project: %w", err)
+	}
+	workDir := agentRunDir(agent, project)
+	_ = service.appendAgentEvent(agent.ID, StreamEvent{Type: "user_message", Content: message})
+	_ = service.store.PatchAgent(agent.ID, map[string]any{"status": "working"})
+	return service.runner.startClaudeSession(service, agent, workDir, message, "", true, true)
+}
+
+// InterruptAndSend aborts the in-flight claude-code turn and applies message
+// immediately, instead of queueing it until the current turn ends. Only the
+// persistent claude session supports a mid-turn interrupt; for any other state
+// it degrades to an ordinary Send (the message is queued / resumes a session).
+func (service *Service) InterruptAndSend(agentID, message string) error {
+	if service.store == nil {
+		return errors.New("store not initialised")
+	}
+	if service.runner == nil {
+		return errors.New("runner not initialised")
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return errors.New("message is required")
+	}
+	if agentID == "" {
+		return errors.New("agentId is required")
+	}
+	agent, err := service.store.GetAgent(agentID)
+	if err != nil {
+		return fmt.Errorf("find agent: %w", err)
+	}
+	if agent == nil {
+		return fmt.Errorf("agent %q not found", agentID)
+	}
+	if agent.PendingQuestion != nil {
+		_ = service.store.PatchAgent(agentID, map[string]any{"pendingQuestion": nil})
+	}
+
+	service.runner.mu.Lock()
+	cs := service.runner.claude[agentID]
+	service.runner.mu.Unlock()
+	if cs == nil {
+		return service.Send(agentID, message)
+	}
+	_ = service.store.PatchAgent(agentID, map[string]any{"status": "working"})
+	// The message is logged when the aborted turn picks it up (interruptAndSend
+	// queues it), so it lands in the transcript where it was taken into account.
+	cs.interruptAndSend(message)
+	return nil
+}
+
+// ClearQueuedMessage drops the agent's pending follow-up (the chip), used when
+// the user pulls it back into the input to edit it.
+func (service *Service) ClearQueuedMessage(agentID string) error {
+	if service.store == nil {
+		return errors.New("store not initialised")
+	}
+	if service.runner == nil {
+		return errors.New("runner not initialised")
+	}
+	if agentID == "" {
+		return errors.New("agentId is required")
+	}
+	service.runner.clearPending(agentID)
+	return service.store.PatchAgent(agentID, map[string]any{"queuedMessage": nil})
+}
+
+// StopAndRetractLast stops the agent (Escape). When its current turn produced no
+// visible response yet, the user's last message is removed from the log and
+// returned so the UI can drop it back into the input for editing — the "I sent
+// the wrong thing" recovery. Returns "" when the agent had already responded
+// (nothing is retracted), so Escape is otherwise a plain stop. For claude-code it
+// also rewinds the model's own transcript so a retracted message is forgotten.
+func (service *Service) StopAndRetractLast(agentID string) (string, error) {
+	if service.runner == nil {
+		return "", errors.New("runner not initialised")
+	}
+	if service.store == nil {
+		return "", errors.New("store not initialised")
+	}
+	// Grab the live session before cancel removes it, so we can wait for its reader
+	// goroutine to finish (and close the log file) before rewriting the log —
+	// otherwise we'd race its final writes.
+	service.runner.mu.Lock()
+	cs := service.runner.claude[agentID]
+	service.runner.mu.Unlock()
+	_ = service.runner.cancel(agentID)
+
+	// The retract is claude-code only: it's the one kind whose persistent reader we
+	// can synchronize on (cs.done) before rewriting the log. Other kinds drain
+	// asynchronously in run(), so we just stop them — never rewrite their log.
+	agent, _ := service.store.GetAgent(agentID)
+	if agent == nil || agent.Kind != "claude-code" {
+		return "", nil
+	}
+	if cs != nil {
+		select {
+		case <-cs.done:
+		case <-time.After(2 * time.Second):
+		}
+	}
+
+	path := filepath.Join(service.runner.logsRoot, agentID+".log")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+
+	last := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		var ev StreamEvent
+		if json.Unmarshal([]byte(lines[i]), &ev) == nil && ev.Type == "user_message" {
+			last = i
+			break
+		}
+	}
+	if last < 0 {
+		return "", nil
+	}
+	// A visible response after the message means the agent already acted on it.
+	for _, ln := range lines[last+1:] {
+		var ev StreamEvent
+		if json.Unmarshal([]byte(ln), &ev) != nil {
+			continue
+		}
+		switch ev.Type {
+		case "text", "thinking", "tool_call", "tool_result":
+			return "", nil
+		}
+	}
+
+	var msg StreamEvent
+	_ = json.Unmarshal([]byte(lines[last]), &msg)
+	out := ""
+	if last > 0 {
+		out = strings.Join(lines[:last], "\n") + "\n"
+	}
+	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
+		return "", err
+	}
+
+	// Also rewind claude-code's own transcript so the message is gone from the
+	// model's context on the next --resume, not just from the Polaris log.
+	if agent.SessionID != "" {
+		project, _ := service.store.GetProject(agent.ProjectID)
+		forgetClaudeMessage(agentRunDir(agent, project), agent.SessionID, msg.Content)
+	}
+	return msg.Content, nil
 }
 
 // buildACPEnv returns the extra environment for an ACP spawn/resume. opencode
@@ -1159,6 +1429,7 @@ func newSessionUUID() string {
 func (runner *Runner) cancel(agentID string) error {
 	runner.mu.Lock()
 	acp := runner.acp[agentID]
+	cs := runner.claude[agentID]
 	proc, ok := runner.procs[agentID]
 	runner.mu.Unlock()
 	if acp != nil {
@@ -1169,6 +1440,15 @@ func (runner *Runner) cancel(agentID string) error {
 		// on kill), so move the agent out of "working" ourselves — otherwise the UI
 		// keeps showing it as running and the stop button never clears.
 		acp.svc.markAgentStopped(agentID)
+		return nil
+	}
+	if cs != nil {
+		// Like ACP, the persistent claude process is killed directly (its readLoop
+		// stands down on closed), so finalise the row ourselves. shutdown clears the
+		// queue, but clear here too in case it had already closed (respawn handoff).
+		cs.shutdown()
+		runner.clearPending(agentID)
+		cs.svc.markAgentStopped(agentID)
 		return nil
 	}
 	if !ok || proc.cmd.Process == nil {
@@ -1186,6 +1466,10 @@ func (runner *Runner) cancelAll() {
 	for _, proc := range runner.procs {
 		procs = append(procs, proc)
 	}
+	claudes := make([]*claudeSession, 0, len(runner.claude))
+	for _, cs := range runner.claude {
+		claudes = append(claudes, cs)
+	}
 	runner.mu.Unlock()
 	for _, proc := range procs {
 		if proc.stdin != nil {
@@ -1194,6 +1478,9 @@ func (runner *Runner) cancelAll() {
 		if proc.cmd.Process != nil {
 			_ = proc.cmd.Process.Kill()
 		}
+	}
+	for _, cs := range claudes {
+		cs.shutdown()
 	}
 }
 
@@ -1297,6 +1584,9 @@ func (runner *Runner) isRunning(agentID string) bool {
 	if _, ok := runner.procs[agentID]; ok {
 		return ok
 	}
+	if _, ok := runner.claude[agentID]; ok {
+		return true
+	}
 	_, ok := runner.acp[agentID]
 	return ok
 }
@@ -1309,11 +1599,21 @@ func (runner *Runner) queueIfRunning(agentID, message string) bool {
 	defer runner.mu.Unlock()
 	_, hasProc := runner.procs[agentID]
 	_, hasACP := runner.acp[agentID]
-	if !hasProc && !hasACP {
+	_, hasClaude := runner.claude[agentID]
+	if !hasProc && !hasACP && !hasClaude {
 		return false
 	}
 	runner.pending[agentID] = append(runner.pending[agentID], message)
 	return true
+}
+
+// setPending replaces the agent's queue with a single message. claude-code keeps
+// at most one pending follow-up: a second send supersedes the first rather than
+// stacking, so the agent never silently runs a backlog of stale messages.
+func (runner *Runner) setPending(agentID, message string) {
+	runner.mu.Lock()
+	defer runner.mu.Unlock()
+	runner.pending[agentID] = []string{message}
 }
 
 // popPending removes and returns the next queued message for the agent. The
@@ -1454,7 +1754,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 					svc.emitAskUserQuestion(agentID, toolUseID, input)
 				}, func(tokens int, parts usageParts, costUSD float64) {
 					svc.emitTokens(agentID, baseTokens+tokens, baseParts.Add(parts), baseCost+costUSD)
-				}, func() {
+				}, func(streamTurnStats) {
 					runner.mu.Lock()
 					proc, ok := runner.procs[agentID]
 					runner.mu.Unlock()
@@ -1896,13 +2196,28 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 
 	working := map[string]any{"status": "working"}
 
+	// Clear the await flag so a later question in the same persistent session is
+	// surfaced again instead of being deduped as a re-emission.
+	service.runner.consumeAwaiting(agentID)
+
 	// opencode: the answer is the chosen option label of a pending ACP
 	// permission request; deliver it to the live session.
 	service.runner.mu.Lock()
 	acp := service.runner.acp[agentID]
+	cs := service.runner.claude[agentID]
 	service.runner.mu.Unlock()
 	if acp != nil {
 		if acp.answerPermission(toolUseID, parseAUQAnswerLabel(answer)) {
+			_ = service.store.PatchAgent(agentID, working)
+			return nil
+		}
+	}
+
+	// claude-code persistent session: the process is still alive mid-turn, so the
+	// answer is delivered as a proper tool_result on its stdin and the turn
+	// continues in place (no resume).
+	if cs != nil {
+		if cs.answerQuestion(toolUseID, answer) {
 			_ = service.store.PatchAgent(agentID, working)
 			return nil
 		}
@@ -1934,18 +2249,21 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 	if err != nil {
 		return fmt.Errorf("find project: %w", err)
 	}
+	_ = service.store.PatchAgent(agentID, working)
+	msg := planResumeMessage(pendingInput, answer)
+	workDir := agentRunDir(agent, project)
+
+	// claude-code resumes as a fresh persistent session (the live-stdin path above
+	// is the normal case; this only runs if its process had already exited).
+	if agent.Kind == "claude-code" {
+		return service.runner.startClaudeSession(service, agent, workDir, msg, "", true, true)
+	}
+
 	binary, args, env, err := service.buildResume(agent, "")
 	if err != nil {
 		return fmt.Errorf("build resume: %w", err)
 	}
-	_ = service.store.PatchAgent(agentID, working)
-	msg := planResumeMessage(pendingInput, answer)
-	var writeInitial func(io.Writer) error
-	if agent.Kind == "claude-code" && msg != "" {
-		writeInitial = func(w io.Writer) error { return writeClaudeUserText(w, msg) }
-	}
-	workDir := agentRunDir(agent, project)
-	go service.runner.run(service, agentID, agent.Kind, binary, args, workDir, "", true, env, writeInitial)
+	go service.runner.run(service, agentID, agent.Kind, binary, args, workDir, "", true, env, nil)
 	return nil
 }
 
