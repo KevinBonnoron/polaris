@@ -9,6 +9,7 @@ import { ClipboardGetText } from '@/wailsjs/runtime/runtime';
 import { useCSharpRun } from '../csharp/csharp-run-context';
 import { useNodejsRun } from '../nodejs/nodejs-run-context';
 import { usePythonRun } from '../python/python-run-context';
+import { useTaskfileRun } from '../taskfile/taskfile-run-context';
 import { patchScrollToBottom } from '../terminal-scroll-fix';
 import { TerminalScrollbar } from '../terminal-scrollbar';
 import { TerminalView } from '../terminal-view';
@@ -21,6 +22,7 @@ export function ShellPane() {
   const { run: nodejsRun, isRunning: nodejsRunning, stop: nodejsStop, restart: nodejsRestart, clear: nodejsClear } = useNodejsRun();
   const { run: pythonRun, isRunning: pythonRunning, stop: pythonStop, restart: pythonRestart, clear: pythonClear } = usePythonRun();
   const { run: csharpRun, isRunning: csharpRunning, stop: csharpStop, restart: csharpRestart, clear: csharpClear } = useCSharpRun();
+  const { run: taskfileRun, isRunning: taskfileRunning, stop: taskfileStop, restart: taskfileRestart, clear: taskfileClear } = useTaskfileRun();
   const { t } = useTranslation();
 
   const prevNodejsRunId = useRef<string | undefined>(nodejsRun?.runId);
@@ -59,20 +61,35 @@ export function ShellPane() {
     }
   }, [csharpRun, setActiveKind, setPaneOpen]);
 
+  const prevTaskfileRunId = useRef<string | undefined>(taskfileRun?.runId);
+  useEffect(() => {
+    if (taskfileRun && prevTaskfileRunId.current !== taskfileRun.runId) {
+      prevTaskfileRunId.current = taskfileRun.runId;
+      setActiveKind('taskfile');
+      setPaneOpen(true);
+    }
+    if (!taskfileRun) {
+      prevTaskfileRunId.current = undefined;
+    }
+  }, [taskfileRun, setActiveKind, setPaneOpen]);
+
   useEffect(() => {
     if (activeKind === 'nodejs' && !nodejsRun) {
-      setActiveKind(pythonRun ? 'python' : csharpRun ? 'csharp' : 'shell');
+      setActiveKind(pythonRun ? 'python' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : 'shell');
     }
     if (activeKind === 'python' && !pythonRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : csharpRun ? 'csharp' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : 'shell');
     }
     if (activeKind === 'csharp' && !csharpRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : taskfileRun ? 'taskfile' : 'shell');
+    }
+    if (activeKind === 'taskfile' && !taskfileRun) {
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : csharpRun ? 'csharp' : 'shell');
     }
     if (activeKind === 'shell' && !activeSessionId && sessions.length > 0) {
       setActiveSessionId(sessions[sessions.length - 1].sessionId);
     }
-  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, csharpRun, setActiveKind, setActiveSessionId]);
+  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, csharpRun, taskfileRun, setActiveKind, setActiveSessionId]);
 
   const onDragStart = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -87,7 +104,7 @@ export function ShellPane() {
     window.addEventListener('pointerup', onUp);
   };
 
-  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun;
+  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun || !!taskfileRun;
   const visible = paneOpen && hasAnything;
 
   const activeShellSession = activeKind === 'shell' ? (sessions.find((s) => s.sessionId === activeSessionId) ?? sessions[0] ?? null) : null;
@@ -193,6 +210,36 @@ export function ShellPane() {
             </>
           )}
 
+          {activeKind === 'taskfile' && taskfileRun && (
+            <>
+              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border/50 px-3">
+                {taskfileRunning ? (
+                  <Badge variant="secondary" className="h-4 gap-1 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-400">
+                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                    {t('integrations.taskfile.running')}
+                  </Badge>
+                ) : taskfileRun.exited ? (
+                  <Badge variant={taskfileRun.exited.code === 0 ? 'secondary' : 'destructive'} className={cn('h-4 px-1.5 text-[10px]', taskfileRun.exited.code === 0 && 'bg-emerald-500/10 text-emerald-400')}>
+                    {taskfileRun.exited.code === 0 ? t('integrations.taskfile.exitOk') : t('integrations.taskfile.exitCode', { code: taskfileRun.exited.code })}
+                  </Badge>
+                ) : null}
+                <div className="flex-1" />
+                <Button size="icon" variant="ghost" className="size-6" onClick={() => void taskfileRestart()}>
+                  <RotateCcw className="size-3" />
+                </Button>
+                {taskfileRunning && (
+                  <Button size="icon" variant="ghost" className="size-6" onClick={() => void taskfileStop()}>
+                    <Square className="size-3 text-destructive" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <TerminalView runId={taskfileRun.runId} lines={taskfileRun.lines} />
+              </div>
+              {taskfileRun.exited?.error && <div className="shrink-0 px-3 py-1.5 font-mono text-xs text-red-400">{taskfileRun.exited.error}</div>}
+            </>
+          )}
+
           {activeKind === 'shell' && <div className="flex-1 overflow-hidden">{activeShellSession ? <ShellTerminal key={activeShellSession.sessionId} session={activeShellSession} /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('integrations.shell.newSession')}</div>}</div>}
         </div>
 
@@ -258,6 +305,19 @@ export function ShellPane() {
                 onSelect={() => setActiveKind('csharp')}
                 onDelete={() => {
                   csharpClear();
+                  setActiveKind('shell');
+                }}
+              />
+            )}
+            {taskfileRun && (
+              <SessionItem
+                label={taskfileRun.scriptName}
+                active={activeKind === 'taskfile'}
+                running={taskfileRunning}
+                exited={taskfileRun.exited}
+                onSelect={() => setActiveKind('taskfile')}
+                onDelete={() => {
+                  taskfileClear();
                   setActiveKind('shell');
                 }}
               />

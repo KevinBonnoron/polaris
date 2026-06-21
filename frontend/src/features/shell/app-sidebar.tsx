@@ -31,6 +31,7 @@ const NAV_ROUTES: Record<string, string> = {
   nodejs: '/nodejs',
   python: '/python',
   csharp: '/csharp',
+  taskfile: '/taskfile',
   docker: '/docker',
   resend: '/resend',
   sentry: '/sentry',
