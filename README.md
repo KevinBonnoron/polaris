@@ -94,17 +94,18 @@ Native notification center with read/unread state. Focus-aware: notifications ca
 
 ## Getting started
 
-Requirements: [Bun](https://bun.com/), [Go](https://go.dev/) 1.22+, [Wails CLI](https://wails.io/docs/gettingstarted/installation).
+The dev toolchain (Bun, Go, the Wails v3 CLI and [go-task](https://taskfile.dev/)) is provided by the Nix devShell. With [direnv](https://direnv.net/) the `.envrc` (`use flake`) loads it automatically; otherwise run `nix develop`.
 
 ```bash
-bun install
-bun run dev
+task dev
 ```
 
-To build the application:
+`task dev` generates the Wails bindings, builds the frontend, and runs the app with hot reload — it is the single entry point and works from a fresh worktree.
+
+To build the application locally:
 
 ```bash
-bun run build
+task build
 ```
 
 ### Build with Nix
@@ -127,12 +128,13 @@ nix run github:KevinBonnoron/polaris
 
 | Command | Description |
 |---|---|
-| `bun run dev` | Run Wails in dev mode (hot reload) |
-| `bun run dev:web` | Run the Vite frontend only |
-| `bun run build` | Production build of the desktop app |
-| `bun run typecheck` | TypeScript type-check |
-| `bun run format` | Format code with Biome |
-| `bun run generate:bindings` | Regenerate Wails Go↔TS bindings |
+| `task dev` | Run Wails in dev mode (bindings + frontend + hot reload) |
+| `task build` | Build the desktop app to `bin/polaris` |
+| `task run` | Run the last built binary |
+| `task common:generate:bindings` | Regenerate Wails Go↔TS bindings |
+| `task common:dev:frontend` | Run the Vite frontend dev server only |
+
+Frontend-only scripts (run from `frontend/`): `bun run typecheck`, `bun run format`.
 
 ## License
 

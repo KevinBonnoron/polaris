@@ -9,8 +9,12 @@ dist
 
 # wails build artifacts + frontend embed
 build/bin
+bin
 frontend/dist/*
 !frontend/dist/.gitkeep
+
+# go-task runner cache
+.task
 
 # tanstack router generated tree
 frontend/src/routeTree.gen.ts

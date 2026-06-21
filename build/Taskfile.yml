@@ -1,0 +1,55 @@
+version: '3'
+
+tasks:
+  install:frontend:deps:
+    summary: Install frontend dependencies
+    run: once
+    dir: frontend
+    sources:
+      - package.json
+      - bun.lock
+    generates:
+      - node_modules/**/*
+    preconditions:
+      - sh: bun --version
+        msg: "bun not found"
+    cmds:
+      - bun install
+
+  generate:bindings:
+    summary: Generates the Wails v3 TypeScript bindings for the frontend
+    run: once
+    sources:
+      - "**/*.go"
+      - go.mod
+      - go.sum
+    generates:
+      - frontend/bindings/**/*
+    cmds:
+      - wails3 generate bindings -ts -clean
+
+  build:frontend:
+    summary: Build the frontend project
+    run: once
+    dir: frontend
+    sources:
+      - "**/*"
+      - exclude: node_modules/**/*
+    generates:
+      - dist/**/*
+    deps:
+      - task: install:frontend:deps
+      - task: generate:bindings
+    cmds:
+      - bun run {{if eq .DEV "true"}}build:dev{{else}}build{{end}}
+    env:
+      PRODUCTION: '{{if eq .DEV "true"}}false{{else}}true{{end}}'
+
+  dev:frontend:
+    summary: Runs the frontend dev server (Vite)
+    deps:
+      - task: install:frontend:deps
+      - task: generate:bindings
+    dir: frontend
+    cmds:
+      - bun run dev --port {{.VITE_PORT}} --strictPort

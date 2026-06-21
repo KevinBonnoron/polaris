@@ -1,0 +1,26 @@
+version: '3'
+
+includes:
+  common: ../Taskfile.yml
+
+tasks:
+  build:
+    summary: Builds the application for Linux
+    deps:
+      - task: common:build:frontend
+        vars:
+          DEV:
+            ref: .DEV
+    cmds:
+      - go build {{.BUILD_FLAGS}} -o {{.OUTPUT}}
+    vars:
+      DEV: '{{.DEV | default "false"}}'
+      BUILD_FLAGS: '{{if eq .DEV "true"}}-buildvcs=false -gcflags=all="-l"{{else}}-tags production -trimpath -buildvcs=false -ldflags="-w -s"{{end}}'
+      OUTPUT: '{{.OUTPUT | default (printf "%s/%s" .BIN_DIR .APP_NAME)}}'
+    env:
+      CGO_ENABLED: 1
+
+  run:
+    summary: Runs the built application
+    cmds:
+      - '{{.BIN_DIR}}/{{.APP_NAME}}'
