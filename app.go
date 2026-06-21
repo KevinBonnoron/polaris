@@ -19,6 +19,7 @@ import (
 	"github.com/KevinBonnoron/polaris/internal/providers/nodejs"
 	"github.com/KevinBonnoron/polaris/internal/providers/python"
 	"github.com/KevinBonnoron/polaris/internal/providers/shell"
+	"github.com/KevinBonnoron/polaris/internal/providers/taskfile"
 	"github.com/KevinBonnoron/polaris/internal/store/dokploystore"
 	"github.com/KevinBonnoron/polaris/internal/store/repositorystore"
 	"github.com/KevinBonnoron/polaris/internal/store/sentrystore"
@@ -126,6 +127,7 @@ type App struct {
 	pythonRunner    *python.Runner
 	csharpRunner    *csharp.Runner
 	shellRunner     *shell.Runner
+	taskfileRunner  *taskfile.Runner
 
 	statusMu sync.RWMutex
 	ready    bool
@@ -227,6 +229,7 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 	app.pythonRunner = python.NewRunner(wailsEmitter{})
 	app.csharpRunner = csharp.NewRunner(wailsEmitter{})
 	app.shellRunner = shell.NewRunner(wailsEmitter{})
+	app.taskfileRunner = taskfile.NewRunner(wailsEmitter{})
 
 	app.setReady(true)
 	app.setError(nil)
