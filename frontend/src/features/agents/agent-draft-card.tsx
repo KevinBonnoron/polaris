@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
 import { Button } from '@/components/ui/button';
+import { formatAgo } from '@/lib/format-ago';
 import { formatTokens } from '@/lib/format';
-import { formatRelative } from '@/lib/time';
 import { cn } from '@/lib/utils';
 import type { Agent } from '@/types';
 import { resolveProviderIcon } from '@/components/brand-icons';
@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function AgentDraftCard({ agent, selected, onSelect }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: providers = [] } = useLiveQuery((q) => q.from({ p: customProvidersCollection }));
   const provider = agent.providerId ? providers.find((p) => p.id === agent.providerId) : undefined;
   const kindCfg = findAgentKind(agent.kind) ?? (agent.kind === 'opencode' ? OPENCODE_DESCRIPTOR : undefined);
@@ -42,7 +42,7 @@ export function AgentDraftCard({ agent, selected, onSelect }: Props) {
         </div>
         <p className="truncate text-xs text-muted-foreground">{t('agents.draft.hint')}</p>
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>{t('agents.card.started', { when: formatRelative(agent.startedAt) })}</span>
+          <span>{t('agents.card.started', { when: formatAgo(agent.startedAt, i18n.language) })}</span>
           <span className="tabular-nums">{t('agents.card.tokens', { count: formatTokens(0) })}</span>
         </div>
       </button>

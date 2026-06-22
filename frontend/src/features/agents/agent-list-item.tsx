@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { agentsCollection } from '@/collections/agents.collection';
 import { Button } from '@/components/ui/button';
+import { formatAgo } from '@/lib/format-ago';
 import { formatTokens } from '@/lib/format';
 import { agentStatusSeverity, SEVERITY_DOT } from '@/lib/severity';
-import { formatRelative } from '@/lib/time';
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import type { Agent } from '@/types';
@@ -29,7 +29,7 @@ interface Props {
 }
 
 export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const confirm = useConfirm();
   const kindCfg = findAgentKind(agent.kind) ?? (agent.kind === 'opencode' ? OPENCODE_DESCRIPTOR : undefined);
   const KindIcon = providerIcon ?? kindCfg?.icon;
@@ -249,7 +249,7 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
           </div>
         )}
         <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-          <span>{t('agents.card.started', { when: formatRelative(agent.startedAt) })}</span>
+          <span>{t('agents.card.started', { when: formatAgo(agent.startedAt, i18n.language) })}</span>
           <span className="tabular-nums">{t('agents.card.tokens', { count: formatTokens(displayTokens) })}</span>
         </div>
       </div>
