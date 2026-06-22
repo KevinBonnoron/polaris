@@ -1664,10 +1664,13 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 	if !appendLog {
 		_ = logFile.Truncate(0)
 	}
+	// stdout and stderr are drained concurrently into the same file; serialise
+	// every write so JSONL lines never interleave.
+	sink := newLockedWriter(logFile)
 
 	if startMsg != "" {
 		evt := StreamEvent{Type: "user_message", Content: startMsg}
-		emitEvent(logFile, nil, evt)
+		emitEvent(sink, nil, evt)
 		svc.emitLogEvent(agentID, evt)
 	}
 
@@ -1675,7 +1678,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 
 	logLine := func(line string) {
 		evt := StreamEvent{Type: "system", Content: line}
-		emitEvent(logFile, nil, evt)
+		emitEvent(sink, nil, evt)
 		svc.emitLogEvent(agentID, evt)
 	}
 
@@ -1750,7 +1753,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		go func() {
 			defer wg.Done()
 			if kind == "claude-code" {
-				stats = streamClaudeJSON(stdout, logFile, func(evt StreamEvent) {
+				stats = streamClaudeJSON(stdout, sink, func(evt StreamEvent) {
 					detect(evt)
 					svc.emitLogEvent(agentID, evt)
 				}, func(toolUseID string, input map[string]any) {
@@ -1768,7 +1771,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 				return
 			}
 			if kind == "gemini" {
-				stats = streamGeminiJSON(stdout, logFile, func(evt StreamEvent) {
+				stats = streamGeminiJSON(stdout, sink, func(evt StreamEvent) {
 					detect(evt)
 					svc.emitLogEvent(agentID, evt)
 				}, func(toolUseID string, input map[string]any) {
@@ -1786,7 +1789,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 				return
 			}
 			if kind == "cursor" {
-				stats = streamCursorJSON(stdout, logFile, func(evt StreamEvent) {
+				stats = streamCursorJSON(stdout, sink, func(evt StreamEvent) {
 					detect(evt)
 					svc.emitLogEvent(agentID, evt)
 				}, func(tokens int, parts usageParts, costUSD float64) {
@@ -1794,7 +1797,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 				})
 				return
 			}
-			streamInteractive(stdout, logFile, func(evt StreamEvent) {
+			streamInteractive(stdout, sink, func(evt StreamEvent) {
 				detect(evt)
 				svc.emitLogEvent(agentID, evt)
 			}, onWaiting)
@@ -1802,13 +1805,13 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		go func() {
 			defer wg.Done()
 			if kind == "claude-code" || kind == "cursor" || kind == "gemini" {
-				streamLines(stderr, logFile, func(evt StreamEvent) {
+				streamLines(stderr, sink, func(evt StreamEvent) {
 					detect(evt)
 					svc.emitLogEvent(agentID, evt)
 				})
 				return
 			}
-			streamInteractive(stderr, logFile, func(evt StreamEvent) {
+			streamInteractive(stderr, sink, func(evt StreamEvent) {
 				detect(evt)
 				svc.emitLogEvent(agentID, evt)
 			}, onWaiting)
@@ -1892,7 +1895,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		}
 		if retryable && !stats.Succeeded {
 			svc.persistTurnStats(agentID, stats)
-			svc.runnerError(agentID, logFile, fmt.Sprintf("upstream API unavailable after %d attempts (overloaded / rate limited); giving up", maxAPIRetries+1))
+			svc.runnerError(agentID, sink, fmt.Sprintf("upstream API unavailable after %d attempts (overloaded / rate limited); giving up", maxAPIRetries+1))
 			if dropped := runner.clearPending(agentID); len(dropped) > 0 {
 				_ = svc.appendAgentEvent(agentID, StreamEvent{Type: "system", Content: fmt.Sprintf("(dropped %d queued message(s))", len(dropped))})
 			}
@@ -1902,7 +1905,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 
 	if waitErr != nil {
 		svc.persistTurnStats(agentID, stats)
-		svc.runnerError(agentID, logFile, fmt.Sprintf("exited: %v", waitErr))
+		svc.runnerError(agentID, sink, fmt.Sprintf("exited: %v", waitErr))
 		// Drop any queued follow-ups since the chain is broken.
 		if dropped := runner.clearPending(agentID); len(dropped) > 0 {
 			_ = svc.appendAgentEvent(agentID, StreamEvent{Type: "system", Content: fmt.Sprintf("(dropped %d queued message(s))", len(dropped))})
