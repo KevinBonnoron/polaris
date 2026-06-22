@@ -6,9 +6,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const apiBase = "https://api.resend.com"
+
+// client carries a timeout so a stalled Resend connection can't hang the
+// calling Wails handler indefinitely (http.DefaultClient has none).
+var client = &http.Client{Timeout: 15 * time.Second}
 
 type Config struct {
 	APIKey    string `json:"apiKey"`
@@ -40,7 +45,7 @@ func ListDomains(cfg Config) ([]Domain, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +101,7 @@ func ListEmails(cfg Config, limit int) ([]Email, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +169,7 @@ func Send(cfg Config, input SendInput) (string, error) {
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
