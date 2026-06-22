@@ -3,11 +3,18 @@
   "vcs": {
     "enabled": true,
     "clientKind": "git",
-    "useIgnoreFile": true
+    "useIgnoreFile": false
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!src/wailsjs"]
+    "includes": [
+      "**",
+      "!src/wailsjs",
+      "!src/routeTree.gen.ts",
+      "!bindings",
+      "!dist",
+      "!.tanstack"
+    ]
   },
   "formatter": {
     "enabled": true,
