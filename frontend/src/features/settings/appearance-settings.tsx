@@ -211,7 +211,7 @@ export function AppearanceSettings() {
               <div className="flex h-8 w-full items-center justify-center">
                 <ThinkingStylePreview styleKey={s.key as ThinkingStyleKey} accent={accent} />
               </div>
-              <span>{s.labelFr}</span>
+              <span>{t(`settings.appearance.thinkingStyles.${s.key}`)}</span>
             </button>
           ))}
         </div>
@@ -233,7 +233,7 @@ export function AppearanceSettings() {
               <div className="flex h-8 w-full items-center justify-center">
                 <CardAnimationPreview styleKey={s.key as CardAnimationStyleKey} />
               </div>
-              <span>{s.labelFr}</span>
+              <span>{t(`settings.appearance.cardStyles.${s.key}`)}</span>
             </button>
           ))}
         </div>
@@ -279,6 +279,8 @@ function CardAnimationPreview({ styleKey }: { styleKey: CardAnimationStyleKey })
 }
 
 function ThinkingStylePreview({ styleKey, accent }: { styleKey: ThinkingStyleKey; accent: boolean }) {
+  const { t } = useTranslation();
+  const label = t('settings.appearance.thinkingPreview');
   switch (styleKey) {
     case 'spinner':
       return (
@@ -286,14 +288,14 @@ function ThinkingStylePreview({ styleKey, accent }: { styleKey: ThinkingStyleKey
           <svg className="size-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <path d="M21 12a9 9 0 1 1-6.219-8.56" />
           </svg>
-          <span>Réflexion</span>
+          <span>{label}</span>
         </span>
       );
     case 'pill':
       return (
         <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs', accent ? 'bg-primary/10 text-primary/80' : 'bg-muted/60 text-muted-foreground/70')}>
           <span className={cn('size-1.5 animate-pulse rounded-full', accent ? 'bg-primary' : 'bg-muted-foreground/60')} />
-          thinking
+          {label}
         </span>
       );
     case 'bar':
@@ -322,7 +324,7 @@ function ThinkingStylePreview({ styleKey, accent }: { styleKey: ThinkingStyleKey
     case 'typing':
       return (
         <span className={cn('inline-flex items-center gap-1 text-xs', accent ? 'text-primary/70' : 'text-muted-foreground/70')}>
-          <span>Réflexion</span>
+          <span>{label}</span>
           <span className="inline-block h-3 w-px bg-current" style={{ animation: 'thinking-cursor 1s steps(1) infinite' }} />
         </span>
       );
