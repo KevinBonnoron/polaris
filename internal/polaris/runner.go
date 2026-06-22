@@ -115,13 +115,20 @@ func (runner *Runner) consumeAwaiting(agentID string) bool {
 	return false
 }
 
-// stopForAwait kills the agent's subprocess once a question/plan has been
-// surfaced, so claude-code can't keep looping on an unanswerable tool call. The
-// session id is persisted, so the answer is delivered later via a resume.
+// stopForAwait halts the agent's work once a question/plan has been surfaced, so
+// the backend can't keep running operations on an unanswerable tool call. A
+// persistent claude session is interrupted (not killed) so the answer can be
+// delivered as the next turn on the live process; a one-shot subprocess is
+// killed and its answer delivered later via a resume.
 func (runner *Runner) stopForAwait(agentID string) {
 	runner.mu.Lock()
+	cs := runner.claude[agentID]
 	proc, ok := runner.procs[agentID]
 	runner.mu.Unlock()
+	if cs != nil {
+		cs.interruptForAwait()
+		return
+	}
 	if !ok || proc.cmd.Process == nil {
 		return
 	}

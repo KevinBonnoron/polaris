@@ -1,12 +1,51 @@
 package polaris
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type bufWriteCloser struct{ buf *bytes.Buffer }
+
+func (b bufWriteCloser) Write(p []byte) (int, error) { return b.buf.Write(p) }
+func (b bufWriteCloser) Close() error                { return nil }
+
+// TestStopForAwaitInterruptsClaudeSession verifies that surfacing a question on a
+// persistent claude session interrupts the in-flight turn (so the model stops
+// running operations while it waits) without killing the process — the answer is
+// delivered later as the next turn on the same live session. Before the fix
+// stopForAwait only looked at the one-shot procs map, so the persistent session
+// kept working straight through the question.
+func TestStopForAwaitInterruptsClaudeSession(t *testing.T) {
+	r := NewRunner(t.TempDir(), t.TempDir())
+	var buf bytes.Buffer
+	cs := &claudeSession{
+		runner:  r,
+		agentID: "a",
+		stdin:   bufWriteCloser{&buf},
+		running: true,
+	}
+	r.mu.Lock()
+	r.claude["a"] = cs
+	r.mu.Unlock()
+
+	r.stopForAwait("a")
+
+	if cs.running {
+		t.Error("running should be cleared so a superseding message sends immediately")
+	}
+	if cs.closed {
+		t.Error("session must stay alive (not closed) so the answer can be the next turn")
+	}
+	out := buf.String()
+	if !strings.Contains(out, "control_request") || !strings.Contains(out, "interrupt") {
+		t.Errorf("expected an interrupt control_request on stdin, got %q", out)
+	}
+}
 
 // TestClaudeSessionTurnAccounting verifies the per-turn stat folding the
 // persistent session does on each result event: the stream-json `usage` block is
