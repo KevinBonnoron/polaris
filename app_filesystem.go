@@ -101,14 +101,61 @@ func (app *App) ReadFileBase64(path string) (string, error) {
 	return base64.StdEncoding.EncodeToString(data), nil
 }
 
+// resolveInProject joins rel onto the project root and guarantees the result
+// stays inside it. filepath.Join already cleans "..", but a plain HasPrefix
+// check would also accept a sibling sharing the prefix (e.g. base "/a/proj"
+// vs "/a/proj-secrets"), so the boundary is enforced with a trailing separator.
+func resolveInProject(projectPath, rel string) (base, full string, err error) {
+	base, err = filepath.Abs(projectPath)
+	if err != nil {
+		return "", "", err
+	}
+	full = filepath.Join(base, filepath.FromSlash(rel))
+	if full != base && !strings.HasPrefix(full, base+string(os.PathSeparator)) {
+		return "", "", fmt.Errorf("path outside project")
+	}
+	// Re-check after resolving symlinks: a symlinked entry inside the project
+	// could otherwise point os.ReadDir/ReadFile/WriteFile outside the boundary.
+	realBase, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", "", err
+	}
+	realFull, err := evalSymlinksAllowingMissing(full)
+	if err != nil {
+		return "", "", err
+	}
+	if realFull != realBase && !strings.HasPrefix(realFull, realBase+string(os.PathSeparator)) {
+		return "", "", fmt.Errorf("path outside project")
+	}
+	return base, full, nil
+}
+
+// evalSymlinksAllowingMissing resolves symlinks in p, tolerating a path whose
+// final components do not exist yet (e.g. a file WriteProjectFile is about to
+// create): it resolves the deepest existing ancestor and re-appends the rest.
+func evalSymlinksAllowingMissing(p string) (string, error) {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved, nil
+	}
+	var missing []string
+	cur := p
+	for {
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return "", fmt.Errorf("cannot resolve %q", p)
+		}
+		missing = append([]string{filepath.Base(cur)}, missing...)
+		if resolved, err := filepath.EvalSymlinks(parent); err == nil {
+			return filepath.Join(append([]string{resolved}, missing...)...), nil
+		}
+		cur = parent
+	}
+}
+
 func (app *App) ListProjectDir(projectPath, relDir string) ([]CodeEntry, error) {
-	base, err := filepath.Abs(projectPath)
+	_, dir, err := resolveInProject(projectPath, relDir)
 	if err != nil {
 		return nil, err
-	}
-	dir := filepath.Join(base, filepath.FromSlash(relDir))
-	if !strings.HasPrefix(dir, base) {
-		return nil, fmt.Errorf("path outside project")
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -133,13 +180,9 @@ func (app *App) ListProjectDir(projectPath, relDir string) ([]CodeEntry, error) 
 }
 
 func (app *App) ReadProjectFile(projectPath, relPath string) (string, error) {
-	base, err := filepath.Abs(projectPath)
+	_, full, err := resolveInProject(projectPath, relPath)
 	if err != nil {
 		return "", err
-	}
-	full := filepath.Join(base, filepath.FromSlash(relPath))
-	if !strings.HasPrefix(full, base) {
-		return "", fmt.Errorf("path outside project")
 	}
 	info, err := os.Stat(full)
 	if err != nil {
@@ -157,13 +200,9 @@ func (app *App) ReadProjectFile(projectPath, relPath string) (string, error) {
 }
 
 func (app *App) WriteProjectFile(projectPath, relPath, content string) error {
-	base, err := filepath.Abs(projectPath)
+	_, full, err := resolveInProject(projectPath, relPath)
 	if err != nil {
 		return err
-	}
-	full := filepath.Join(base, filepath.FromSlash(relPath))
-	if !strings.HasPrefix(full, base) {
-		return fmt.Errorf("path outside project")
 	}
 	return os.WriteFile(full, []byte(content), 0644)
 }
