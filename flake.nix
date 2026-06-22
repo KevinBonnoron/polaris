@@ -77,14 +77,19 @@
         outputHash = "sha256-f0IsVR04C4bBUHjUnqzGo5ZJUmKDVjPAUXKMniEAms4=";
       };
 
+      # Under GTK4 the window/taskbar icon comes from desktop integration, not
+      # the embedded bytes (GTK4 dropped gtk_window_set_icon). Wails sets the GTK
+      # application id to "org.wails.<lowercased name>", so the desktop file, its
+      # Icon= and the WMClass must all match org.wails.polaris for the desktop
+      # environment to associate the running window with the installed icon.
       desktopItem = pkgs.makeDesktopItem {
-        name = "polaris";
+        name = "org.wails.polaris";
         desktopName = "Polaris";
         exec = "polaris";
-        icon = "polaris";
+        icon = "org.wails.polaris";
         comment = "Polaris";
         categories = [ "Development" ];
-        startupWMClass = "Polaris";
+        startupWMClass = "org.wails.polaris";
       };
     in
     {
@@ -134,7 +139,7 @@
           postInstall = ''
             for size in 16 24 32 48 64 128 256 512; do
               install -Dm644 build/appicon.png \
-                $out/share/icons/hicolor/''${size}x''${size}/apps/polaris.png
+                $out/share/icons/hicolor/''${size}x''${size}/apps/org.wails.polaris.png
             done
           '';
 
