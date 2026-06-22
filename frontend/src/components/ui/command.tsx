@@ -21,7 +21,7 @@ function CommandInput({ className, ...props }: React.ComponentProps<typeof Comma
 
 function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
   return (
-    <ScrollArea className="max-h-[300px]">
+    <ScrollArea className="max-h-[300px]" viewportProps={{ className: 'max-h-[300px]' }}>
       <CommandPrimitive.List data-slot="command-list" className={cn('scroll-py-1', className)} {...props} />
     </ScrollArea>
   );
