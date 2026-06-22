@@ -1,7 +1,7 @@
 // Package dokploystore caches recent deployments for a Dokploy (instance,
 // project-filter) tuple and emits diffs when deployments reach a terminal
 // state. Multiple polaris projects watching the same instance + filter share a
-// single poll loop, mirroring ghstore / ticketsstore / sentrystore.
+// single poll loop (see internal/store/pollstore).
 package dokploystore
 
 import (
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/dokploy"
+	"github.com/KevinBonnoron/polaris/internal/store/pollstore"
 )
 
 // Key identifies one watched (instance, project-filter) tuple. Projects is the
@@ -63,264 +64,47 @@ type Diff struct {
 
 type Subscriber func(Diff)
 
-type Store struct {
-	mu     sync.RWMutex
-	states map[string]*state
+type driver struct{}
 
-	subMu sync.RWMutex
-	subs  map[int]Subscriber
-	subID int
+func (driver) KeyString(k Key) string      { return k.String() }
+func (driver) HasData(s Snapshot) bool     { return !s.FetchedAt.IsZero() }
+func (driver) Persist(Key, Snapshot) error { return nil }
 
-	configMu sync.RWMutex
-	configs  map[string]Config
+func (driver) Refresh(k Key, cfg Config, before Snapshot) (Snapshot, Diff, error) {
+	after := fetchAll(cfg)
+	return after, Diff{
+		Key:                 k,
+		Before:              before,
+		After:               after,
+		DeploymentsFinished: finishedDeployments(before, after),
+	}, nil
 }
 
-type state struct {
-	mu      sync.Mutex
-	snap    Snapshot
-	refs    map[string]time.Duration
-	cancel  context.CancelFunc
-	current time.Duration
-	flight  chan struct{}
+type Store struct {
+	*pollstore.Store[Key, Config, Snapshot, Diff]
 }
 
 func New() *Store {
-	return &Store{
-		states:  map[string]*state{},
-		subs:    map[int]Subscriber{},
-		configs: map[string]Config{},
-	}
+	return &Store{pollstore.New[Key, Config, Snapshot, Diff]("dokploystore", driver{}, nil)}
 }
 
-func (store *Store) getOrCreateState(k string) *state {
-	store.mu.RLock()
-	st, ok := store.states[k]
-	store.mu.RUnlock()
-	if ok {
-		return st
-	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if st, ok := store.states[k]; ok {
-		return st
-	}
-	st = &state{refs: map[string]time.Duration{}}
-	store.states[k] = st
-	return st
-}
-
-func (store *Store) setConfig(k Key, cfg Config) {
-	store.configMu.Lock()
-	store.configs[k.String()] = cfg
-	store.configMu.Unlock()
-}
-
-func (store *Store) getConfig(k Key) (Config, bool) {
-	store.configMu.RLock()
-	defer store.configMu.RUnlock()
-	c, ok := store.configs[k.String()]
-	return c, ok
+// GetSnapshot returns the cached snapshot, fetching inline if cold.
+func (s *Store) GetSnapshot(ctx context.Context, key Key, cfg Config) (Snapshot, error) {
+	return s.Get(ctx, key, cfg)
 }
 
 // Reload registers the config and forces a fresh poll, returning the resulting
 // snapshot. It is the UI read path: it shares the store cache (and in-flight
 // requests) with automation polling, so the dashboard never double-calls the
-// Dokploy API. A concurrent automation tick is deduplicated by Refresh.
-func (store *Store) Reload(ctx context.Context, cfg Config) (Snapshot, error) {
+// Dokploy API.
+func (s *Store) Reload(ctx context.Context, cfg Config) (Snapshot, error) {
 	k := KeyFor(cfg)
-	store.setConfig(k, cfg)
-	if err := store.Refresh(ctx, k); err != nil {
+	s.SetConfig(k, cfg)
+	if err := s.Refresh(ctx, k); err != nil {
 		return Snapshot{}, err
 	}
-	st := store.getOrCreateState(k.String())
-	st.mu.Lock()
-	out := st.snap
-	st.mu.Unlock()
-	return out, nil
-}
-
-// GetSnapshot returns the cached snapshot, fetching inline if cold.
-func (store *Store) GetSnapshot(ctx context.Context, key Key, cfg Config) (Snapshot, error) {
-	store.setConfig(key, cfg)
-	state := store.getOrCreateState(key.String())
-	state.mu.Lock()
-	cached := state.snap
-	hasData := !cached.FetchedAt.IsZero()
-	state.mu.Unlock()
-	if hasData {
-		return cached, nil
-	}
-
-	if err := store.Refresh(ctx, key); err != nil {
-		return Snapshot{}, err
-	}
-
-	state.mu.Lock()
-	out := state.snap
-	state.mu.Unlock()
-	return out, nil
-}
-
-func (store *Store) Refresh(ctx context.Context, k Key) error {
-	cfg, ok := store.getConfig(k)
-	if !ok {
-		return fmt.Errorf("dokploystore: no config registered for %s", k)
-	}
-
-	state := store.getOrCreateState(k.String())
-	state.mu.Lock()
-	if state.flight != nil {
-		ch := state.flight
-		state.mu.Unlock()
-		select {
-		case <-ch:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	state.flight = make(chan struct{})
-	before := state.snap
-	state.mu.Unlock()
-
-	defer func() {
-		state.mu.Lock()
-		close(state.flight)
-		state.flight = nil
-		state.mu.Unlock()
-	}()
-
-	after := fetchAll(cfg)
-
-	state.mu.Lock()
-	state.snap = after
-	state.mu.Unlock()
-
-	store.notify(Diff{
-		Key:                 k,
-		Before:              before,
-		After:               after,
-		DeploymentsFinished: finishedDeployments(before, after),
-	})
-	return nil
-}
-
-func (store *Store) Register(ctx context.Context, k Key, cfg Config, refKey string, interval time.Duration) {
-	if interval < 10*time.Second {
-		interval = 10 * time.Second
-	}
-	store.setConfig(k, cfg)
-	st := store.getOrCreateState(k.String())
-
-	st.mu.Lock()
-	st.refs[refKey] = interval
-	next := minInterval(st.refs)
-	needRestart := st.cancel == nil || next != st.current
-	st.mu.Unlock()
-
-	if needRestart {
-		store.restartTicker(ctx, k, st, next)
-	}
-}
-
-func (store *Store) Unregister(k Key, refKey string) {
-	store.mu.RLock()
-	st, ok := store.states[k.String()]
-	store.mu.RUnlock()
-	if !ok {
-		return
-	}
-	st.mu.Lock()
-	delete(st.refs, refKey)
-	empty := len(st.refs) == 0
-	cancel := st.cancel
-	if empty {
-		st.cancel = nil
-		st.current = 0
-	}
-	next := minInterval(st.refs)
-	needRestart := !empty && next != st.current
-	st.mu.Unlock()
-
-	if empty && cancel != nil {
-		cancel()
-		return
-	}
-	if needRestart {
-		store.restartTicker(context.Background(), k, st, next)
-	}
-}
-
-func (store *Store) restartTicker(ctx context.Context, k Key, st *state, interval time.Duration) {
-	st.mu.Lock()
-	if st.cancel != nil {
-		st.cancel()
-	}
-	tickerCtx, cancel := context.WithCancel(ctx)
-	st.cancel = cancel
-	st.current = interval
-	st.mu.Unlock()
-
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-tickerCtx.Done():
-				return
-			case <-t.C:
-				_ = store.Refresh(tickerCtx, k)
-			}
-		}
-	}()
-}
-
-func minInterval(refs map[string]time.Duration) time.Duration {
-	var min time.Duration
-	for _, d := range refs {
-		if min == 0 || d < min {
-			min = d
-		}
-	}
-	return min
-}
-
-func (store *Store) Subscribe(sub Subscriber) func() {
-	store.subMu.Lock()
-	store.subID++
-	id := store.subID
-	store.subs[id] = sub
-	store.subMu.Unlock()
-	return func() {
-		store.subMu.Lock()
-		delete(store.subs, id)
-		store.subMu.Unlock()
-	}
-}
-
-func (store *Store) notify(d Diff) {
-	store.subMu.RLock()
-	subs := make([]Subscriber, 0, len(store.subs))
-	for _, sub := range store.subs {
-		subs = append(subs, sub)
-	}
-	store.subMu.RUnlock()
-	for _, sub := range subs {
-		sub(d)
-	}
-}
-
-func (store *Store) Stop() {
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	for _, st := range store.states {
-		st.mu.Lock()
-		if st.cancel != nil {
-			st.cancel()
-			st.cancel = nil
-		}
-		st.mu.Unlock()
-	}
+	snap, _ := s.Cached(k)
+	return snap, nil
 }
 
 // fetchAll resolves the project tree, keeps the projects matching the filter

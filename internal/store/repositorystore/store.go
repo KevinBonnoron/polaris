@@ -1,8 +1,9 @@
 // Package repositorystore is the single source of truth for repository hosting
 // data (pull requests, issues, recent workflow runs). All callers — the Wails
-// HTTP-style endpoints feeding the UI and the AutomationManager — read
-// through this store instead of calling the repository provider directly, so a
-// single poll services every consumer of a given (owner, repo).
+// HTTP-style endpoints feeding the UI and the AutomationManager — read through
+// this store instead of calling the repository provider directly, so a single
+// poll services every consumer of a given (owner, repo). The poll/diff engine
+// is shared with the other provider caches (see internal/store/pollstore).
 package repositorystore
 
 import (
@@ -15,10 +16,11 @@ import (
 	"time"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/repository"
+	"github.com/KevinBonnoron/polaris/internal/store/pollstore"
 )
 
 // Snapshot is the cached view of one repo at a point in time. Empty slices
-// mean "fetched, nothing found"; a nil snapshot means "never fetched".
+// mean "fetched, nothing found"; a zero FetchedAt means "never fetched".
 type Snapshot struct {
 	PRs       []repository.PullRequest
 	Issues    []repository.Issue
@@ -29,8 +31,8 @@ type Snapshot struct {
 	PartialErr error
 }
 
-// Diff is what subscribers receive after a refresh. Slices contain the
-// items that changed between Before and After.
+// Diff is what subscribers receive after a refresh. Slices contain the items
+// that changed between Before and After.
 type Diff struct {
 	Owner, Repo string
 	Before      Snapshot
@@ -43,21 +45,20 @@ type Diff struct {
 	IssuesAssigned []IssueAssignment
 	RunsAdded      []repository.WorkflowRun
 	// RunsCompleted is the subset of runs whose status just transitioned to
-	// "completed" between Before and After. Useful for triggers that care
-	// about terminal CI outcomes (pr_build_failed, pr_build_success).
+	// "completed" between Before and After. Useful for triggers that care about
+	// terminal CI outcomes (pr_build_failed, pr_build_success).
 	RunsCompleted []repository.WorkflowRun
 }
 
-// IssueAssignment records that `Assignee` newly appears on `Issue` (was not
-// in the previous snapshot's assignees list).
+// IssueAssignment records that Assignee newly appears on Issue (was not in the
+// previous snapshot's assignees list).
 type IssueAssignment struct {
 	Issue    repository.Issue
 	Assignee string
 }
 
 // Subscriber receives every diff after a successful refresh. Implementations
-// must not block — the store calls them on its own refresh goroutine and a
-// slow subscriber stalls the next tick.
+// must not block — the store calls them on its own refresh goroutine.
 type Subscriber func(Diff)
 
 // Persistence persists snapshots across process restarts. Nil persistence is
@@ -67,84 +68,67 @@ type Persistence interface {
 	Save(owner, repo string, snap Snapshot) error
 }
 
-type Store struct {
-	mu      sync.RWMutex
-	states  map[string]*state
+// key identifies a watched repository. There are no per-key credentials: the
+// repository provider reads them from the environment, so the pollstore config
+// type is empty.
+type key struct {
+	Owner, Repo string
+}
+
+type driver struct {
 	persist Persistence
-
-	subMu sync.RWMutex
-	subs  map[int]Subscriber
-	subID int
 }
 
-type state struct {
-	mu      sync.Mutex
-	snap    Snapshot
-	refs    map[string]time.Duration
-	cancel  context.CancelFunc
-	current time.Duration
-	flight  chan struct{}
+func (driver) KeyString(k key) string  { return k.Owner + "/" + k.Repo }
+func (driver) HasData(s Snapshot) bool { return !s.FetchedAt.IsZero() }
+
+func (d driver) Persist(k key, snap Snapshot) error {
+	if d.persist != nil {
+		return d.persist.Save(k.Owner, k.Repo, snap)
+	}
+	return nil
 }
 
-func key(owner, repo string) string {
-	return owner + "/" + repo
+func (driver) Refresh(k key, _ struct{}, before Snapshot) (Snapshot, Diff, error) {
+	after, err := fetchAll(k.Owner, k.Repo)
+	if err != nil && after.FetchedAt.IsZero() {
+		return Snapshot{}, Diff{}, err
+	}
+	return after, Diff{
+		Owner:          k.Owner,
+		Repo:           k.Repo,
+		Before:         before,
+		After:          after,
+		PRsOpened:      newPRs(before.PRs, after.PRs),
+		PRsClosed:      removedPRs(before.PRs, after.PRs),
+		PRsUpdated:     updatedPRs(before.PRs, after.PRs),
+		IssuesAdded:    newIssues(before.Issues, after.Issues),
+		IssuesAssigned: newAssignments(before.Issues, after.Issues),
+		RunsAdded:      newRuns(before.Runs, after.Runs),
+		RunsCompleted:  completedRuns(before.Runs, after.Runs),
+	}, nil
+}
+
+type Store struct {
+	*pollstore.Store[key, struct{}, Snapshot, Diff]
 }
 
 func New(persist Persistence) *Store {
-	s := &Store{
-		states:  map[string]*state{},
-		persist: persist,
-		subs:    map[int]Subscriber{},
-	}
+	var preloaded map[string]Snapshot
 	if persist != nil {
 		if loaded, err := persist.Load(); err == nil {
-			for k, snap := range loaded {
-				s.states[k] = &state{snap: snap, refs: map[string]time.Duration{}}
-			}
+			preloaded = loaded
 		}
 	}
-	return s
+	return &Store{pollstore.New[key, struct{}, Snapshot, Diff]("repositorystore", driver{persist: persist}, preloaded)}
 }
 
-func (s *Store) getOrCreateState(k string) *state {
-	s.mu.RLock()
-	st, ok := s.states[k]
-	s.mu.RUnlock()
-	if ok {
-		return st
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if st, ok := s.states[k]; ok {
-		return st
-	}
-	st = &state{refs: map[string]time.Duration{}}
-	s.states[k] = st
-	return st
-}
-
-// GetSnapshot returns the cached snapshot. If nothing's cached yet it
-// triggers a refresh inline and waits for it.
+// GetSnapshot returns the cached snapshot, fetching inline if cold.
 func (s *Store) GetSnapshot(ctx context.Context, owner, repo string) (Snapshot, error) {
-	k := key(owner, repo)
-	st := s.getOrCreateState(k)
-	st.mu.Lock()
-	cached := st.snap
-	hasData := !cached.FetchedAt.IsZero()
-	st.mu.Unlock()
-	if hasData {
-		return cached, nil
-	}
-	if err := s.Refresh(ctx, owner, repo); err != nil {
-		return Snapshot{}, err
-	}
-	st.mu.Lock()
-	out := st.snap
-	st.mu.Unlock()
-	return out, nil
+	return s.Get(ctx, key{owner, repo}, struct{}{})
 }
 
-// GetPRs is a sugar over GetSnapshot for callers that only need PRs.
+// GetPRs is sugar over GetSnapshot for callers that only need PRs.
 func (s *Store) GetPRs(ctx context.Context, owner, repo string) ([]repository.PullRequest, error) {
 	snap, err := s.GetSnapshot(ctx, owner, repo)
 	if err != nil {
@@ -169,193 +153,26 @@ func (s *Store) GetRuns(ctx context.Context, owner, repo string) ([]repository.W
 	return snap.Runs, nil
 }
 
-// Refresh forces a fresh fetch and emits a diff to subscribers. Concurrent
-// calls for the same key coalesce: the second caller waits for the first
-// fetch to finish instead of issuing a duplicate API call.
+// Refresh forces a fresh fetch and emits a diff to subscribers.
 func (s *Store) Refresh(ctx context.Context, owner, repo string) error {
-	k := key(owner, repo)
-	st := s.getOrCreateState(k)
-
-	st.mu.Lock()
-	if st.flight != nil {
-		ch := st.flight
-		st.mu.Unlock()
-		select {
-		case <-ch:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	st.flight = make(chan struct{})
-	before := st.snap
-	st.mu.Unlock()
-
-	defer func() {
-		st.mu.Lock()
-		close(st.flight)
-		st.flight = nil
-		st.mu.Unlock()
-	}()
-
-	after, err := fetchAll(owner, repo)
-	if err != nil && after.FetchedAt.IsZero() {
-		return err
-	}
-
-	st.mu.Lock()
-	st.snap = after
-	st.mu.Unlock()
-
-	if s.persist != nil {
-		_ = s.persist.Save(owner, repo, after)
-	}
-
-	s.notify(Diff{
-		Owner:          owner,
-		Repo:           repo,
-		Before:         before,
-		After:          after,
-		PRsOpened:      newPRs(before.PRs, after.PRs),
-		PRsClosed:      removedPRs(before.PRs, after.PRs),
-		PRsUpdated:     updatedPRs(before.PRs, after.PRs),
-		IssuesAdded:    newIssues(before.Issues, after.Issues),
-		IssuesAssigned: newAssignments(before.Issues, after.Issues),
-		RunsAdded:      newRuns(before.Runs, after.Runs),
-		RunsCompleted:  completedRuns(before.Runs, after.Runs),
-	})
-	return nil
+	k := key{owner, repo}
+	s.SetConfig(k, struct{}{})
+	return s.Store.Refresh(ctx, k)
 }
 
-// Register signals that refKey wants this repo polled at interval. The
-// effective polling cadence is the minimum across all live registrations.
-// Calling Register a second time with the same refKey updates that
-// registration's interval.
+// Register signals that refKey wants this repo polled at interval.
 func (s *Store) Register(ctx context.Context, owner, repo, refKey string, interval time.Duration) {
-	if interval < 10*time.Second {
-		interval = 10 * time.Second
-	}
-	k := key(owner, repo)
-	st := s.getOrCreateState(k)
-
-	st.mu.Lock()
-	st.refs[refKey] = interval
-	next := minInterval(st.refs)
-	needRestart := st.cancel == nil || next != st.current
-	st.mu.Unlock()
-
-	if needRestart {
-		s.restartTicker(ctx, owner, repo, st, next)
-	}
+	s.Store.Register(ctx, key{owner, repo}, struct{}{}, refKey, interval)
 }
 
 func (s *Store) Unregister(owner, repo, refKey string) {
-	k := key(owner, repo)
-	s.mu.RLock()
-	st, ok := s.states[k]
-	s.mu.RUnlock()
-	if !ok {
-		return
-	}
-	st.mu.Lock()
-	delete(st.refs, refKey)
-	empty := len(st.refs) == 0
-	cancel := st.cancel
-	if empty {
-		st.cancel = nil
-		st.current = 0
-	}
-	next := minInterval(st.refs)
-	needRestart := !empty && next != st.current
-	st.mu.Unlock()
-
-	if empty && cancel != nil {
-		cancel()
-		return
-	}
-	if needRestart {
-		s.restartTicker(context.Background(), owner, repo, st, next)
-	}
-}
-
-func (s *Store) restartTicker(ctx context.Context, owner, repo string, st *state, interval time.Duration) {
-	st.mu.Lock()
-	if st.cancel != nil {
-		st.cancel()
-	}
-	tickerCtx, cancel := context.WithCancel(ctx)
-	st.cancel = cancel
-	st.current = interval
-	st.mu.Unlock()
-
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-tickerCtx.Done():
-				return
-			case <-t.C:
-				_ = s.Refresh(tickerCtx, owner, repo)
-			}
-		}
-	}()
-}
-
-func minInterval(refs map[string]time.Duration) time.Duration {
-	var min time.Duration
-	for _, d := range refs {
-		if min == 0 || d < min {
-			min = d
-		}
-	}
-	return min
-}
-
-// Subscribe registers a handler called after every successful refresh.
-// Returns an unsubscribe function. Handlers must not block.
-func (s *Store) Subscribe(sub Subscriber) func() {
-	s.subMu.Lock()
-	s.subID++
-	id := s.subID
-	s.subs[id] = sub
-	s.subMu.Unlock()
-	return func() {
-		s.subMu.Lock()
-		delete(s.subs, id)
-		s.subMu.Unlock()
-	}
-}
-
-func (s *Store) notify(d Diff) {
-	s.subMu.RLock()
-	subs := make([]Subscriber, 0, len(s.subs))
-	for _, sub := range s.subs {
-		subs = append(subs, sub)
-	}
-	s.subMu.RUnlock()
-	for _, sub := range subs {
-		sub(d)
-	}
-}
-
-// Stop cancels every active ticker. Safe to call multiple times.
-func (s *Store) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, st := range s.states {
-		st.mu.Lock()
-		if st.cancel != nil {
-			st.cancel()
-			st.cancel = nil
-		}
-		st.mu.Unlock()
-	}
+	s.Store.Unregister(key{owner, repo}, refKey)
 }
 
 // fetchAll calls the three repository endpoints in parallel and bundles the
-// result into a single Snapshot. A failure on one of the three doesn't kill
-// the snapshot — the field stays nil and PartialErr carries the cause.
+// result into a single Snapshot. A failure on one of the three doesn't kill the
+// snapshot — the field stays nil and PartialErr carries the cause. Only a total
+// failure (all three) returns an error.
 func fetchAll(owner, repo string) (Snapshot, error) {
 	var (
 		wg   sync.WaitGroup

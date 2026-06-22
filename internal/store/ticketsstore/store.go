@@ -1,16 +1,16 @@
 // Package ticketsstore caches tickets sprint snapshots keyed by the tuple
-// (baseUrl, projectKey, boardId). Multiple polaris projects pointing at
-// the same board share a single poll loop.
+// (baseUrl, projectKey, boardId). Multiple polaris projects pointing at the
+// same board share a single poll loop (see internal/store/pollstore).
 package ticketsstore
 
 import (
 	"context"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/tickets"
+	"github.com/KevinBonnoron/polaris/internal/store/pollstore"
 )
 
 type Key struct {
@@ -60,273 +60,54 @@ type Persistence interface {
 	Save(k Key, snap Snapshot) error
 }
 
-type Store struct {
-	mu      sync.RWMutex
-	states  map[string]*state
+type driver struct {
 	persist Persistence
-
-	subMu sync.RWMutex
-	subs  map[int]Subscriber
-	subID int
-
-	// configs maps key → the tickets.Config the store should use when fetching.
-	// Set on Register and consulted on every refresh.
-	configMu sync.RWMutex
-	configs  map[string]tickets.Config
 }
 
-type state struct {
-	mu      sync.Mutex
-	snap    Snapshot
-	refs    map[string]time.Duration
-	cancel  context.CancelFunc
-	current time.Duration
-	flight  chan struct{}
+func (driver) KeyString(k Key) string { return k.String() }
+
+// HasData treats a failed fetch as cold so Get re-fetches instead of serving an
+// error snapshot as cache.
+func (driver) HasData(s Snapshot) bool { return !s.FetchedAt.IsZero() && s.Err == nil }
+
+func (d driver) Persist(k Key, snap Snapshot) error {
+	// Never overwrite the last good cache with a failed fetch.
+	if snap.Err != nil || d.persist == nil {
+		return nil
+	}
+	return d.persist.Save(k, snap)
 }
 
-func New(persist Persistence) *Store {
-	s := &Store{
-		states:  map[string]*state{},
-		persist: persist,
-		subs:    map[int]Subscriber{},
-		configs: map[string]tickets.Config{},
-	}
-	if persist != nil {
-		if loaded, err := persist.Load(); err == nil {
-			for k, snap := range loaded {
-				s.states[k] = &state{snap: snap, refs: map[string]time.Duration{}}
-			}
-		}
-	}
-	return s
-}
-
-func (s *Store) getOrCreateState(k string) *state {
-	s.mu.RLock()
-	st, ok := s.states[k]
-	s.mu.RUnlock()
-	if ok {
-		return st
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if st, ok := s.states[k]; ok {
-		return st
-	}
-	st = &state{refs: map[string]time.Duration{}}
-	s.states[k] = st
-	return st
-}
-
-// GetSnapshot returns the cached sprint snapshot, fetching inline if the
-// cache is cold. cfg is consulted only when no cached config exists for the
-// key (e.g. cold start before any Register call).
-func (s *Store) GetSnapshot(ctx context.Context, k Key, cfg tickets.Config) (Snapshot, error) {
-	s.setConfig(k, cfg)
-	st := s.getOrCreateState(k.String())
-	st.mu.Lock()
-	cached := st.snap
-	hasData := !cached.FetchedAt.IsZero()
-	st.mu.Unlock()
-	if hasData {
-		return cached, nil
-	}
-	if err := s.Refresh(ctx, k); err != nil {
-		return Snapshot{}, err
-	}
-	st.mu.Lock()
-	out := st.snap
-	st.mu.Unlock()
-	return out, nil
-}
-
-func (s *Store) setConfig(k Key, cfg tickets.Config) {
-	s.configMu.Lock()
-	s.configs[k.String()] = cfg
-	s.configMu.Unlock()
-}
-
-// SetConfig records the credentials used to fetch this key. Callers
-// that drive Refresh without going through Register (e.g. one-shot reads
-// from a Wails endpoint) must call this first.
-func (s *Store) SetConfig(k Key, cfg tickets.Config) {
-	s.setConfig(k, cfg)
-}
-
-func (s *Store) getConfig(k Key) (tickets.Config, bool) {
-	s.configMu.RLock()
-	defer s.configMu.RUnlock()
-	c, ok := s.configs[k.String()]
-	return c, ok
-}
-
-func (s *Store) Refresh(ctx context.Context, k Key) error {
-	cfg, ok := s.getConfig(k)
-	if !ok {
-		return fmt.Errorf("ticketsstore: no config registered for %s", k)
-	}
-	st := s.getOrCreateState(k.String())
-
-	st.mu.Lock()
-	if st.flight != nil {
-		ch := st.flight
-		st.mu.Unlock()
-		select {
-		case <-ch:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	st.flight = make(chan struct{})
-	before := st.snap
-	st.mu.Unlock()
-
-	defer func() {
-		st.mu.Lock()
-		close(st.flight)
-		st.flight = nil
-		st.mu.Unlock()
-	}()
-
+func (driver) Refresh(k Key, cfg tickets.Config, before Snapshot) (Snapshot, Diff, error) {
 	sprint, err := tickets.FetchActiveSprint(cfg)
 	after := Snapshot{Sprint: sprint, FetchedAt: time.Now(), Err: err}
-
-	st.mu.Lock()
-	st.snap = after
-	st.mu.Unlock()
-
-	if s.persist != nil {
-		_ = s.persist.Save(k, after)
-	}
-
-	s.notify(Diff{
+	return after, Diff{
 		Key:                k,
 		Before:             before,
 		After:              after,
 		IssuesTransitioned: transitions(before, after),
 		IssuesReassigned:   reassignments(before, after),
 		IssuesAdded:        addedIssues(before, after),
-	})
-	return nil
+	}, nil
 }
 
-func (s *Store) Register(ctx context.Context, k Key, cfg tickets.Config, refKey string, interval time.Duration) {
-	if interval < 10*time.Second {
-		interval = 10 * time.Second
-	}
-	s.setConfig(k, cfg)
-	st := s.getOrCreateState(k.String())
-
-	st.mu.Lock()
-	st.refs[refKey] = interval
-	next := minInterval(st.refs)
-	needRestart := st.cancel == nil || next != st.current
-	st.mu.Unlock()
-
-	if needRestart {
-		s.restartTicker(ctx, k, st, next)
-	}
+type Store struct {
+	*pollstore.Store[Key, tickets.Config, Snapshot, Diff]
 }
 
-func (s *Store) Unregister(k Key, refKey string) {
-	s.mu.RLock()
-	st, ok := s.states[k.String()]
-	s.mu.RUnlock()
-	if !ok {
-		return
-	}
-	st.mu.Lock()
-	delete(st.refs, refKey)
-	empty := len(st.refs) == 0
-	cancel := st.cancel
-	if empty {
-		st.cancel = nil
-		st.current = 0
-	}
-	next := minInterval(st.refs)
-	needRestart := !empty && next != st.current
-	st.mu.Unlock()
-
-	if empty && cancel != nil {
-		cancel()
-		return
-	}
-	if needRestart {
-		s.restartTicker(context.Background(), k, st, next)
-	}
-}
-
-func (s *Store) restartTicker(ctx context.Context, k Key, st *state, interval time.Duration) {
-	st.mu.Lock()
-	if st.cancel != nil {
-		st.cancel()
-	}
-	tickerCtx, cancel := context.WithCancel(ctx)
-	st.cancel = cancel
-	st.current = interval
-	st.mu.Unlock()
-
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-tickerCtx.Done():
-				return
-			case <-t.C:
-				_ = s.Refresh(tickerCtx, k)
-			}
-		}
-	}()
-}
-
-func minInterval(refs map[string]time.Duration) time.Duration {
-	var min time.Duration
-	for _, d := range refs {
-		if min == 0 || d < min {
-			min = d
+func New(persist Persistence) *Store {
+	var preloaded map[string]Snapshot
+	if persist != nil {
+		if loaded, err := persist.Load(); err == nil {
+			preloaded = loaded
 		}
 	}
-	return min
+	return &Store{pollstore.New[Key, tickets.Config, Snapshot, Diff]("ticketsstore", driver{persist: persist}, preloaded)}
 }
 
-func (s *Store) Subscribe(sub Subscriber) func() {
-	s.subMu.Lock()
-	s.subID++
-	id := s.subID
-	s.subs[id] = sub
-	s.subMu.Unlock()
-	return func() {
-		s.subMu.Lock()
-		delete(s.subs, id)
-		s.subMu.Unlock()
-	}
-}
-
-func (s *Store) notify(d Diff) {
-	s.subMu.RLock()
-	subs := make([]Subscriber, 0, len(s.subs))
-	for _, sub := range s.subs {
-		subs = append(subs, sub)
-	}
-	s.subMu.RUnlock()
-	for _, sub := range subs {
-		sub(d)
-	}
-}
-
-func (s *Store) Stop() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, st := range s.states {
-		st.mu.Lock()
-		if st.cancel != nil {
-			st.cancel()
-			st.cancel = nil
-		}
-		st.mu.Unlock()
-	}
+// GetSnapshot returns the cached sprint snapshot, fetching inline if cold.
+func (s *Store) GetSnapshot(ctx context.Context, k Key, cfg tickets.Config) (Snapshot, error) {
+	return s.Get(ctx, k, cfg)
 }
 
 func issueMap(snap Snapshot) map[string]tickets.Issue {
