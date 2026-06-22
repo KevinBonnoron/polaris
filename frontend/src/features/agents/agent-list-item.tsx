@@ -14,6 +14,7 @@ import type { Agent } from '@/types';
 import { CancelAgent, CreatePRForAgent, GetAgentGitState, ReadAgentLog } from '@/wailsjs/go/main/App';
 import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
 import { useCardAnimationStyle } from '@/providers/appearance';
+import { useConfirm } from '@/providers/confirm';
 import { findAgentKind, OPENCODE_DESCRIPTOR } from './agent-kinds';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
 
@@ -29,6 +30,7 @@ interface Props {
 
 export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const kindCfg = findAgentKind(agent.kind) ?? (agent.kind === 'opencode' ? OPENCODE_DESCRIPTOR : undefined);
   const KindIcon = providerIcon ?? kindCfg?.icon;
   const isWorking = agent.status === 'working';
@@ -63,7 +65,12 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
         const hasUnpushed = (state?.aheadCount ?? 0) > 0;
         const hasStaged = (state?.stagedCount ?? 0) > 0;
         if (hasUnpushed || hasStaged) {
-          const ok = window.confirm(t('agents.card.deleteWithUnpushedConfirm', { branch: agent.worktree.branch }));
+          const ok = await confirm({
+            title: t('agents.card.delete'),
+            description: t('agents.card.deleteWithUnpushedConfirm', { branch: agent.worktree.branch }),
+            confirmLabel: t('common.delete'),
+            destructive: true,
+          });
           if (!ok) {
             return;
           }
