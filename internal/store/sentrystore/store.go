@@ -61,20 +61,39 @@ type Diff struct {
 
 type Subscriber func(Diff)
 
+type Persistence interface {
+	Load() (map[string]Snapshot, error)
+	Save(k Key, snap Snapshot) error
+}
+
 // driver tracks, per key, the set of issue IDs seen so far so a refresh can tell
 // which issues are new. The seen-set is guarded by its own mutex: the singleflight
 // in pollstore already serialises refreshes per key, this just makes concurrent
 // keys safe.
 type driver struct {
+	persist Persistence
+
 	mu   sync.Mutex
 	seen map[string]map[string]struct{}
 }
 
-func newDriver() *driver { return &driver{seen: map[string]map[string]struct{}{}} }
+func newDriver(persist Persistence) *driver {
+	return &driver{persist: persist, seen: map[string]map[string]struct{}{}}
+}
 
-func (*driver) KeyString(k Key) string      { return k.String() }
-func (*driver) HasData(s Snapshot) bool     { return !s.FetchedAt.IsZero() }
-func (*driver) Persist(Key, Snapshot) error { return nil }
+func (*driver) KeyString(k Key) string { return k.String() }
+
+// HasData treats a failed fetch as cold so Get re-fetches instead of serving an
+// error snapshot as cache.
+func (*driver) HasData(s Snapshot) bool { return !s.FetchedAt.IsZero() && s.Err == nil }
+
+func (d *driver) Persist(k Key, snap Snapshot) error {
+	// Never overwrite the last good cache with a failed fetch.
+	if snap.Err != nil || d.persist == nil {
+		return nil
+	}
+	return d.persist.Save(k, snap)
+}
 
 func (d *driver) Refresh(k Key, cfg Config, before Snapshot) (Snapshot, Diff, error) {
 	after := fetchAll(cfg)
@@ -110,8 +129,24 @@ type Store struct {
 	*pollstore.Store[Key, Config, Snapshot, Diff]
 }
 
-func New() *Store {
-	return &Store{pollstore.New[Key, Config, Snapshot, Diff]("sentrystore", newDriver(), nil)}
+func New(persist Persistence) *Store {
+	d := newDriver(persist)
+	var preloaded map[string]Snapshot
+	if persist != nil {
+		if loaded, err := persist.Load(); err == nil {
+			preloaded = loaded
+			// Seed the seen-set from the restored snapshots so the first refresh
+			// after a restart doesn't report every already-known issue as new.
+			for kstr, snap := range loaded {
+				seen := make(map[string]struct{}, len(snap.Issues))
+				for _, i := range snap.Issues {
+					seen[i.ID] = struct{}{}
+				}
+				d.seen[kstr] = seen
+			}
+		}
+	}
+	return &Store{pollstore.New[Key, Config, Snapshot, Diff]("sentrystore", d, preloaded)}
 }
 
 // GetSnapshot returns the cached snapshot, fetching inline if cold.

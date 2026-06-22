@@ -64,11 +64,28 @@ type Diff struct {
 
 type Subscriber func(Diff)
 
-type driver struct{}
+type Persistence interface {
+	Load() (map[string]Snapshot, error)
+	Save(k Key, snap Snapshot) error
+}
 
-func (driver) KeyString(k Key) string      { return k.String() }
-func (driver) HasData(s Snapshot) bool     { return !s.FetchedAt.IsZero() }
-func (driver) Persist(Key, Snapshot) error { return nil }
+type driver struct {
+	persist Persistence
+}
+
+func (driver) KeyString(k Key) string { return k.String() }
+
+// HasData treats a failed fetch as cold so Get re-fetches instead of serving an
+// error snapshot as cache.
+func (driver) HasData(s Snapshot) bool { return !s.FetchedAt.IsZero() && s.Err == nil }
+
+func (d driver) Persist(k Key, snap Snapshot) error {
+	// Never overwrite the last good cache with a failed fetch.
+	if snap.Err != nil || d.persist == nil {
+		return nil
+	}
+	return d.persist.Save(k, snap)
+}
 
 func (driver) Refresh(k Key, cfg Config, before Snapshot) (Snapshot, Diff, error) {
 	after := fetchAll(cfg)
@@ -84,8 +101,14 @@ type Store struct {
 	*pollstore.Store[Key, Config, Snapshot, Diff]
 }
 
-func New() *Store {
-	return &Store{pollstore.New[Key, Config, Snapshot, Diff]("dokploystore", driver{}, nil)}
+func New(persist Persistence) *Store {
+	var preloaded map[string]Snapshot
+	if persist != nil {
+		if loaded, err := persist.Load(); err == nil {
+			preloaded = loaded
+		}
+	}
+	return &Store{pollstore.New[Key, Config, Snapshot, Diff]("dokploystore", driver{persist: persist}, preloaded)}
 }
 
 // GetSnapshot returns the cached snapshot, fetching inline if cold.
