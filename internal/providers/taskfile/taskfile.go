@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KevinBonnoron/polaris/internal/providers/devenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -80,7 +81,7 @@ func Detect(projectPath string) (*Project, error) {
 	return &Project{
 		ManifestPath:   manifest,
 		PackageManager: "task",
-		RunEnv:         detectRunEnv(filepath.Dir(manifest)),
+		RunEnv:         devenv.Detect(filepath.Dir(manifest)),
 		Scripts:        scripts,
 	}, nil
 }
@@ -106,7 +107,7 @@ func DetectAll(projectPath string) ([]*Project, error) {
 		out = append(out, &Project{
 			ManifestPath:   m,
 			PackageManager: "task",
-			RunEnv:         detectRunEnv(filepath.Dir(m)),
+			RunEnv:         devenv.Detect(filepath.Dir(m)),
 			Scripts:        scripts,
 		})
 	}
@@ -241,50 +242,4 @@ func tasksFromYAML(manifestPath string) ([]Script, error) {
 	}
 	sort.Slice(scripts, func(i, j int) bool { return scripts[i].Name < scripts[j].Name })
 	return scripts, nil
-}
-
-// BuildCommand creates an exec.Cmd that runs `name args...` from workDir,
-// optionally wrapped by the project's run environment (nix develop, devcontainer).
-func BuildCommand(ctx context.Context, workDir, runEnv, name string, args []string) (*exec.Cmd, error) {
-	switch runEnv {
-	case "nix":
-		nixArgs := append([]string{"develop", workDir, "--command", name}, args...)
-		cmd := exec.CommandContext(ctx, "nix", nixArgs...)
-		cmd.Dir = workDir
-		return cmd, nil
-	case "devcontainer":
-		containerID, wsFolder, err := devcontainerInfo(workDir)
-		if err != nil {
-			return nil, err
-		}
-		if containerID != "" {
-			dockerArgs := append([]string{"exec", "-i", "-w", wsFolder, containerID, name}, args...)
-			cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
-			cmd.Dir = workDir
-			return cmd, nil
-		}
-		dcArgs := append([]string{"exec", "--workspace-folder", workDir, "--", name}, args...)
-		cmd := exec.CommandContext(ctx, "devcontainer", dcArgs...)
-		cmd.Dir = workDir
-		return cmd, nil
-	default:
-		cmd := exec.CommandContext(ctx, name, args...)
-		cmd.Dir = workDir
-		return cmd, nil
-	}
-}
-
-// detectRunEnv checks for environment-specific files in the project directory.
-func detectRunEnv(projectPath string) string {
-	for _, name := range []string{".devcontainer", "devcontainer.json"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return "devcontainer"
-		}
-	}
-	for _, name := range []string{"devenv.nix", "flake.nix", ".devenv"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return "nix"
-		}
-	}
-	return ""
 }

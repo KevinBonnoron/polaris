@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KevinBonnoron/polaris/internal/providers/devenv"
 	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
 
@@ -117,7 +118,7 @@ func (runner *Runner) launch(manifestPath, runEnv string, commands [][]string) (
 	go func() {
 		if runEnv == "devcontainer" {
 			runner.emitLine(runID, "system", "Starting devcontainer...")
-			containerID, weStarted, err := ensureDevcontainerUp(workDir)
+			containerID, weStarted, err := devenv.EnsureUp(workDir)
 			if err != nil {
 				runner.emitLine(runID, "stderr", err.Error())
 				finish(1, err.Error())
@@ -168,7 +169,7 @@ func (runner *Runner) launch(manifestPath, runEnv string, commands [][]string) (
 // when the command could not be started or exited non-zero (so the sequence
 // stops).
 func (runner *Runner) runOne(ctx context.Context, runID, workDir, runEnv string, args []string) (int, string, bool) {
-	cmd, err := BuildCommand(ctx, workDir, runEnv, "dotnet", args)
+	cmd, err := devenv.BuildCommand(ctx, workDir, runEnv, "dotnet", args)
 	if err != nil {
 		return -1, err.Error(), false
 	}

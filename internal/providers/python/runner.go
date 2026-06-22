@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/KevinBonnoron/polaris/internal/providers/devenv"
 	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
 
@@ -104,7 +105,7 @@ func (runner *Runner) launch(manifestPath, runEnv, name string, args []string) (
 	go func() {
 		if runEnv == "devcontainer" {
 			runner.emitLine(runID, "system", "Starting devcontainer...")
-			containerID, weStarted, err := ensureDevcontainerUp(workDir)
+			containerID, weStarted, err := devenv.EnsureUp(workDir)
 			if err != nil {
 				runner.emitLine(runID, "stderr", err.Error())
 				runner.emit.Emit(EventExit, map[string]any{"runId": runID, "code": 1, "error": err.Error()})
@@ -121,7 +122,7 @@ func (runner *Runner) launch(manifestPath, runEnv, name string, args []string) (
 			runner.mu.Unlock()
 		}
 
-		cmd, err := BuildCommand(ctx, workDir, runEnv, name, args)
+		cmd, err := devenv.BuildCommand(ctx, workDir, runEnv, name, args)
 		if err != nil {
 			runner.emit.Emit(EventExit, map[string]any{"runId": runID, "code": -1, "error": err.Error()})
 			runner.mu.Lock()
