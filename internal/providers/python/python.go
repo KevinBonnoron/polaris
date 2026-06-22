@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 
+	"github.com/KevinBonnoron/polaris/internal/providers/devenv"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -84,7 +84,7 @@ func Detect(projectPath string) (*Project, error) {
 	return &Project{
 		ManifestPath:   manifest,
 		PackageManager: detectPackageManager(dir, manifest),
-		RunEnv:         detectRunEnv(dir),
+		RunEnv:         devenv.Detect(dir),
 		Scripts:        scripts,
 	}, nil
 }
@@ -172,7 +172,7 @@ func DetectAll(projectPath string) ([]*Project, error) {
 		out = append(out, &Project{
 			ManifestPath:   m,
 			PackageManager: detectPackageManager(dir, m),
-			RunEnv:         detectRunEnv(dir),
+			RunEnv:         devenv.Detect(dir),
 			Scripts:        scripts,
 		})
 	}
@@ -601,134 +601,6 @@ func uvMembers(manifestPath string) []string {
 	return out
 }
 
-// BuildCommand creates an exec.Cmd that runs `name args...` from workDir,
-// optionally wrapped by the project's run environment (nix develop, etc.).
-func BuildCommand(ctx context.Context, workDir, runEnv, name string, args []string) (*exec.Cmd, error) {
-	switch runEnv {
-	case "nix":
-		nixArgs := append([]string{"develop", workDir, "--command", name}, args...)
-		cmd := exec.CommandContext(ctx, "nix", nixArgs...)
-		cmd.Dir = workDir
-		return cmd, nil
-	case "devcontainer":
-		containerID, wsFolder, err := devcontainerInfo(workDir)
-		if err != nil {
-			return nil, err
-		}
-		if containerID != "" {
-			dockerArgs := append([]string{"exec", "-i", "-w", wsFolder, containerID, name}, args...)
-			cmd := exec.CommandContext(ctx, "docker", dockerArgs...)
-			cmd.Dir = workDir
-			return cmd, nil
-		}
-		dcArgs := append([]string{"exec", "--workspace-folder", workDir, "--", name}, args...)
-		cmd := exec.CommandContext(ctx, "devcontainer", dcArgs...)
-		cmd.Dir = workDir
-		return cmd, nil
-	default:
-		cmd := exec.CommandContext(ctx, name, args...)
-		cmd.Dir = workDir
-		return cmd, nil
-	}
-}
-
-// detectRunEnv checks for environment-specific files in the project directory.
-// Devcontainer is checked first (most specific), then nix.
-func detectRunEnv(projectPath string) string {
-	for _, name := range []string{".devcontainer", "devcontainer.json"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return "devcontainer"
-		}
-	}
-	for _, name := range []string{"devenv.nix", "flake.nix", ".devenv"} {
-		if _, err := os.Stat(filepath.Join(projectPath, name)); err == nil {
-			return "nix"
-		}
-	}
-	return ""
-}
-
-// ensureDevcontainerUp checks whether the devcontainer for workDir is running,
-// starts a stopped container directly via docker, or runs `devcontainer up`
-// when the devcontainer CLI is available. Returns the container ID, whether
-// this call started it (so the caller can stop it when done), and any error.
-func ensureDevcontainerUp(workDir string) (containerID string, weStarted bool, err error) {
-	absDir, absErr := filepath.Abs(workDir)
-	if absErr != nil {
-		absDir = workDir
-	}
-	filter := "label=devcontainer.local_folder=" + absDir
-	// Already running — leave it alone when we're done.
-	out, err := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
-	if err != nil {
-		return "", false, fmt.Errorf("docker ps failed: %w", err)
-	}
-	if ids := strings.Fields(string(out)); len(ids) > 0 {
-		return ids[0], false, nil
-	}
-	// Stopped but exists — start it; we own the lifecycle.
-	out, err = exec.Command("docker", "ps", "-a", "--filter", filter, "-q").Output()
-	if err != nil {
-		return "", false, fmt.Errorf("docker ps -a failed: %w", err)
-	}
-	if ids := strings.Fields(string(out)); len(ids) > 0 {
-		if err := exec.Command("docker", "start", ids[0]).Run(); err != nil {
-			return "", false, err
-		}
-		return ids[0], true, nil
-	}
-	// No container — use devcontainer CLI when available.
-	if _, err := exec.LookPath("devcontainer"); err == nil {
-		cmd := exec.Command("devcontainer", "up", "--workspace-folder", workDir)
-		cmd.Env = os.Environ()
-		if err := cmd.Run(); err != nil {
-			return "", false, err
-		}
-		out2, err := exec.Command("docker", "ps", "--filter", filter, "-q").Output()
-		if err != nil {
-			return "", false, err
-		}
-		ids := strings.Fields(string(out2))
-		if len(ids) == 0 {
-			return "", false, fmt.Errorf("devcontainer started but no running container matched %q", filter)
-		}
-		return ids[0], true, nil
-	}
-	return "", false, fmt.Errorf("no devcontainer found for this project; open it in VS Code first or install the devcontainer CLI")
-}
-
-// devcontainerInfo returns the container ID and workspace folder path inside
-// the container for the devcontainer associated with workDir. Returns ("", "",
-// nil) when no running container is found.
-func devcontainerInfo(workDir string) (containerID, wsFolder string, err error) {
-	absDir, absErr := filepath.Abs(workDir)
-	if absErr != nil {
-		absDir = workDir
-	}
-	idOut, err := exec.Command("docker", "ps",
-		"--filter", "label=devcontainer.local_folder="+absDir,
-		"-q",
-	).Output()
-	if err != nil {
-		return "", "", fmt.Errorf("docker ps failed: %w", err)
-	}
-	ids := strings.Fields(string(idOut))
-	if len(ids) == 0 {
-		return "", "", nil
-	}
-	containerID = ids[0]
-	wsfOut, err := exec.Command("docker", "inspect", containerID,
-		"--format", `{{index .Config.Labels "devcontainer.workspace_folder"}}`).Output()
-	if err != nil {
-		return "", "", fmt.Errorf("docker inspect failed: %w", err)
-	}
-	wsFolder = strings.TrimSpace(string(wsfOut))
-	if wsFolder == "" {
-		wsFolder = "/workspaces/" + filepath.Base(workDir)
-	}
-	return containerID, wsFolder, nil
-}
-
 // pipListCommand returns the executable + args that run `pip list ...` inside the
 // project's environment for the given package manager, so outdated checks share
 // one JSON parser across every manager.
@@ -761,7 +633,7 @@ func CheckOutdatedPackages(manifestPath, packageManager, runEnv string) ([]Outda
 	}
 	workDir := filepath.Dir(manifestPath)
 	name, args := pipListCommand(pm, []string{"--outdated", "--format", "json"})
-	cmd, err := BuildCommand(context.Background(), workDir, runEnv, name, args)
+	cmd, err := devenv.BuildCommand(context.Background(), workDir, runEnv, name, args)
 	if err != nil {
 		return nil, nil
 	}
@@ -976,7 +848,7 @@ func deptryUnused(workDir, pm, runEnv string) []string {
 		execCmd, execArgs = "deptry", deptryArgs[1:]
 	}
 
-	cmd, err := BuildCommand(context.Background(), workDir, runEnv, execCmd, execArgs)
+	cmd, err := devenv.BuildCommand(context.Background(), workDir, runEnv, execCmd, execArgs)
 	if err != nil {
 		return nil
 	}
@@ -1040,7 +912,7 @@ func CheckVulnerabilities(manifestPath, packageManager, runEnv string) ([]Vulner
 		execCmd, execArgs = "pip-audit", auditArgs[1:]
 	}
 
-	cmd, err := BuildCommand(context.Background(), workDir, runEnv, execCmd, execArgs)
+	cmd, err := devenv.BuildCommand(context.Background(), workDir, runEnv, execCmd, execArgs)
 	if err != nil {
 		return nil, err
 	}
