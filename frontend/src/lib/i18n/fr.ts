@@ -282,6 +282,7 @@ export const fr: Translation = {
       couldNotCopy: 'Impossible de copier le journal',
       runServer: 'Lancer',
       stopServer: 'Arrêter',
+      selectLaunchTarget: 'Choisir la commande de lancement',
       promoteWorktree: 'Déplacer sur une branche',
       promoteWorktreeTitle: 'Déplacer sur une branche',
       promoteWorktreePlaceholder: 'feat/ma-feature',

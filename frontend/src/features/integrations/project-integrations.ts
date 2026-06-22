@@ -2,6 +2,22 @@ import type { IntegrationConfig, Project, ProjectIntegrations } from '@/types';
 import type { Integration } from './integration-catalog';
 
 const INSTANCES_KEY = '_instances';
+const LAUNCH_KEY = '_launch';
+
+// Stored under a reserved key in the integrations map: survives the backend JSON round-trip and is never iterated as an integration (the UI walks the fixed catalog).
+export type LaunchTarget = { kind: string; instanceIndex: number };
+
+export function getLaunchTarget(project: Project | null | undefined): LaunchTarget | null {
+  const raw = getIntegrations(project)[LAUNCH_KEY] as { kind?: unknown; instanceIndex?: unknown } | undefined;
+  if (!raw || typeof raw.kind !== 'string') {
+    return null;
+  }
+  return { kind: raw.kind, instanceIndex: Number(raw.instanceIndex) || 0 };
+}
+
+export function withLaunchTarget(project: Project, target: LaunchTarget): ProjectIntegrations {
+  return { ...getIntegrations(project), [LAUNCH_KEY]: { ...target } };
+}
 
 export function getIntegrations(project: Project | null | undefined): ProjectIntegrations {
   return project?.integrations ?? {};

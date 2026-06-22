@@ -6,7 +6,7 @@ import { useCurrentProject } from '@/state/projects';
 import { EventsOff, EventsOn } from '@/wailsjs/runtime/runtime';
 import type { RunExitEvent, RunLineEvent, RunState, WorkspaceCommand } from './runtime-types';
 
-interface BaseConfig {
+export interface BaseConfig {
   manifestPath?: string;
   packageManager?: string;
   runEnv?: string;
@@ -17,6 +17,7 @@ interface RunContextOptions {
   eventPrefix: string;
   defaultPm: string;
   i18nPrefix: string;
+  startKey: string;
   fns: {
     start: (mp: string, pm: string, name: string, env: string) => Promise<string>;
     run: (mp: string, pm: string, env: string, args: string[]) => Promise<string>;
@@ -25,9 +26,12 @@ interface RunContextOptions {
 }
 
 interface RunContextValue<TConfig extends BaseConfig> {
+  kind: string;
+  startKey: string;
   run: RunState | null;
   isRunning: boolean;
   config: TConfig | null;
+  startName: string | undefined;
   instances: TConfig[];
   instanceIndex: number;
   setInstanceIndex: (index: number) => void;
@@ -41,8 +45,10 @@ interface RunContextValue<TConfig extends BaseConfig> {
   clear: () => void;
 }
 
+export type RunContext = RunContextValue<BaseConfig>;
+
 export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOptions) {
-  const { kind, eventPrefix, defaultPm, i18nPrefix, fns } = opts;
+  const { kind, eventPrefix, defaultPm, i18nPrefix, startKey, fns } = opts;
 
   const Context = createContext<RunContextValue<TConfig> | null>(null);
 
@@ -60,6 +66,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
 
     const instances = (project ? getInstances(project, kind) : []) as TConfig[];
     const config = instances[instanceIndex] ?? null;
+    const startName = ((config as Record<string, unknown> | null)?.[startKey] as string | undefined) || undefined;
 
     const run = runs.get(projectId) ?? null;
     const terminalOpen = openTerminals.get(projectId) ?? false;
@@ -236,7 +243,7 @@ export function createRunContext<TConfig extends BaseConfig>(opts: RunContextOpt
       }
     }, [isRunning, setProjectRun, setTerminalOpen]);
 
-    return <Context.Provider value={{ run, isRunning, config, instances, instanceIndex, setInstanceIndex, terminalOpen, setTerminalOpen, startScript, runCommand, runInWorkspaces, stop, restart, clear }}>{children}</Context.Provider>;
+    return <Context.Provider value={{ kind, startKey, run, isRunning, config, startName, instances, instanceIndex, setInstanceIndex, terminalOpen, setTerminalOpen, startScript, runCommand, runInWorkspaces, stop, restart, clear }}>{children}</Context.Provider>;
   }
 
   function useRun(): RunContextValue<TConfig> {

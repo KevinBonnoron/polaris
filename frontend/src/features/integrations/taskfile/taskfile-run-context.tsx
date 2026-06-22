@@ -7,6 +7,7 @@ const { Provider, useRun } = createRunContext<TaskfileConfig>({
   eventPrefix: 'taskfile',
   defaultPm: 'task',
   i18nPrefix: 'integrations.taskfile',
+  startKey: 'startTask',
   fns: {
     start: StartTaskfileTask,
     run: RunTaskfileCommand,

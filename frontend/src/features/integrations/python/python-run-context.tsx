@@ -7,6 +7,7 @@ const { Provider, useRun } = createRunContext<PythonConfig>({
   eventPrefix: 'python',
   defaultPm: 'pip',
   i18nPrefix: 'integrations.python',
+  startKey: 'startScript',
   fns: {
     start: StartPythonScript,
     run: RunPythonCommand,
