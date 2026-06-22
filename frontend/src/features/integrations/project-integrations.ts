@@ -28,16 +28,28 @@ export function isConnected(project: Project | null | undefined, id: string): bo
   return Object.hasOwn(map, id);
 }
 
+function hasValue(v: unknown): boolean {
+  return typeof v === 'string' ? v.trim() !== '' : v != null;
+}
+
 export function isIntegrationConnected(project: Project | null | undefined, integration: Integration): boolean {
   const key = integration.storageKey ?? integration.id;
   const config = getIntegrations(project)[key];
   if (!config) {
     return false;
   }
-  if (!integration.fixedValues) {
+  // Multi integrations store their fields inside per-instance configs, so the
+  // presence of the key already means there's at least one configured instance.
+  if (integration.multi) {
     return true;
   }
-  return Object.entries(integration.fixedValues).every(([k, v]) => config[k] === v);
+  if (integration.fixedValues && !Object.entries(integration.fixedValues).every(([k, v]) => config[k] === v)) {
+    return false;
+  }
+  // A shared storageKey (e.g. jira vs linear under "tickets") only counts as
+  // connected once this integration's own required fields are filled in — which
+  // is exactly what each integration page checks before showing its dashboard.
+  return integration.fields.filter((f) => f.required).every((f) => hasValue(config[f.key]));
 }
 
 export function effectiveStorageKey(integration: Integration): string {
