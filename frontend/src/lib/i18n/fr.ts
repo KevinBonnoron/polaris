@@ -14,6 +14,9 @@ export const fr: Translation = {
     remove: 'Retirer',
     configure: 'Configurer',
     loading: 'Chargement',
+    copyDetails: 'Copier les détails',
+    detailsCopied: 'Détails de l’erreur copiés',
+    clipboardUnavailable: 'Presse-papiers indisponible',
     validation: {
       required: 'Ce champ est requis',
       tooShort: 'Au moins {{min}} caractères',

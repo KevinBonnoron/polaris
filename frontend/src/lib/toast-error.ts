@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { describeError, dumpError } from './errors';
+import i18n from './i18n';
 
 interface Options {
   title: string;
@@ -18,12 +19,12 @@ export function toastError({ title, err }: Options): void {
     description,
     duration: 8000,
     action: {
-      label: 'Copy details',
+      label: i18n.t('common.copyDetails'),
       onClick: () => {
         const blob = dumpError(err);
         navigator.clipboard?.writeText(blob).then(
-          () => toast.success('Error details copied'),
-          () => toast.error('Clipboard unavailable'),
+          () => toast.success(i18n.t('common.detailsCopied')),
+          () => toast.error(i18n.t('common.clipboardUnavailable')),
         );
       },
     },
