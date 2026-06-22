@@ -27,6 +27,9 @@ type claudeSession struct {
 	agentID string
 	workDir string
 	logFile *os.File
+	// sink serialises writes to logFile from the concurrent stdout/stderr
+	// drain goroutines so JSONL lines never interleave.
+	sink *lockedWriter
 
 	mu      sync.Mutex
 	writeMu sync.Mutex
@@ -128,6 +131,7 @@ func (runner *Runner) startClaudeSession(svc *Service, agent *Agent, workDir, st
 		agentID:   agent.ID,
 		workDir:   workDir,
 		logFile:   logFile,
+		sink:      newLockedWriter(logFile),
 		cmd:       cmd,
 		stdin:     stdin,
 		running:   true,
@@ -165,7 +169,7 @@ func (c *claudeSession) readLoop(stdout, stderr io.Reader) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		streamLines(stderr, c.logFile, func(evt StreamEvent) {
+		streamLines(stderr, c.sink, func(evt StreamEvent) {
 			if isRetryableAPIError(evt.Content) {
 				c.markRetryable()
 			}
@@ -173,7 +177,7 @@ func (c *claudeSession) readLoop(stdout, stderr io.Reader) {
 		})
 	}()
 
-	streamClaudeJSON(stdout, c.logFile,
+	streamClaudeJSON(stdout, c.sink,
 		func(evt StreamEvent) {
 			if isRetryableAPIError(evt.Content) {
 				c.markRetryable()

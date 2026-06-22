@@ -7,8 +7,26 @@ import (
 	"io"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
+
+// lockedWriter serialises concurrent writes to an underlying writer. The agent
+// log is fed by the stdout parser and the stderr drain goroutines at the same
+// time; without this their fmt.Fprintln calls can interleave and produce
+// corrupt JSONL lines, which then drop silently when the log is re-parsed.
+type lockedWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func newLockedWriter(w io.Writer) *lockedWriter { return &lockedWriter{w: w} }
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
+}
 
 var interactivePromptRe = regexp.MustCompile(`(?i)\[['"]?[yn]/[yn]['"]?\]\s*$|\((?:[yn]/[yn]|y/n)\)\s*$`)
 
