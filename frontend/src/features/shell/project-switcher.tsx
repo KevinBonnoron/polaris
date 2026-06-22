@@ -36,8 +36,8 @@ export function ProjectSwitcher({ open, onOpenChange }: Props) {
   };
 
   const pick = (id: string) => {
-    setProjectId(id);
     handleOpenChange(false);
+    requestAnimationFrame(() => setProjectId(id));
   };
 
   return (

@@ -201,7 +201,7 @@ export function AppSidebar() {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem className="relative">
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton size="lg" className="focus-visible:ring-0 data-[state=open]:bg-sidebar-accent">
                   <ProjectAvatar project={currentProject} className="aspect-square size-8" textClassName="text-xs" />
