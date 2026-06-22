@@ -196,8 +196,8 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 
 	app.repositoryStore = repositorystore.New(&repositorystore.SQLitePersistence{DB: store.DB()})
 	app.ticketsStore = ticketsstore.New(&ticketsstore.SQLitePersistence{DB: store.DB()})
-	app.sentryStore = sentrystore.New()
-	app.dokployStore = dokploystore.New()
+	app.sentryStore = sentrystore.New(&sentrystore.SQLitePersistence{DB: store.DB()})
+	app.dokployStore = dokploystore.New(&dokploystore.SQLitePersistence{DB: store.DB()})
 
 	app.svc = polaris.NewService(store).
 		WithRunner(polaris.NewRunner(logsDir, worktreesDir)).
