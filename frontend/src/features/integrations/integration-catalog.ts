@@ -59,8 +59,8 @@ const TICKETS_FIELDS_LINEAR: IntegrationField[] = [
 
 const REPOSITORY_FIELDS: IntegrationField[] = [
   { key: 'baseUrl', label: 'Instance URL', type: 'url', placeholder: 'https://github.com', help: 'Leave blank for the provider default.' },
-  { key: 'owner', label: 'Owner / org', type: 'text', placeholder: 'octocat' },
-  { key: 'repo', label: 'Repository', type: 'text', placeholder: 'hello-world' },
+  { key: 'owner', label: 'Owner / org', type: 'text', required: true, placeholder: 'octocat' },
+  { key: 'repo', label: 'Repository', type: 'text', required: true, placeholder: 'hello-world' },
   { key: 'token', label: 'Personal access token', type: 'password', help: 'Only needed for private repos, write actions, or to lift API rate limits.' },
   { key: 'pollIntervalSec', label: 'Poll interval (seconds)', type: 'number', defaultValue: '60', help: 'How often PRs, issues and recent workflow runs are refreshed. Shared across every automation on this repository.' },
 ];
