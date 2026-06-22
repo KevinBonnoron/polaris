@@ -7,6 +7,7 @@ const { Provider, useRun } = createRunContext<CSharpConfig>({
   eventPrefix: 'csharp',
   defaultPm: 'dotnet',
   i18nPrefix: 'integrations.csharp',
+  startKey: 'startScript',
   fns: {
     start: StartCSharpScript,
     run: RunCSharpCommand,

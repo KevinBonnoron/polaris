@@ -7,6 +7,7 @@ const { Provider, useRun } = createRunContext<NodejsConfig>({
   eventPrefix: 'nodejs',
   defaultPm: 'npm',
   i18nPrefix: 'integrations.nodejs',
+  startKey: 'startScript',
   fns: {
     start: StartNodeScript,
     run: RunNodeCommand,

@@ -280,6 +280,7 @@ export const en = {
       couldNotCopy: 'Could not copy log',
       runServer: 'Run',
       stopServer: 'Stop',
+      selectLaunchTarget: 'Choose launch command',
       promoteWorktree: 'Move to branch',
       promoteWorktreeTitle: 'Move to branch',
       promoteWorktreePlaceholder: 'feat/my-feature',

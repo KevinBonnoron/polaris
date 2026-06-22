@@ -1,10 +1,12 @@
 import { useLiveQuery } from '@tanstack/react-db';
 import type { TFunction } from 'i18next';
-import { Check, ExternalLink, GitBranch, GitBranchPlus, GitPullRequest, Play, Square } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, GitBranch, GitBranchPlus, GitPullRequest, Play, Square } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
+import { projectsCollection } from '@/collections/projects.collection';
 import { resolveProviderIcon } from '@/components/brand-icons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,11 +15,13 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import type { RunContext } from '@/features/integrations/create-run-context';
 import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
+import { getLaunchTarget, withLaunchTarget } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
+import { useTaskfileRun } from '@/features/integrations/taskfile/taskfile-run-context';
 import { isSeparator, isUsageBlock, sepGlyph, usageMode } from '@/features/settings/status-bar-settings';
-import { toast } from 'sonner';
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { useStatusBarBlocks } from '@/providers/theme-accent';
@@ -25,8 +29,8 @@ import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
 import { useCurrentProject } from '@/state/projects';
 import { CreatePRForAgent, PromoteAgentToWorktree, ReadAgentLogFrom, SetAgentModel } from '@/wailsjs/go/main/App';
-import { BrowserOpenURL, EventsOn } from '@/wailsjs/runtime/runtime';
 import type { polaris } from '@/wailsjs/go/models';
+import { BrowserOpenURL, EventsOn } from '@/wailsjs/runtime/runtime';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
 import { AgentInputArea, NO_TOOLS_SENTINEL, TOOL_PRESETS } from './agent-input-area';
@@ -35,6 +39,13 @@ import { countToolsFromLog } from './agent-log-files';
 import { useClaudeUsage } from './claude-usage-bar';
 import { TokenStat } from './token-stat';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
+
+const LAUNCH_KIND_LABEL: Record<string, string> = {
+  nodejs: 'Node.js',
+  python: 'Python',
+  csharp: 'C#',
+  taskfile: 'Taskfile',
+};
 
 const PRESET_I18N: Record<string, string> = {
   readonly: 'toolsReadonly',
@@ -119,7 +130,58 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const nodejs = useNodejsRun();
   const python = usePythonRun();
   const csharp = useCSharpRun();
-  const activeRun = nodejs.isRunning ? nodejs : python.isRunning ? python : csharp.isRunning ? csharp : nodejs.config?.startScript ? nodejs : python.config?.startScript ? python : csharp.config?.startScript ? csharp : null;
+  const taskfile = useTaskfileRun();
+  const runs = useMemo<RunContext[]>(() => [nodejs, python, csharp, taskfile], [nodejs, python, csharp, taskfile]);
+
+  const launchCandidates = useMemo(
+    () =>
+      runs.flatMap((r) =>
+        r.instances.map((inst, index) => ({ run: r, kind: r.kind, index, name: (inst as Record<string, unknown>)[r.startKey] as string | undefined, manifestPath: inst.manifestPath })).filter((c): c is { run: RunContext; kind: string; index: number; name: string; manifestPath: string | undefined } => Boolean(c.name)),
+      ),
+    [runs],
+  );
+
+  const launchTarget = getLaunchTarget(project);
+  const runningRun = runs.find((r) => r.isRunning) ?? null;
+  const selectedCandidate = useMemo(() => {
+    const byTarget = launchTarget ? launchCandidates.find((c) => c.kind === launchTarget.kind && c.index === launchTarget.instanceIndex) : undefined;
+    return byTarget ?? launchCandidates[0] ?? null;
+  }, [launchTarget, launchCandidates]);
+
+  const activeRun = runningRun ?? selectedCandidate?.run ?? null;
+  const activeStartName = runningRun ? runningRun.startName : selectedCandidate?.name;
+
+  useEffect(() => {
+    if (!runningRun && selectedCandidate && selectedCandidate.run.instanceIndex !== selectedCandidate.index) {
+      selectedCandidate.run.setInstanceIndex(selectedCandidate.index);
+    }
+  }, [runningRun, selectedCandidate]);
+
+  const onSelectLaunchTarget = useCallback(
+    (kind: string, index: number) => {
+      if (!project) {
+        return;
+      }
+      const next = withLaunchTarget(project, { kind, instanceIndex: index });
+      projectsCollection.update(project.id, (d) => {
+        d.integrations = next;
+      });
+    },
+    [project],
+  );
+
+  const launchOptions = useMemo(() => {
+    const counts = launchCandidates.reduce<Record<string, number>>((acc, c) => {
+      acc[c.kind] = (acc[c.kind] ?? 0) + 1;
+      return acc;
+    }, {});
+    return launchCandidates.map((c) => {
+      const base = `${LAUNCH_KIND_LABEL[c.kind] ?? c.kind} · ${c.name}`;
+      const manifestBase = c.manifestPath?.split(/[\\/]/).pop();
+      const suffix = (counts[c.kind] ?? 0) > 1 && manifestBase ? ` (${manifestBase})` : '';
+      return { ...c, label: base + suffix };
+    });
+  }, [launchCandidates]);
 
   const devManifestPath = useMemo(() => {
     const manifest = activeRun?.config?.manifestPath;
@@ -146,10 +208,10 @@ export function AgentConversation({ agentId }: { agentId: string }) {
 
     if (activeRun.isRunning) {
       void activeRun.stop();
-    } else if (activeRun.config?.startScript && devManifestPath) {
-      void activeRun.startScript(activeRun.config.startScript, devManifestPath, agentId);
+    } else if (activeStartName && devManifestPath) {
+      void activeRun.startScript(activeStartName, devManifestPath, agentId);
     }
-  }, [activeRun, devManifestPath, agentId]);
+  }, [activeRun, activeStartName, devManifestPath, agentId]);
 
   const prUrl = agent?.worktree?.prUrl ?? '';
   const hasBranch = Boolean(agent?.worktree?.branch && agent?.worktree?.path);
@@ -487,11 +549,33 @@ export function AgentConversation({ agentId }: { agentId: string }) {
                 )}
               </div>
             )}
-            {activeRun && (thisAgentRunning || (!activeRun.isRunning && devManifestPath)) && (
-              <Button size="sm" variant={thisAgentRunning ? 'destructive' : 'secondary'} onClick={onDevRun} className="ml-1 h-6 px-2 text-xs">
-                {thisAgentRunning ? <Square className="mr-1 size-3 fill-current" /> : <Play className="mr-1 size-3 fill-current" />}
-                {thisAgentRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
-              </Button>
+            {activeRun && (thisAgentRunning || (!activeRun.isRunning && activeStartName && devManifestPath)) && (
+              <div className="ml-1 flex items-center">
+                <Button size="sm" variant={thisAgentRunning ? 'destructive' : 'secondary'} onClick={onDevRun} className={cn('h-6 px-2 text-xs', !activeRun.isRunning && launchOptions.length > 1 && 'rounded-r-none')}>
+                  {thisAgentRunning ? <Square className="mr-1 size-3 fill-current" /> : <Play className="mr-1 size-3 fill-current" />}
+                  {thisAgentRunning ? t('agents.detail.stopServer') : t('agents.detail.runServer')}
+                </Button>
+                {!activeRun.isRunning && launchOptions.length > 1 && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button size="icon" variant="secondary" className="h-6 w-5 rounded-l-none border-l border-border/50" title={t('agents.detail.selectLaunchTarget')}>
+                        <ChevronDown className="size-3" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-56 p-1">
+                      {launchOptions.map((o) => {
+                        const isActive = o.kind === selectedCandidate?.kind && o.index === selectedCandidate?.index;
+                        return (
+                          <button type="button" key={`${o.kind}:${o.index}`} onClick={() => onSelectLaunchTarget(o.kind, o.index)} className={cn('flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-accent', isActive && 'font-medium')}>
+                            <Check className={cn('size-3 shrink-0', !isActive && 'opacity-0')} />
+                            <span className="truncate">{o.label}</span>
+                          </button>
+                        );
+                      })}
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
             )}
             {!agent?.worktree?.branch && agent && project?.hasGit && !isDraft && filesModified > 0 && (
               <Button size="sm" variant="ghost" onClick={() => setPromoteOpen(true)} className="h-6 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground">
