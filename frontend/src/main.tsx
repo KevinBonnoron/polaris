@@ -5,6 +5,7 @@ import '@wterm/react/css';
 import './lib/i18n';
 import { wailsReady } from './lib/wails-ready';
 import { AppearanceProvider } from './providers/appearance';
+import { ConfirmProvider } from './providers/confirm';
 import { routeTree } from './routeTree.gen';
 import './styles.css';
 
@@ -40,7 +41,9 @@ const mount = () => {
   createRoot(rootEl).render(
     <StrictMode>
       <AppearanceProvider>
-        <RouterProvider router={router} />
+        <ConfirmProvider>
+          <RouterProvider router={router} />
+        </ConfirmProvider>
       </AppearanceProvider>
     </StrictMode>,
   );

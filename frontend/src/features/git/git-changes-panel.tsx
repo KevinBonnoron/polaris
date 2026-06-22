@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { useGitChangesViewMode } from '@/providers/appearance';
+import { useConfirm } from '@/providers/confirm';
 import type { git as gitModels } from '@/wailsjs/go/models';
 
 export type FileStatus = gitModels.FileChangeStatus;
@@ -178,6 +179,7 @@ function splitPath(path: string): { name: string; dir: string } {
 
 export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange }: Props) {
   const { t } = useTranslation();
+  const confirm = useConfirm();
   const { viewMode: view, setViewMode: setView } = useGitChangesViewMode();
   const [diff, setDiff] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<FileStatus[] | null>(null);
@@ -341,21 +343,33 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
       await ops.unstageFiles(collectPaths(node));
     }, 'agents.detail.unapproveFailed');
 
-  const discardFile = (path: string, untracked: boolean) => {
+  const discardFile = async (path: string, untracked: boolean) => {
     if (!ops.discardFile) {
       return;
     }
-    if (!window.confirm(t('agents.detail.discardFileConfirm', { name: splitPath(path).name }))) {
+    const ok = await confirm({
+      title: t('agents.detail.discardFile'),
+      description: t('agents.detail.discardFileConfirm', { name: splitPath(path).name }),
+      confirmLabel: t('agents.detail.discardFile'),
+      destructive: true,
+    });
+    if (!ok) {
       return;
     }
     runWith(() => ops.discardFile!(path, untracked), 'agents.detail.discardFailed');
   };
 
-  const discardDir = (node: TreeNode) => {
+  const discardDir = async (node: TreeNode) => {
     if (!ops.discardFiles) {
       return;
     }
-    if (!window.confirm(t('agents.detail.discardDirConfirm', { name: node.name }))) {
+    const ok = await confirm({
+      title: t('agents.detail.discardFile'),
+      description: t('agents.detail.discardDirConfirm', { name: node.name }),
+      confirmLabel: t('agents.detail.discardFile'),
+      destructive: true,
+    });
+    if (!ok) {
       return;
     }
     const paths = collectPaths(node);
