@@ -33,10 +33,22 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 	var stats streamTurnStats
 
 	askPending := map[string]struct{}{}
+	// surfacedIDs holds the tool_use ids of AskUserQuestion/ExitPlanMode calls we
+	// surfaced this turn. In --print mode claude auto-dismisses these itself: it
+	// injects an is_error tool_result for the tool it just called and then emits
+	// filler text ("the question was dismissed, let me know…"). Both are noise —
+	// the question is surfaced via the panel + the tool_call line, and the real
+	// answer is recorded when the user responds — so they are dropped (suppressed
+	// per turn, reset at the result boundary).
+	surfacedIDs := map[string]struct{}{}
+	suppressTrailing := false
+	activateSuppress := false
 	wrappedAsk := onAsk
 	if onAsk != nil {
 		wrappedAsk = func(toolUseID string, input map[string]any) {
 			askPending[toolUseID] = struct{}{}
+			surfacedIDs[toolUseID] = struct{}{}
+			activateSuppress = true
 			onAsk(toolUseID, input)
 		}
 	}
@@ -51,21 +63,41 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 			emitEvent(sink, onEvent, StreamEvent{Type: "text", Content: raw})
 			continue
 		}
-		if kind, _ := evt["type"].(string); kind == "user" {
+		kind, _ := evt["type"].(string)
+		if kind == "user" {
 			for _, id := range userToolResultIDs(evt) {
 				delete(askPending, id)
 			}
 		}
 		prevTokens := stats.Tokens
 		for _, se := range claudeEventToStreamEvents(evt, filesSet, toolInputs, wrappedAsk, &stats) {
+			if suppressTrailing && (se.Type == "text" || se.Type == "thinking") {
+				continue
+			}
+			if se.Type == "tool_result" {
+				if _, ok := surfacedIDs[se.ID]; ok {
+					continue
+				}
+			}
 			emitEvent(sink, onEvent, se)
+		}
+		// Activated after the event that surfaced the question is fully emitted, so
+		// the tool_call line (and its leading thinking) survive and only the
+		// follow-on filler is dropped.
+		if activateSuppress {
+			suppressTrailing = true
+			activateSuppress = false
 		}
 		if onTok != nil && stats.Tokens != prevTokens {
 			onTok(stats.Tokens, stats.Parts, stats.CostUSD)
 		}
-		if kind, _ := evt["type"].(string); kind == "result" && onResult != nil && len(askPending) == 0 {
-			stats.FilesModified = len(filesSet)
-			onResult(stats)
+		if kind == "result" {
+			if onResult != nil && len(askPending) == 0 {
+				stats.FilesModified = len(filesSet)
+				onResult(stats)
+			}
+			suppressTrailing = false
+			surfacedIDs = map[string]struct{}{}
 		}
 	}
 
