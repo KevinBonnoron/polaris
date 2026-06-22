@@ -33,7 +33,7 @@ func main() {
 	app := NewApp()
 
 	appRef = application.New(application.Options{
-		Name:        "Polaris",
+		Name:        appName(),
 		Description: "Desktop cockpit to orchestrate multiple AI coding agents",
 		Icon:        appIcon,
 		Services: []application.Service{
