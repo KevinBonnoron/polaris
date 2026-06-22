@@ -243,6 +243,10 @@ func summarizeToolInput(name string, input map[string]any) string {
 		if p, ok := input["pattern"].(string); ok {
 			return " · " + truncate(p, 120)
 		}
+	case "AskUserQuestion":
+		return " · " + summarizeQuestionLine(input)
+	case "ExitPlanMode":
+		return " · Plan ready for review"
 	case "WebFetch", "WebSearch":
 		if u, ok := input["url"].(string); ok && u != "" {
 			return " · " + truncate(u, 120)
@@ -273,6 +277,90 @@ func summarizeToolInput(name string, input map[string]any) string {
 		return fmt.Sprintf(" · %d todos (%d done, %d in progress, %d pending)", len(todos), completed, inProgress, pending)
 	}
 	return ""
+}
+
+// summarizeQuestionLine renders a one-line label for an AskUserQuestion tool call
+// (the first question's header + text, "(+N)" when there are more), shown as the
+// `· detail` on the transcript's `→ AskUserQuestion` line.
+func summarizeQuestionLine(input map[string]any) string {
+	questions, _ := input["questions"].([]any)
+	if len(questions) == 0 {
+		return "question"
+	}
+	first, _ := questions[0].(map[string]any)
+	if first == nil {
+		return "question"
+	}
+	q, _ := first["question"].(string)
+	if h, _ := first["header"].(string); h != "" {
+		q = h + ": " + q
+	}
+	label := truncate(q, 120)
+	if len(questions) > 1 {
+		label += fmt.Sprintf(" (+%d)", len(questions)-1)
+	}
+	return label
+}
+
+// questionAnswerRecap renders a persisted AskUserQuestion / ExitPlanMode prompt
+// together with the user's choice as a multi-line block, kept in the transcript
+// (as a tool_result preview) so the exchange stays reviewable after the live panel
+// is gone. The ExitPlanMode plan is surfaced under a "Plan" header.
+func questionAnswerRecap(input json.RawMessage, answer string) string {
+	var payload struct {
+		Questions []struct {
+			Header   string `json:"header"`
+			Question string `json:"question"`
+			Options  []struct {
+				Label string `json:"label"`
+			} `json:"options"`
+		} `json:"questions"`
+	}
+	if json.Unmarshal(input, &payload) != nil || len(payload.Questions) == 0 {
+		return summarizeAnswer(answer)
+	}
+	var answers []struct {
+		Answer json.RawMessage `json:"answer"`
+	}
+	_ = json.Unmarshal([]byte(answer), &answers)
+	answerLabel := func(i int) string {
+		if i >= len(answers) {
+			return summarizeAnswer(answer)
+		}
+		var s string
+		var arr []string
+		switch {
+		case json.Unmarshal(answers[i].Answer, &s) == nil:
+			return s
+		case json.Unmarshal(answers[i].Answer, &arr) == nil:
+			return strings.Join(arr, ", ")
+		}
+		return summarizeAnswer(answer)
+	}
+	var sb strings.Builder
+	for i, q := range payload.Questions {
+		if i > 0 {
+			sb.WriteString("\n\n")
+		}
+		if q.Header == "Plan" {
+			sb.WriteString(q.Question)
+			sb.WriteString("\n\nDecision: ")
+			sb.WriteString(answerLabel(i))
+			continue
+		}
+		if q.Header != "" {
+			sb.WriteString(q.Header)
+			sb.WriteString(": ")
+		}
+		sb.WriteString(q.Question)
+		for _, opt := range q.Options {
+			sb.WriteString("\n· ")
+			sb.WriteString(opt.Label)
+		}
+		sb.WriteString("\nAnswer: ")
+		sb.WriteString(answerLabel(i))
+	}
+	return sb.String()
 }
 
 func toolResultText(raw any) string {

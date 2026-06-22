@@ -376,30 +376,35 @@ func (c *claudeSession) interruptAndSend(message string) {
 	c.interrupt()
 }
 
-// answerQuestion delivers an AskUserQuestion / ExitPlanMode answer as a proper
-// tool_result on the live stdin, so the turn continues in place (no resume).
-func (c *claudeSession) answerQuestion(toolUseID, answer string) bool {
-	if err := c.writeToolResult(toolUseID, answer, false); err != nil {
+// answerQuestion delivers an AskUserQuestion / ExitPlanMode answer as the next
+// user turn on the live session. In --print mode claude auto-dismisses these
+// interactive tools itself (an is_error tool_result it injects) and ends the
+// turn, so the process is idle by the time the user answers: the answer can't be
+// a tool_result for the already-closed tool — it is a fresh user message. The
+// caller logs the choice separately, so this writes straight to stdin without a
+// chat bubble.
+func (c *claudeSession) answerQuestion(message string) bool {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
 		return false
+	}
+	c.running = true
+	c.curMsg = message
+	c.retryCount = 0
+	c.mu.Unlock()
+	if err := c.writeUser(message); err != nil {
+		c.respawnResume(c.model, message)
 	}
 	return true
 }
 
-// supersedeQuestion handles a user who types a new message instead of answering
-// a pending question: the question is closed with a dismissal tool_result (which
-// unblocks the turn and lets it reach a turn boundary), and message is queued so
-// it runs as the next turn.
-func (c *claudeSession) supersedeQuestion(toolUseID, message string) {
+// supersedeQuestion handles a user who types a new message instead of answering a
+// pending question. claude already auto-dismissed the tool and ended the turn, so
+// the message is simply the next user turn (logged as a normal bubble).
+func (c *claudeSession) supersedeQuestion(message string) {
 	c.runner.consumeAwaiting(c.agentID)
-	c.queue(message)
-	if err := c.writeToolResult(toolUseID, "The user dismissed this prompt and will respond with a new message.", false); err != nil {
-		// The respawn replays message directly as its first turn, so drop the
-		// queued copy first — otherwise the next turn boundary drains it again and
-		// sends it twice.
-		c.runner.clearPending(c.agentID)
-		_ = c.svc.store.PatchAgent(c.agentID, map[string]any{"queuedMessage": nil})
-		c.respawnResume(c.model, message)
-	}
+	c.sendOrQueue(message)
 }
 
 // dropQueue discards the pending message on a broken chain (crash / giving up),
@@ -429,21 +434,6 @@ func (c *claudeSession) writeUser(text string) error {
 		"message": map[string]any{
 			"role":    "user",
 			"content": escapeLeadingSlash(text),
-		},
-	})
-}
-
-func (c *claudeSession) writeToolResult(toolUseID, content string, isErr bool) error {
-	return c.write(map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"role": "user",
-			"content": []map[string]any{{
-				"type":        "tool_result",
-				"tool_use_id": toolUseID,
-				"content":     content,
-				"is_error":    isErr,
-			}},
 		},
 	})
 }

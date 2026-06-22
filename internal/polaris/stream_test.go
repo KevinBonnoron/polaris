@@ -7,6 +7,60 @@ import (
 	"testing"
 )
 
+func TestSummarizeQuestionLine(t *testing.T) {
+	input := map[string]any{"questions": []any{
+		map[string]any{"header": "Indentation", "question": "Tabs or spaces?"},
+		map[string]any{"header": "Quotes", "question": "Single or double?"},
+	}}
+	got := summarizeQuestionLine(input)
+	if !strings.Contains(got, "Indentation: Tabs or spaces?") {
+		t.Errorf("expected first question in summary, got %q", got)
+	}
+	if !strings.Contains(got, "(+1)") {
+		t.Errorf("expected '(+1)' for the extra question, got %q", got)
+	}
+}
+
+func TestSummarizeQuestionLine_Malformed(t *testing.T) {
+	if got := summarizeQuestionLine(map[string]any{"questions": []any{"not a map"}}); got != "question" {
+		t.Errorf("expected fallback 'question' for malformed entry, got %q", got)
+	}
+	if got := summarizeQuestionLine(map[string]any{}); got != "question" {
+		t.Errorf("expected fallback 'question' for empty input, got %q", got)
+	}
+}
+
+func TestQuestionAnswerRecap_AskUserQuestion(t *testing.T) {
+	input := []byte(`{"questions":[{"header":"Indentation","question":"Tabs or spaces?","options":[{"label":"Spaces"},{"label":"Tabs"}]}]}`)
+	answer := `[{"question":"Tabs or spaces?","answer":"Spaces"}]`
+	got := questionAnswerRecap(input, answer)
+	for _, want := range []string{"Indentation: Tabs or spaces?", "· Spaces", "· Tabs", "Answer: Spaces"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("recap missing %q\n--- got ---\n%s", want, got)
+		}
+	}
+}
+
+func TestQuestionAnswerRecap_Plan(t *testing.T) {
+	input := []byte(`{"questions":[{"header":"Plan","question":"Step 1\nStep 2","options":[{"label":"Approve & proceed"},{"label":"Reject"}]}]}`)
+	answer := `[{"question":"Step 1\nStep 2","answer":"Approve & proceed"}]`
+	got := questionAnswerRecap(input, answer)
+	if !strings.Contains(got, "Step 1") || !strings.Contains(got, "Step 2") {
+		t.Errorf("recap missing plan text, got %q", got)
+	}
+	if !strings.Contains(got, "Decision: Approve & proceed") {
+		t.Errorf("recap missing decision, got %q", got)
+	}
+}
+
+func TestQuestionAnswerRecap_FreeTextFallback(t *testing.T) {
+	input := []byte(`{"questions":[{"header":"Indentation","question":"Tabs or spaces?","options":[{"label":"Spaces"}]}]}`)
+	got := questionAnswerRecap(input, "I actually prefer 4-wide tabs")
+	if !strings.Contains(got, "Answer: I actually prefer 4-wide tabs") {
+		t.Errorf("expected free-text answer to fall through, got %q", got)
+	}
+}
+
 func runInteractive(input string) (lines []string, waitingCalls int) {
 	reader := strings.NewReader(input)
 	var sink bytes.Buffer

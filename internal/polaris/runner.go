@@ -739,7 +739,10 @@ func (service *Service) Send(agentID, message string) error {
 		// for a tool_result, so close the question (dismissal tool_result) to
 		// unblock it; the new message then drains as the next turn.
 		if hadPending && agent.PendingQuestion != nil {
-			c.supersedeQuestion(agent.PendingQuestion.ToolUseID, message)
+			// Resolve the surfaced question in the transcript (it has no real
+			// tool_result) and keep it reviewable, paired with the free-text reply.
+			_ = service.appendAgentEvent(agentID, StreamEvent{Type: "tool_result", ID: agent.PendingQuestion.ToolUseID, Content: summarizeAnswer(message), RenderedContent: questionAnswerRecap(agent.PendingQuestion.Input, message)})
+			c.supersedeQuestion(message)
 		} else {
 			c.sendOrQueue(message)
 		}
@@ -1291,8 +1294,8 @@ func buildSpawnCommand(kind, binary, model, sessionID, task, source string, allo
 		permissionMode := "bypassPermissions"
 		// stream-json (both directions) gives us a full-duplex JSON channel:
 		// stdout emits one event per assistant message / tool_use / result, and
-		// stdin lets us deliver the initial task and answer tool_use events
-		// like AskUserQuestion with a proper tool_result mid-turn.
+		// stdin lets us deliver the initial task and each follow-up as a new user
+		// turn on the same process.
 		args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", permissionMode}
 		if sessionID != "" {
 			args = append(args, "--session-id", sessionID)
@@ -2188,11 +2191,11 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 	// path runs below or whether it succeeds.
 	_ = service.store.PatchAgent(agentID, map[string]any{"pendingQuestion": nil})
 
-	// Resolve the tool call in the log so its dot stops pulsing blue: AskUserQuestion
-	// / ExitPlanMode get no tool_result from claude (the subprocess was stopped),
-	// so without this line they'd stay "pending" forever. `← [#id]` is the
-	// success-result marker the log formatter pairs with the `→ [#id]` call.
-	_ = service.appendAgentEvent(agentID, StreamEvent{Type: "tool_result", ID: toolUseID, Content: summarizeAnswer(answer)})
+	// Resolve the tool call in the log so its dot stops pulsing blue, and preserve
+	// the exchange: claude auto-dismisses the question and its real tool_result is
+	// suppressed, so this marker is the only record. RenderedContent keeps the full
+	// question + chosen answer reviewable as the call's expandable preview.
+	_ = service.appendAgentEvent(agentID, StreamEvent{Type: "tool_result", ID: toolUseID, Content: summarizeAnswer(answer), RenderedContent: questionAnswerRecap(pendingInput, answer)})
 
 	working := map[string]any{"status": "working"}
 
@@ -2213,11 +2216,12 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 		}
 	}
 
-	// claude-code persistent session: the process is still alive mid-turn, so the
-	// answer is delivered as a proper tool_result on its stdin and the turn
-	// continues in place (no resume).
+	// claude-code persistent session: claude auto-dismissed the interactive tool
+	// and ended the turn, so the process is alive but idle. The answer is delivered
+	// as the next user turn (a context-aware message, not a tool_result for the
+	// already-closed tool), continuing in place without a resume.
 	if cs != nil {
-		if cs.answerQuestion(toolUseID, answer) {
+		if cs.answerQuestion(planResumeMessage(pendingInput, answer)) {
 			_ = service.store.PatchAgent(agentID, working)
 			return nil
 		}

@@ -143,6 +143,90 @@ func TestStreamClaudeJSON_AskUserQuestion(t *testing.T) {
 	}
 }
 
+func TestStreamClaudeJSON_AutoDismissSuppressed(t *testing.T) {
+	// The real --print sequence: claude calls AskUserQuestion, then auto-dismisses
+	// it itself (is_error tool_result for the same id) and emits filler text before
+	// the result. The tool_call must survive; the auto result and filler must not.
+	askCall := mustJSON(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{map[string]any{
+				"type":  "tool_use",
+				"id":    "toolu_ask",
+				"name":  "AskUserQuestion",
+				"input": map[string]any{"questions": []any{map[string]any{"header": "Indentation", "question": "Tabs or spaces?", "options": []any{map[string]any{"label": "Spaces"}, map[string]any{"label": "Tabs"}}}}},
+			}},
+		},
+	})
+	autoResult := mustJSON(map[string]any{
+		"type": "user",
+		"message": map[string]any{
+			"content": []any{map[string]any{
+				"type":        "tool_result",
+				"tool_use_id": "toolu_ask",
+				"content":     "Answer questions?",
+				"is_error":    true,
+			}},
+		},
+	})
+	filler := mustJSON(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{map[string]any{"type": "text", "text": "It looks like the question was dismissed. Let me know."}},
+		},
+	})
+	result := mustJSON(map[string]any{"type": "result", "status": "success"})
+
+	events, _ := collectClaudeEvents(askCall, autoResult, filler, result)
+	var sawCall, sawAutoResult, sawFiller bool
+	for _, e := range events {
+		switch {
+		case e.Type == "tool_call" && e.Name == "AskUserQuestion":
+			sawCall = true
+		case e.Type == "tool_result" && e.ID == "toolu_ask":
+			sawAutoResult = true
+		case e.Type == "text" && strings.Contains(e.Content, "dismissed"):
+			sawFiller = true
+		}
+	}
+	if !sawCall {
+		t.Error("expected the AskUserQuestion tool_call to survive")
+	}
+	if sawAutoResult {
+		t.Error("expected the auto is_error tool_result to be suppressed")
+	}
+	if sawFiller {
+		t.Error("expected the post-question filler text to be suppressed")
+	}
+}
+
+func TestStreamClaudeJSON_SuppressionResetsNextTurn(t *testing.T) {
+	askCall := mustJSON(map[string]any{
+		"type":    "assistant",
+		"message": map[string]any{"content": []any{map[string]any{"type": "tool_use", "id": "toolu_ask", "name": "AskUserQuestion", "input": map[string]any{"questions": []any{map[string]any{"question": "Proceed?"}}}}}},
+	})
+	autoResult := mustJSON(map[string]any{
+		"type":    "user",
+		"message": map[string]any{"content": []any{map[string]any{"type": "tool_result", "tool_use_id": "toolu_ask", "content": "Answer questions?", "is_error": true}}},
+	})
+	turn1End := mustJSON(map[string]any{"type": "result", "status": "success"})
+	nextTurnText := mustJSON(map[string]any{
+		"type":    "assistant",
+		"message": map[string]any{"content": []any{map[string]any{"type": "text", "text": "real answer after the question"}}},
+	})
+
+	events, _ := collectClaudeEvents(askCall, autoResult, turn1End, nextTurnText)
+	found := false
+	for _, e := range events {
+		if e.Type == "text" && strings.Contains(e.Content, "real answer") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected text in the turn after the question to NOT be suppressed")
+	}
+}
+
 func TestStreamClaudeJSON_TokenAccumulation(t *testing.T) {
 	line := mustJSON(map[string]any{
 		"type": "assistant",
