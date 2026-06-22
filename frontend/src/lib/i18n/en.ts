@@ -12,6 +12,9 @@ export const en = {
     remove: 'Remove',
     configure: 'Configure',
     loading: 'Loading',
+    copyDetails: 'Copy details',
+    detailsCopied: 'Error details copied',
+    clipboardUnavailable: 'Clipboard unavailable',
     validation: {
       required: 'This field is required',
       tooShort: 'Must be at least {{min}} characters',
