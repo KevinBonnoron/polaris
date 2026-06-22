@@ -160,18 +160,68 @@ func (app *App) OpenInIde(repoDir, relPath string, line, col int) error {
 		return app.openIdeDiff(ideId, repoDir, relPath, filePath)
 	}
 
-	cmd := settings.IdeCmd
-	if cmd == "" {
-		cmd = `code --goto "$FILE:$LINE:$COL"`
+	tmpl := settings.IdeCmd
+	if tmpl == "" {
+		tmpl = `code --goto "$FILE:$LINE:$COL"`
 	}
-	cmd = strings.ReplaceAll(cmd, "$FILE", filePath)
-	cmd = strings.ReplaceAll(cmd, "$LINE", fmt.Sprintf("%d", line))
-	cmd = strings.ReplaceAll(cmd, "$COL", fmt.Sprintf("%d", col))
+	// Tokenise the template BEFORE substituting, then inject the values into
+	// individual argv elements. This keeps a file path containing shell
+	// metacharacters from being re-parsed (no "sh -c" / "cmd /C").
+	tokens := splitCommandTemplate(tmpl)
+	if len(tokens) == 0 {
+		return fmt.Errorf("empty IDE command")
+	}
+	repl := strings.NewReplacer(
+		"$FILE", filePath,
+		"$LINE", fmt.Sprintf("%d", line),
+		"$COL", fmt.Sprintf("%d", col),
+	)
+	for i, tok := range tokens {
+		tokens[i] = repl.Replace(tok)
+	}
+	cmd := exec.Command(tokens[0], tokens[1:]...)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Reap the launcher so a short-lived IDE process doesn't linger as a zombie.
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
 
-	if runtime.GOOS == "windows" {
-		return exec.Command("cmd", "/C", cmd).Start()
+// splitCommandTemplate splits a command template on whitespace, honouring
+// single and double quotes for grouping. It performs no variable expansion or
+// escape handling — placeholders are substituted into the resulting tokens.
+func splitCommandTemplate(s string) []string {
+	var tokens []string
+	var cur strings.Builder
+	var quote rune
+	inToken := false
+	for _, r := range s {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote = r
+			inToken = true
+		case unicode.IsSpace(r):
+			if inToken {
+				tokens = append(tokens, cur.String())
+				cur.Reset()
+				inToken = false
+			}
+		default:
+			cur.WriteRune(r)
+			inToken = true
+		}
 	}
-	return exec.Command("sh", "-c", cmd).Start()
+	if inToken {
+		tokens = append(tokens, cur.String())
+	}
+	return tokens
 }
 
 func (app *App) openIdeDiff(ideId, repoDir, relPath, filePath string) error {
