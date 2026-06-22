@@ -416,6 +416,22 @@ func (c *claudeSession) dropQueue() {
 	_ = c.svc.store.PatchAgent(c.agentID, map[string]any{"queuedMessage": nil})
 }
 
+// interruptForAwait aborts the in-flight turn because an AskUserQuestion /
+// ExitPlanMode was surfaced. In --print mode claude auto-dismisses the
+// interactive tool and the model then keeps going — running real operations
+// while it "should" be waiting for the user. Interrupting stops it without
+// killing the process, so the answer can still be delivered as the next turn.
+// running is cleared because the aborted turn may not reach a clean result
+// boundary (the interrupt can pre-empt the auto-dismiss tool_result that
+// onTurnEnd waits for via askPending), and a stuck running flag would make a
+// superseding message queue forever with no turn boundary to drain it.
+func (c *claudeSession) interruptForAwait() {
+	c.interrupt()
+	c.mu.Lock()
+	c.running = false
+	c.mu.Unlock()
+}
+
 func (c *claudeSession) interrupt() {
 	c.mu.Lock()
 	c.seq++
