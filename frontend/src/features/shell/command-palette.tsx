@@ -308,7 +308,7 @@ export function CommandPalette({ open, onOpenChange }: Props) {
                   <CommandSeparator />
                   <CommandGroup heading={t('commandPalette.groups.switchProject')}>
                     {otherProjects.map((p) => (
-                      <CommandItem key={p.id} value={`switch ${p.name}`} onSelect={run(() => setProjectId(p.id))}>
+                      <CommandItem key={p.id} value={`switch ${p.name}`} onSelect={run(() => requestAnimationFrame(() => setProjectId(p.id)))}>
                         <ProjectAvatar project={p} className="size-5 rounded" textClassName="text-[9px]" />
                         <span>{p.name}</span>
                       </CommandItem>
