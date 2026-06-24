@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,6 +20,19 @@ import (
 
 // ansiEscape matches ANSI/VT100 escape sequences produced by TUI-based CLIs.
 var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])`)
+
+var fallbackCodexModels = []polaris.ModelInfo{
+	{Value: "gpt-5.5", Name: "GPT-5.5"},
+	{Value: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
+}
+
+type codexModelsCache struct {
+	Models []struct {
+		Slug        string `json:"slug"`
+		DisplayName string `json:"display_name"`
+		Visibility  string `json:"visibility"`
+	} `json:"models"`
+}
 
 func parseModelsOutput(raw string) []string {
 	clean := ansiEscape.ReplaceAllString(raw, "")
@@ -58,22 +72,78 @@ func (app *App) ListOpencodeModels() []string {
 	return parseModelsOutput(string(out))
 }
 
+func codexHomeDir() string {
+	if dir := strings.TrimSpace(os.Getenv("CODEX_HOME")); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".codex")
+}
+
+func listCodexModels() []polaris.ModelInfo {
+	if dir := codexHomeDir(); dir != "" {
+		if models := readCodexModelsCache(filepath.Join(dir, "models_cache.json")); len(models) > 0 {
+			return models
+		}
+	}
+
+	return append([]polaris.ModelInfo(nil), fallbackCodexModels...)
+}
+
+func readCodexModelsCache(path string) []polaris.ModelInfo {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var cache codexModelsCache
+	if err := json.Unmarshal(raw, &cache); err != nil {
+		return nil
+	}
+
+	models := make([]polaris.ModelInfo, 0, len(cache.Models))
+	seen := map[string]bool{}
+	for _, m := range cache.Models {
+		id := strings.TrimSpace(m.Slug)
+		if id == "" || seen[id] || strings.EqualFold(strings.TrimSpace(m.Visibility), "hide") {
+			continue
+		}
+		name := strings.TrimSpace(m.DisplayName)
+		if name == "" {
+			name = id
+		}
+		seen[id] = true
+		models = append(models, polaris.ModelInfo{Value: id, Name: name})
+	}
+
+	return models
+}
+
 // ListCliModels returns the available models for the given agent kind.
 // For providers with a known API (gemini, mistral), it reads stored credentials
 // and calls the provider API directly. For others, it tries `<binary> models`.
 func (app *App) ListCliModels(kind string) []polaris.ModelInfo {
 	switch kind {
+	case "codex":
+		return listCodexModels()
+
 	case "gemini":
 		models, err := polaris.FetchGeminiModels()
 		if err != nil {
 			return []polaris.ModelInfo{}
 		}
+
 		return models
+
 	case "mistral":
 		models, err := polaris.FetchMistralModels()
 		if err != nil {
 			return []polaris.ModelInfo{}
 		}
+
 		return models
 	}
 
@@ -84,24 +154,29 @@ func (app *App) ListCliModels(kind string) []polaris.ModelInfo {
 			break
 		}
 	}
+
 	if len(binaries) == 0 {
 		return []polaris.ModelInfo{}
 	}
+
 	_, path, ok := resolveAgentBinary(binaries)
 	if !ok {
 		return []polaris.ModelInfo{}
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, path, "models").Output()
 	if err != nil {
 		return []polaris.ModelInfo{}
 	}
+
 	ids := parseModelsOutput(string(out))
 	models := make([]polaris.ModelInfo, len(ids))
 	for i, id := range ids {
 		models[i] = polaris.ModelInfo{Value: id, Name: id, Family: ""}
 	}
+
 	return models
 }
 
@@ -111,6 +186,7 @@ func (app *App) DetectAgentClis() []AgentCli {
 		name, path, installed := resolveAgentBinary(c.binaries)
 		out = append(out, AgentCli{Kind: c.kind, Binary: name, Installed: installed, Path: path})
 	}
+
 	return out
 }
 
@@ -123,6 +199,7 @@ func (app *App) DetectIdes() []Ide {
 			out = append(out, entry)
 			continue
 		}
+
 		for _, bin := range c.binaries {
 			if p, err := exec.LookPath(bin); err == nil {
 				entry.Installed = true
@@ -131,8 +208,10 @@ func (app *App) DetectIdes() []Ide {
 				break
 			}
 		}
+
 		out = append(out, entry)
 	}
+
 	return out
 }
 
