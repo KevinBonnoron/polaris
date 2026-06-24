@@ -13,7 +13,7 @@ func TestBuildSpawnCommandCodexIncludesModel(t *testing.T) {
 	if bin != "codex" {
 		t.Fatalf("bin = %q, want codex", bin)
 	}
-	want := []string{"exec", "--json", "--model", "gpt-5.5", "fix the tests"}
+	want := []string{"exec", "--json", "--model", "gpt-5.5", "--", "fix the tests"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
@@ -29,7 +29,7 @@ func TestBuildSpawnCommandCodexOmitsEmptyModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "fix the tests"}
+	want := []string{"exec", "--json", "--", "fix the tests"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
@@ -48,7 +48,39 @@ func TestBuildResumeCommandCodexIncludesModel(t *testing.T) {
 	if bin != "codex" {
 		t.Fatalf("bin = %q, want codex", bin)
 	}
-	want := []string{"exec", "resume", "--json", "--model", "gpt-5.5", "session-id", "follow up"}
+	want := []string{"exec", "resume", "--json", "--model", "gpt-5.5", "session-id", "--", "follow up"}
+	if len(args) != len(want) {
+		t.Fatalf("args = %#v, want %#v", args, want)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args = %#v, want %#v", args, want)
+		}
+	}
+}
+
+func TestBuildResumeCommandCodexSeparatesPromptStartingWithDash(t *testing.T) {
+	_, args, err := buildResumeCommand("codex", "", "session-id", "--- FAIL: test", "manual", "gpt-5.5", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "resume", "--json", "--model", "gpt-5.5", "session-id", "--", "--- FAIL: test"}
+	if len(args) != len(want) {
+		t.Fatalf("args = %#v, want %#v", args, want)
+	}
+	for i := range want {
+		if args[i] != want[i] {
+			t.Fatalf("args = %#v, want %#v", args, want)
+		}
+	}
+}
+
+func TestBuildSpawnCommandCodexSeparatesPromptStartingWithDash(t *testing.T) {
+	_, args, err := buildSpawnCommand("codex", "", "gpt-5.5", "", "--- FAIL: test", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"exec", "--json", "--model", "gpt-5.5", "--", "--- FAIL: test"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
