@@ -756,22 +756,33 @@ func (service *Service) Send(agentID, message string) error {
 		return nil
 	}
 
+	appendedUserMessage := false
+
 	// 1. If the agent is already running, try to deliver the message to the live process.
 	if service.runner.isRunning(agentID) {
-		// Turn-based cursor uses a queue.
-		if agent.Kind == "cursor" {
-			_ = service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message})
-			service.runner.queueIfRunning(agentID, message)
-			return nil
+		// Turn-based CLIs use a queue; their prompt is passed as command args,
+		// not delivered to a live stdin pipe.
+		if agent.Kind == "cursor" || agent.Kind == "codex" {
+			if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
+				return fmt.Errorf("write log: %w", err)
+			}
+			appendedUserMessage = true
+			if service.runner.queueIfRunning(agentID, message) {
+				return nil
+			}
+			// The process exited between isRunning and queueIfRunning. Fall
+			// through to the resume path without logging the message twice.
 		}
 
-		// Interactive CLIs (copilot, codex) use direct stdin.
+		// Interactive CLIs (copilot) use direct stdin.
 		if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
 			return fmt.Errorf("write log: %w", err)
 		}
+
 		if !service.runner.writeStdin(agentID, message) {
 			return fmt.Errorf("cannot write to %q stdin", agent.Kind)
 		}
+
 		_ = service.store.PatchAgent(agentID, map[string]any{"status": "working"})
 		return nil
 	}
@@ -781,8 +792,10 @@ func (service *Service) Send(agentID, message string) error {
 		return errors.New("agent has no session id; cannot resume")
 	}
 
-	if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
-		return fmt.Errorf("write log: %w", err)
+	if !appendedUserMessage {
+		if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
+			return fmt.Errorf("write log: %w", err)
+		}
 	}
 
 	// Already running: queue and let the in-flight turn pick it up.
@@ -794,8 +807,8 @@ func (service *Service) Send(agentID, message string) error {
 	if err != nil {
 		return fmt.Errorf("find project: %w", err)
 	}
-	workDir := agentRunDir(agent, project)
 
+	workDir := agentRunDir(agent, project)
 	binary, args, env, err := service.buildResume(agent, message)
 	if err != nil {
 		return err
@@ -1319,7 +1332,12 @@ func buildSpawnCommand(kind, binary, model, sessionID, task, source string, allo
 		if bin == "" {
 			bin = "codex"
 		}
-		return bin, []string{"exec", task}, nil
+		args := []string{"exec", "--json"}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		args = append(args, task)
+		return bin, args, nil
 	case "copilot":
 		bin := binary
 		if bin == "" {
@@ -1385,6 +1403,20 @@ func buildResumeCommand(kind, binary, sessionID, message, source, model string, 
 		}
 		args = append(args, message)
 		return bin, args, nil
+	case "codex":
+		bin := binary
+		if bin == "" {
+			bin = "codex"
+		}
+		args := []string{"exec", "resume", "--json"}
+		if model != "" {
+			args = append(args, "--model", model)
+		}
+		args = append(args, sessionID)
+		if message != "" {
+			args = append(args, message)
+		}
+		return bin, args, nil
 	case "gemini":
 		bin := binary
 		if bin == "" {
@@ -1424,6 +1456,18 @@ func appendToolArgs(args *[]string, tools []string) {
 func (service *Service) buildResume(agent *Agent, message string) (string, []string, []string, error) {
 	binary, args, err := buildResumeCommand(agent.Kind, "", agent.SessionID, message, agent.Source, agent.Model, agent.AllowedTools)
 	return binary, args, nil, err
+}
+
+func needsStdinPipe(kind string, writeInitial func(io.Writer) error) bool {
+	if writeInitial != nil {
+		return true
+	}
+	switch kind {
+	case "claude-code", "copilot", "gemini":
+		return true
+	default:
+		return false
+	}
 }
 
 // newSessionUUID returns a RFC 4122 v4 UUID string. claude --session-id refuses
@@ -1725,12 +1769,13 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		if err != nil {
 			return stats, fmt.Errorf("stderr pipe: %w", err), false
 		}
-		// All agent kinds now pipe stdin. Non-claude agents (copilot/codex) read
-		// prompt answers from it; claude-code (in --input-format stream-json) reads
-		// the initial user message and any mid-turn tool_result events from it.
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			return stats, fmt.Errorf("stdin pipe: %w", err), false
+		var stdin io.WriteCloser
+		if needsStdinPipe(kind, writeInitial) {
+			var err error
+			stdin, err = cmd.StdinPipe()
+			if err != nil {
+				return stats, fmt.Errorf("stdin pipe: %w", err), false
+			}
 		}
 
 		if err := cmd.Start(); err != nil {
@@ -1743,6 +1788,9 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		_ = svc.store.PatchAgent(agentID, map[string]any{"pid": cmd.Process.Pid})
 
 		if writeInitial != nil {
+			if stdin == nil {
+				return stats, errors.New("initial input requested without stdin pipe"), false
+			}
 			if err := writeInitial(stdin); err != nil {
 				return stats, fmt.Errorf("send initial input: %w", err), false
 			}
@@ -1774,6 +1822,20 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 					if ok && proc.stdin != nil {
 						_ = proc.stdin.Close()
 					}
+				})
+				return
+			}
+			if kind == "codex" {
+				stats = streamCodexJSON(stdout, logFile, func(evt StreamEvent) {
+					detect(evt)
+					svc.emitLogEvent(agentID, evt)
+				}, func(threadID string) {
+					if threadID == "" {
+						return
+					}
+					_ = svc.store.PatchAgent(agentID, map[string]any{"sessionId": threadID})
+				}, func(tokens int, parts usageParts, costUSD float64) {
+					svc.emitTokens(agentID, baseTokens+tokens, baseParts.Add(parts), baseCost+costUSD)
 				})
 				return
 			}
@@ -1811,7 +1873,14 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		}()
 		go func() {
 			defer wg.Done()
-			if kind == "claude-code" || kind == "cursor" || kind == "gemini" {
+			if kind == "claude-code" || kind == "cursor" || kind == "gemini" || kind == "codex" {
+				if kind == "codex" {
+					streamCodexStderr(stderr, sink, func(evt StreamEvent) {
+						detect(evt)
+						svc.emitLogEvent(agentID, evt)
+					})
+					return
+				}
 				streamLines(stderr, sink, func(evt StreamEvent) {
 					detect(evt)
 					svc.emitLogEvent(agentID, evt)

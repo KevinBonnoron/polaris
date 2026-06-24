@@ -55,7 +55,7 @@ func isRetryableAPIError(line string) bool {
 	return retryableAPIErrorRe.MatchString(line)
 }
 
-var technicalNoiseRe = regexp.MustCompile(`(?i)loaded cached credentials|attempt \d+ failed:.*retrying`)
+var technicalNoiseRe = regexp.MustCompile(`(?i)loaded cached credentials|attempt \d+ failed:.*retrying|reading additional input from stdin|^openai codex v\d+`)
 
 // isTechnicalNoise returns true for CLI output lines that are purely technical
 // and shouldn't clutter the user chat (e.g. auth messages, retry attempts).
