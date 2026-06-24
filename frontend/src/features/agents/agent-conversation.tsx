@@ -37,7 +37,9 @@ import { AgentInputArea, NO_TOOLS_SENTINEL, TOOL_PRESETS } from './agent-input-a
 import { findAgentKind, OPENCODE_DESCRIPTOR } from './agent-kinds';
 import { countToolsFromLog } from './agent-log-files';
 import { useClaudeUsage } from './claude-usage-bar';
+import { useCodexUsage } from './codex-usage-bar';
 import { TokenStat } from './token-stat';
+import { formatUsageWindow } from './usage-limit-utils';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
 
 const LAUNCH_KIND_LABEL: Record<string, string> = {
@@ -391,6 +393,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const providerLabel = provider?.name ?? (cliCfg ? (findAgentKind(agent?.kind ?? '')?.label ?? cliCfg.id) : null);
   const duration = agent && !isDraft ? (agent.updatedAt ?? agent.startedAt) - agent.startedAt : 0;
   const { usage: claudeUsage } = useClaudeUsage();
+  const { usage: codexUsage } = useCodexUsage();
 
   const blockRenderers: Record<string, () => ReactNode> = useMemo(
     () => ({
@@ -635,14 +638,15 @@ export function AgentConversation({ agentId }: { agentId: string }) {
               );
             }
             if (isUsageBlock(blockId)) {
-              if (!claudeUsage || cliCfg?.id !== 'claude-code') {
+              const pct = cliCfg?.id === 'claude-code' ? claudeUsage?.sessionPercentUsed : cliCfg?.id === 'codex' ? codexUsage?.percentUsed : undefined;
+              if (pct == null) {
                 return null;
               }
 
-              const pct = claudeUsage.sessionPercentUsed;
               const mode = usageMode(blockId);
               const display = mode === 'remaining' ? 100 - pct : pct;
               const label = mode === 'remaining' ? t('agents.usage.left') : t('agents.usage.used');
+              const sourceLabel = cliCfg?.id === 'codex' ? t('agents.usage.window', { provider: 'Codex', window: formatUsageWindow(codexUsage?.windowMinutes, '?') }) : t('agents.usage.window', { provider: 'Claude', window: '5h' });
               return (
                 <Tooltip key={`usage-${idx}`}>
                   <TooltipTrigger asChild>
@@ -653,7 +657,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
                     </Badge>
                   </TooltipTrigger>
                   <TooltipContent side="top">
-                    {t('agents.usage.session')}: {display}% {label}
+                    {sourceLabel}: {display}% {label}
                   </TooltipContent>
                 </Tooltip>
               );

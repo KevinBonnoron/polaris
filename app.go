@@ -301,6 +301,10 @@ func (app *App) FetchCursorUsage(force bool) (*polaris.CursorUsage, error) {
 	return polaris.FetchCursorUsage(force)
 }
 
+func (app *App) FetchCodexUsage(force bool) (*polaris.CodexUsage, error) {
+	return polaris.FetchCodexUsage(force)
+}
+
 func (app *App) FetchClaudeModels(force bool) ([]polaris.ModelInfo, error) {
 	return polaris.FetchClaudeModels(force)
 }

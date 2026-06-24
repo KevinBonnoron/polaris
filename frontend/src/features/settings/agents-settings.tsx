@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AgentModelSelect } from '@/features/agents/agent-model-select';
 import { ClaudeUsageBar } from '@/features/agents/claude-usage-bar';
+import { CodexUsageBar } from '@/features/agents/codex-usage-bar';
 import { CursorUsageBar } from '@/features/agents/cursor-usage-bar';
 import { cn } from '@/lib/utils';
 import { type AgentCliInfo, useAgentClis } from '@/state/agent-clis';
@@ -27,6 +28,7 @@ function AgentKindCard({ kind, detecting, defaultModel, onDefaultModelChange, no
   const showInstallActions = !installed && !detecting;
   const binaryHint = installed ? (kind.path ?? kind.binary) : kind.installCmd;
   const isClaude = kind.id === 'claude-code';
+  const isCodex = kind.id === 'codex';
   const isCursor = kind.id === 'cursor';
   const hasModels = kind.models.length > 0;
   const [copied, setCopied] = useState(false);
@@ -71,6 +73,7 @@ function AgentKindCard({ kind, detecting, defaultModel, onDefaultModelChange, no
           )}
         </div>
         {isClaude && installed && <ClaudeUsageBar model={defaultModel} />}
+        {isCodex && installed && <CodexUsageBar />}
         {isCursor && installed && <CursorUsageBar />}
       </CardContent>
     </Card>

@@ -137,19 +137,19 @@ export const en = {
       dismissWarning: 'Dismiss warning',
     },
     usage: {
-      title: 'Claude usage',
-      session: 'Session (5h window)',
+      title: '{{provider}} usage',
+      window: '{{provider}} ({{window}} window)',
       weekly: 'Weekly (all models)',
       weeklyModel: 'Weekly ({{model}})',
       left: 'left',
       used: 'used',
       loading: 'Fetching usage…',
+      localTokens: 'Local tokens',
+      plan: '{{plan}} plan',
     },
     cursorUsage: {
-      title: 'Cursor usage',
       requests: 'Requests (monthly)',
       requestsUnlimited: '{{count}} requests this month',
-      left: 'left',
       cost: 'Cost this month',
     },
     modelFamily: {
