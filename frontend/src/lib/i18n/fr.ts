@@ -139,19 +139,19 @@ export const fr: Translation = {
       dismissWarning: "Ignorer l'avertissement",
     },
     usage: {
-      title: 'Utilisation Claude',
-      session: 'Session (fenêtre 5h)',
+      title: 'Utilisation {{provider}}',
+      window: '{{provider}} (fenêtre {{window}})',
       weekly: 'Hebdomadaire (tous modèles)',
       weeklyModel: 'Hebdomadaire ({{model}})',
       left: 'restant',
       used: 'utilisé',
       loading: "Récupération de l'utilisation…",
+      localTokens: 'Tokens locaux',
+      plan: 'Plan {{plan}}',
     },
     cursorUsage: {
-      title: 'Utilisation Cursor',
       requests: 'Requêtes (mensuel)',
       requestsUnlimited: '{{count}} requêtes ce mois',
-      left: 'restant',
       cost: 'Coût ce mois',
     },
     modelFamily: {
