@@ -1336,6 +1336,9 @@ func buildSpawnCommand(kind, binary, model, sessionID, task, source string, allo
 		if model != "" {
 			args = append(args, "--model", model)
 		}
+		if task != "" {
+			args = append(args, "--")
+		}
 		args = append(args, task)
 		return bin, args, nil
 	case "copilot":
@@ -1414,7 +1417,7 @@ func buildResumeCommand(kind, binary, sessionID, message, source, model string, 
 		}
 		args = append(args, sessionID)
 		if message != "" {
-			args = append(args, message)
+			args = append(args, "--", message)
 		}
 		return bin, args, nil
 	case "gemini":
