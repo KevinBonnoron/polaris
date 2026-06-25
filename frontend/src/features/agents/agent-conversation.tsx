@@ -277,12 +277,13 @@ export function AgentConversation({ agentId }: { agentId: string }) {
     let active = true;
     let reading = false;
     let pendingPull = false;
+    let pendingReset = false;
     logOffset.current = 0;
     setLog([]);
     setLogLoading(true);
     stickToBottom.current = true;
 
-    const pull = (first = false) => {
+    const pull = (first = false, reset = false) => {
       if (!active) {
         return;
       }
@@ -290,7 +291,13 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         // A signal arrived mid-read; coalesce it into a follow-up so the final
         // tail is never dropped.
         pendingPull = true;
+        pendingReset = pendingReset || reset;
         return;
+      }
+      if (reset) {
+        logOffset.current = 0;
+        setLog([]);
+        stickToBottom.current = true;
       }
       reading = true;
       ReadAgentLogFrom(agentId, logOffset.current)
@@ -311,16 +318,18 @@ export function AgentConversation({ agentId }: { agentId: string }) {
             setLogLoading(false);
           }
           if (active && pendingPull) {
+            const nextReset = pendingReset;
             pendingPull = false;
-            pull(false);
+            pendingReset = false;
+            pull(false, nextReset);
           }
         });
     };
 
     pull(true);
-    const unsubscribe = EventsOn('agent:log:appended', (payload: { agentId: string }) => {
+    const unsubscribe = EventsOn('agent:log:appended', (payload: { agentId: string; reset?: boolean }) => {
       if (payload.agentId === agentId) {
-        pull(false);
+        pull(false, payload.reset === true);
       }
     });
     return () => {

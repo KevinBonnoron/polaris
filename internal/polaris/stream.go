@@ -225,8 +225,8 @@ func summarizeToolInput(name string, input map[string]any) string {
 			return " · " + truncate(strings.ReplaceAll(cmd, "\n", " "), 160)
 		}
 	case "Read":
-		if fp, ok := input["file_path"].(string); ok && fp != "" {
-			detail := fp
+		if path, ok := readToolPath(input); ok {
+			detail := path
 			offset, hasOffset := numericField(input, "offset")
 			limit, hasLimit := numericField(input, "limit")
 			if hasOffset && hasLimit {
@@ -237,6 +237,10 @@ func summarizeToolInput(name string, input map[string]any) string {
 				detail += fmt.Sprintf(":1-%d", int(limit))
 			}
 			return " · " + detail
+		}
+	case "ReadImage", "ViewImage":
+		if path, ok := readToolPath(input); ok {
+			return " · " + path
 		}
 	case "Edit", "Write", "MultiEdit", "NotebookEdit", "Update":
 		if fp, ok := input["file_path"].(string); ok && fp != "" {
@@ -295,6 +299,15 @@ func summarizeToolInput(name string, input map[string]any) string {
 		return fmt.Sprintf(" · %d todos (%d done, %d in progress, %d pending)", len(todos), completed, inProgress, pending)
 	}
 	return ""
+}
+
+func readToolPath(input map[string]any) (string, bool) {
+	for _, key := range []string{"file_path", "path", "filePath", "image_path", "imagePath"} {
+		if path, ok := input[key].(string); ok && path != "" {
+			return path, true
+		}
+	}
+	return "", false
 }
 
 // summarizeQuestionLine renders a one-line label for an AskUserQuestion tool call
