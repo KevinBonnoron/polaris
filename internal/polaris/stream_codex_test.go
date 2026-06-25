@@ -2,8 +2,12 @@ package polaris
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func collectCodexEvents(jsonLines ...string) ([]StreamEvent, streamTurnStats, []string) {
@@ -70,6 +74,182 @@ func TestStreamCodexJSON_CommandLifecycle(t *testing.T) {
 	}
 	if result.Content != "test" {
 		t.Fatalf("result.Content = %q, want %q", result.Content, "test")
+	}
+}
+
+func TestStreamCodexJSON_ResponseItemViewImageLifecycle(t *testing.T) {
+	events, stats, _ := collectCodexEvents(
+		mustJSON(map[string]any{"type": "response_item", "payload": map[string]any{
+			"type":      "function_call",
+			"name":      "view_image",
+			"arguments": `{"path":"/tmp/screenshot.png","detail":"high"}`,
+			"call_id":   "call_img",
+		}}),
+		mustJSON(map[string]any{"type": "response_item", "payload": map[string]any{
+			"type":    "function_call_output",
+			"call_id": "call_img",
+			"output": []any{map[string]any{
+				"type":      "input_image",
+				"image_url": "data:image/png;base64,very-large",
+				"detail":    "high",
+			}},
+		}}),
+	)
+	if stats.ToolsUsed != 1 {
+		t.Fatalf("ToolsUsed = %d, want 1", stats.ToolsUsed)
+	}
+	var call, result *StreamEvent
+	for i, e := range events {
+		switch e.Type {
+		case "tool_call":
+			call = &events[i]
+		case "tool_result":
+			result = &events[i]
+		}
+	}
+	if call == nil {
+		t.Fatalf("expected tool_call, got %+v", events)
+	}
+	if call.Name != "Read" || call.ID != "call_img" {
+		t.Fatalf("unexpected tool_call: %+v", *call)
+	}
+	if call.Content != "/tmp/screenshot.png" {
+		t.Fatalf("call.Content = %q, want image path summary", call.Content)
+	}
+	if result == nil {
+		t.Fatalf("expected tool_result, got %+v", events)
+	}
+	if result.Content != "image loaded" {
+		t.Fatalf("result.Content = %q, want compact image summary", result.Content)
+	}
+}
+
+func TestStreamCodexJSON_FunctionOutputSingleTextBlock(t *testing.T) {
+	events, _, _ := collectCodexEvents(
+		mustJSON(map[string]any{"type": "response_item", "payload": map[string]any{
+			"type":    "function_call_output",
+			"call_id": "call_text",
+			"output": map[string]any{
+				"type": "output_text",
+				"text": "tool output\n",
+			},
+		}}),
+	)
+	if len(events) != 1 {
+		t.Fatalf("len(events) = %d, want 1: %+v", len(events), events)
+	}
+	if events[0].Type != "tool_result" || events[0].ID != "call_text" || events[0].Content != "tool output" {
+		t.Fatalf("unexpected event: %+v", events[0])
+	}
+}
+
+func TestRecentCodexImageToolEventsFromSessionFile(t *testing.T) {
+	dir := t.TempDir()
+	oldHome := os.Getenv("CODEX_HOME")
+	t.Setenv("CODEX_HOME", dir)
+	t.Cleanup(func() {
+		_ = os.Setenv("CODEX_HOME", oldHome)
+	})
+	sessions := filepath.Join(dir, "sessions", "2026", "06", "25")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC().Add(-time.Second)
+	lineTime := started.Add(500 * time.Millisecond).Format(time.RFC3339Nano)
+	path := filepath.Join(sessions, "rollout-test.jsonl")
+	content := strings.Join([]string{
+		mustJSON(map[string]any{"timestamp": lineTime, "type": "session_meta", "payload": map[string]any{
+			"id": "thread-good",
+		}}),
+		mustJSON(map[string]any{"timestamp": lineTime, "type": "response_item", "payload": map[string]any{
+			"type":      "function_call",
+			"name":      "view_image",
+			"arguments": `{"path":"/tmp/image.png","detail":"high"}`,
+			"call_id":   "call_img",
+		}}),
+		mustJSON(map[string]any{"timestamp": lineTime, "type": "response_item", "payload": map[string]any{
+			"type":    "function_call_output",
+			"call_id": "call_img",
+			"output": []any{map[string]any{
+				"type":      "input_image",
+				"image_url": "data:image/png;base64,too-large-to-log",
+			}},
+		}}),
+	}, "\n") + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	events := recentCodexImageToolEvents(started, "thread-good")
+	if len(events) != 2 {
+		t.Fatalf("len(events) = %d, want 2: %+v", len(events), events)
+	}
+	if events[0].Type != "tool_call" || events[0].Name != "Read" || events[0].Content != "/tmp/image.png" {
+		t.Fatalf("unexpected call event: %+v", events[0])
+	}
+	if events[1].Type != "tool_result" || events[1].Content != "image loaded" {
+		t.Fatalf("unexpected result event: %+v", events[1])
+	}
+}
+
+func TestRecentCodexImageToolEventsIgnoresOtherSessions(t *testing.T) {
+	dir := t.TempDir()
+	oldHome := os.Getenv("CODEX_HOME")
+	t.Setenv("CODEX_HOME", dir)
+	t.Cleanup(func() {
+		_ = os.Setenv("CODEX_HOME", oldHome)
+	})
+	sessions := filepath.Join(dir, "sessions", "2026", "06", "25")
+	if err := os.MkdirAll(sessions, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC().Add(-time.Second)
+	lineTime := started.Add(500 * time.Millisecond).Format(time.RFC3339Nano)
+	content := strings.Join([]string{
+		mustJSON(map[string]any{"timestamp": lineTime, "type": "session_meta", "payload": map[string]any{
+			"id": "thread-other",
+		}}),
+		mustJSON(map[string]any{"timestamp": lineTime, "type": "response_item", "payload": map[string]any{
+			"type":      "function_call",
+			"name":      "view_image",
+			"arguments": `{"path":"/tmp/other.png"}`,
+			"call_id":   "call_other",
+		}}),
+	}, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(sessions, "rollout-other.jsonl"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	events := recentCodexImageToolEvents(started, "thread-current")
+	if len(events) != 0 {
+		t.Fatalf("len(events) = %d, want 0: %+v", len(events), events)
+	}
+}
+
+func TestMergeEventsIntoLogLinesUsesTimestamps(t *testing.T) {
+	lines := []string{
+		marshalEvent(StreamEvent{Type: "user_message", Ts: "08:00:00", Content: "look"}),
+		marshalEvent(StreamEvent{Type: "text", Ts: "08:00:02", Content: "after"}),
+	}
+	events := []StreamEvent{
+		{Type: "tool_call", Ts: "08:00:01", ID: "call_img", Name: "Read", Content: "/tmp/image.png"},
+		{Type: "tool_result", Ts: "08:00:01", ID: "call_img", Content: "image loaded"},
+	}
+
+	merged := mergeEventsIntoLogLines(lines, events)
+	if len(merged) != 4 {
+		t.Fatalf("len(merged) = %d, want 4", len(merged))
+	}
+	var got []StreamEvent
+	for _, line := range merged {
+		var evt StreamEvent
+		if err := json.Unmarshal([]byte(line), &evt); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, evt)
+	}
+	if got[1].Type != "tool_call" || got[2].Type != "tool_result" || got[3].Type != "text" {
+		t.Fatalf("unexpected order: %+v", got)
 	}
 }
 
