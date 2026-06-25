@@ -83,6 +83,71 @@ func TestStreamClaudeJSON_ToolCall(t *testing.T) {
 	}
 }
 
+func TestStreamClaudeJSON_ReadImagePathSummary(t *testing.T) {
+	line := mustJSON(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{map[string]any{
+				"type": "tool_use",
+				"id":   "toolu_img",
+				"name": "Read",
+				"input": map[string]any{
+					"image_path": "/tmp/polaris_paste_1782371913317374478.png",
+					"detail":     "original",
+				},
+			}},
+		},
+	})
+	events, _ := collectClaudeEvents(line)
+	var call *StreamEvent
+	for i, e := range events {
+		if e.Type == "tool_call" {
+			call = &events[i]
+		}
+	}
+	if call == nil {
+		t.Fatalf("expected tool_call event, got %+v", events)
+	}
+	if call.Name != "Read" {
+		t.Fatalf("call.Name = %q, want Read", call.Name)
+	}
+	want := "/tmp/polaris_paste_1782371913317374478.png"
+	if call.Content != want {
+		t.Fatalf("call.Content = %q, want %q", call.Content, want)
+	}
+}
+
+func TestStreamClaudeJSON_NamedImageReadPathSummary(t *testing.T) {
+	line := mustJSON(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{map[string]any{
+				"type":  "tool_use",
+				"id":    "toolu_img",
+				"name":  "ReadImage",
+				"input": map[string]any{"path": "/tmp/polaris_paste.png", "detail": "original"},
+			}},
+		},
+	})
+	events, _ := collectClaudeEvents(line)
+	var call *StreamEvent
+	for i, e := range events {
+		if e.Type == "tool_call" {
+			call = &events[i]
+		}
+	}
+	if call == nil {
+		t.Fatalf("expected tool_call event, got %+v", events)
+	}
+	if call.Name != "Read" {
+		t.Fatalf("call.Name = %q, want Read", call.Name)
+	}
+	want := "/tmp/polaris_paste.png"
+	if call.Content != want {
+		t.Fatalf("call.Content = %q, want %q", call.Content, want)
+	}
+}
+
 func TestStreamClaudeJSON_ToolResult(t *testing.T) {
 	editCall := mustJSON(map[string]any{
 		"type": "assistant",

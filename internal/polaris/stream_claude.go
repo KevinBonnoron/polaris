@@ -178,7 +178,8 @@ func renderClaudeAssistant(evt map[string]any, files map[string]struct{}, toolIn
 				events = append(events, StreamEvent{Type: "thinking", Content: t})
 			}
 		case "tool_use":
-			name, _ := block["name"].(string)
+			rawName, _ := block["name"].(string)
+			name := claudeToolName(rawName)
 			input, _ := block["input"].(map[string]any)
 			id, _ := block["id"].(string)
 			stats.ToolsUsed++
@@ -209,6 +210,15 @@ func renderClaudeAssistant(evt map[string]any, files map[string]struct{}, toolIn
 		}
 	}
 	return events
+}
+
+func claudeToolName(name string) string {
+	switch name {
+	case "ReadImage", "ViewImage":
+		return "Read"
+	default:
+		return name
+	}
 }
 
 func renderClaudeUserToolResults(evt map[string]any, toolInputs map[string]toolInputSnapshot) []StreamEvent {
