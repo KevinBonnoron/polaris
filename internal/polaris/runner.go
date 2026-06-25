@@ -1333,7 +1333,7 @@ func buildSpawnCommand(kind, binary, model, sessionID, task, source string, allo
 		if bin == "" {
 			bin = "codex"
 		}
-		args := []string{"exec", "--json"}
+		args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
@@ -1412,7 +1412,7 @@ func buildResumeCommand(kind, binary, sessionID, message, source, model string, 
 		if bin == "" {
 			bin = "codex"
 		}
-		args := []string{"exec", "resume", "--json"}
+		args := []string{"exec", "resume", "--json", "--dangerously-bypass-approvals-and-sandbox"}
 		if model != "" {
 			args = append(args, "--model", model)
 		}
