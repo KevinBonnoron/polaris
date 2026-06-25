@@ -13,7 +13,7 @@ func TestBuildSpawnCommandCodexIncludesModel(t *testing.T) {
 	if bin != "codex" {
 		t.Fatalf("bin = %q, want codex", bin)
 	}
-	want := []string{"exec", "--json", "--model", "gpt-5.5", "--", "fix the tests"}
+	want := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.5", "fix the tests"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
@@ -29,7 +29,7 @@ func TestBuildSpawnCommandCodexOmitsEmptyModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "--", "fix the tests"}
+	want := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox", "fix the tests"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
@@ -80,7 +80,7 @@ func TestBuildSpawnCommandCodexSeparatesPromptStartingWithDash(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"exec", "--json", "--model", "gpt-5.5", "--", "--- FAIL: test"}
+	want := []string{"exec", "resume", "--json", "--dangerously-bypass-approvals-and-sandbox", "--model", "gpt-5.5", "--", "--- FAIL: test"}
 	if len(args) != len(want) {
 		t.Fatalf("args = %#v, want %#v", args, want)
 	}
