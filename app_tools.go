@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -18,108 +16,16 @@ import (
 	"github.com/KevinBonnoron/polaris/internal/terminal"
 )
 
-// ansiEscape matches ANSI/VT100 escape sequences produced by TUI-based CLIs.
-var ansiEscape = regexp.MustCompile(`\x1b(?:[@-Z\\-_]|\[[0-9;?]*[ -/]*[@-~])`)
-
-var fallbackCodexModels = []polaris.ModelInfo{
-	{Value: "gpt-5.5", Name: "GPT-5.5"},
-	{Value: "gpt-5.4-mini", Name: "GPT-5.4 Mini"},
-}
-
-type codexModelsCache struct {
-	Models []struct {
-		Slug        string `json:"slug"`
-		DisplayName string `json:"display_name"`
-		Visibility  string `json:"visibility"`
-	} `json:"models"`
-}
-
-func parseModelsOutput(raw string) []string {
-	clean := ansiEscape.ReplaceAllString(raw, "")
-	var models []string
-	for _, line := range strings.Split(clean, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		// Discard lines with spaces or non-printable characters — those are
-		// UI chrome, not model IDs.
-		valid := true
-		for _, r := range line {
-			if r == ' ' || !unicode.IsPrint(r) {
-				valid = false
-				break
-			}
-		}
-		if valid {
-			models = append(models, line)
-		}
+func (app *App) ListOpencodeModels() []string {
+	models, err := polaris.ListOpencodeModels()
+	if err != nil {
+		return []string{}
 	}
 	return models
-}
-
-func (app *App) ListOpencodeModels() []string {
-	_, path, ok := resolveAgentBinary([]string{"opencode"})
-	if !ok {
-		return []string{}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "models").Output()
-	if err != nil {
-		return []string{}
-	}
-	return parseModelsOutput(string(out))
-}
-
-func codexHomeDir() string {
-	if dir := strings.TrimSpace(os.Getenv("CODEX_HOME")); dir != "" {
-		return dir
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".codex")
 }
 
 func listCodexModels() []polaris.ModelInfo {
-	if dir := codexHomeDir(); dir != "" {
-		if models := readCodexModelsCache(filepath.Join(dir, "models_cache.json")); len(models) > 0 {
-			return models
-		}
-	}
-
-	return append([]polaris.ModelInfo(nil), fallbackCodexModels...)
-}
-
-func readCodexModelsCache(path string) []polaris.ModelInfo {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	var cache codexModelsCache
-	if err := json.Unmarshal(raw, &cache); err != nil {
-		return nil
-	}
-
-	models := make([]polaris.ModelInfo, 0, len(cache.Models))
-	seen := map[string]bool{}
-	for _, m := range cache.Models {
-		id := strings.TrimSpace(m.Slug)
-		if id == "" || seen[id] || strings.EqualFold(strings.TrimSpace(m.Visibility), "hide") {
-			continue
-		}
-		name := strings.TrimSpace(m.DisplayName)
-		if name == "" {
-			name = id
-		}
-		seen[id] = true
-		models = append(models, polaris.ModelInfo{Value: id, Name: name})
-	}
-
-	return models
+	return polaris.ListCodexModels()
 }
 
 // ListCliModels returns the available models for the given agent kind.
@@ -171,7 +77,7 @@ func (app *App) ListCliModels(kind string) []polaris.ModelInfo {
 		return []polaris.ModelInfo{}
 	}
 
-	ids := parseModelsOutput(string(out))
+	ids := polaris.ParseModelsOutput(string(out))
 	models := make([]polaris.ModelInfo, len(ids))
 	for i, id := range ids {
 		models[i] = polaris.ModelInfo{Value: id, Name: id, Family: ""}

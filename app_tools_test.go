@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/KevinBonnoron/polaris/internal/polaris"
 )
 
 func TestReadCodexModelsCacheFiltersVisibleModels(t *testing.T) {
@@ -20,7 +22,7 @@ func TestReadCodexModelsCacheFiltersVisibleModels(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	models := readCodexModelsCache(path)
+	models := polaris.ReadCodexModelsCache(path)
 	if len(models) != 2 {
 		t.Fatalf("len(models) = %d, want 2: %#v", len(models), models)
 	}
