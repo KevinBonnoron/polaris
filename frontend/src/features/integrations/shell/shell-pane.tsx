@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { ClipboardGetText } from '@/wailsjs/runtime/runtime';
 import { useCSharpRun } from '../csharp/csharp-run-context';
+import { useGodotRun } from '../godot/godot-run-context';
 import { useNodejsRun } from '../nodejs/nodejs-run-context';
 import { usePythonRun } from '../python/python-run-context';
 import { useTaskfileRun } from '../taskfile/taskfile-run-context';
@@ -23,6 +24,7 @@ export function ShellPane() {
   const { run: pythonRun, isRunning: pythonRunning, stop: pythonStop, restart: pythonRestart, clear: pythonClear } = usePythonRun();
   const { run: csharpRun, isRunning: csharpRunning, stop: csharpStop, restart: csharpRestart, clear: csharpClear } = useCSharpRun();
   const { run: taskfileRun, isRunning: taskfileRunning, stop: taskfileStop, restart: taskfileRestart, clear: taskfileClear } = useTaskfileRun();
+  const { run: godotRun, isRunning: godotRunning, stop: godotStop, restart: godotRestart, clear: godotClear } = useGodotRun();
   const { t } = useTranslation();
 
   const prevNodejsRunId = useRef<string | undefined>(nodejsRun?.runId);
@@ -73,23 +75,38 @@ export function ShellPane() {
     }
   }, [taskfileRun, setActiveKind, setPaneOpen]);
 
+  const prevGodotRunId = useRef<string | undefined>(godotRun?.runId);
+  useEffect(() => {
+    if (godotRun && prevGodotRunId.current !== godotRun.runId) {
+      prevGodotRunId.current = godotRun.runId;
+      setActiveKind('godot');
+      setPaneOpen(true);
+    }
+    if (!godotRun) {
+      prevGodotRunId.current = undefined;
+    }
+  }, [godotRun, setActiveKind, setPaneOpen]);
+
   useEffect(() => {
     if (activeKind === 'nodejs' && !nodejsRun) {
-      setActiveKind(pythonRun ? 'python' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : 'shell');
+      setActiveKind(pythonRun ? 'python' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : godotRun ? 'godot' : 'shell');
     }
     if (activeKind === 'python' && !pythonRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : godotRun ? 'godot' : 'shell');
     }
     if (activeKind === 'csharp' && !csharpRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : taskfileRun ? 'taskfile' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : taskfileRun ? 'taskfile' : godotRun ? 'godot' : 'shell');
     }
     if (activeKind === 'taskfile' && !taskfileRun) {
-      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : csharpRun ? 'csharp' : 'shell');
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : csharpRun ? 'csharp' : godotRun ? 'godot' : 'shell');
+    }
+    if (activeKind === 'godot' && !godotRun) {
+      setActiveKind(nodejsRun ? 'nodejs' : pythonRun ? 'python' : csharpRun ? 'csharp' : taskfileRun ? 'taskfile' : 'shell');
     }
     if (activeKind === 'shell' && !activeSessionId && sessions.length > 0) {
       setActiveSessionId(sessions[sessions.length - 1].sessionId);
     }
-  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, csharpRun, taskfileRun, setActiveKind, setActiveSessionId]);
+  }, [activeKind, activeSessionId, sessions, nodejsRun, pythonRun, csharpRun, taskfileRun, godotRun, setActiveKind, setActiveSessionId]);
 
   const onDragStart = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -104,7 +121,7 @@ export function ShellPane() {
     window.addEventListener('pointerup', onUp);
   };
 
-  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun || !!taskfileRun;
+  const hasAnything = sessions.length > 0 || !!nodejsRun || !!pythonRun || !!csharpRun || !!taskfileRun || !!godotRun;
   const visible = paneOpen && hasAnything;
 
   const activeShellSession = activeKind === 'shell' ? (sessions.find((s) => s.sessionId === activeSessionId) ?? sessions[0] ?? null) : null;
@@ -240,6 +257,36 @@ export function ShellPane() {
             </>
           )}
 
+          {activeKind === 'godot' && godotRun && (
+            <>
+              <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border/50 px-3">
+                {godotRunning ? (
+                  <Badge variant="secondary" className="h-4 gap-1 bg-emerald-500/10 px-1.5 text-[10px] text-emerald-400">
+                    <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
+                    {t('integrations.godot.running')}
+                  </Badge>
+                ) : godotRun.exited ? (
+                  <Badge variant={godotRun.exited.code === 0 ? 'secondary' : 'destructive'} className={cn('h-4 px-1.5 text-[10px]', godotRun.exited.code === 0 && 'bg-emerald-500/10 text-emerald-400')}>
+                    {godotRun.exited.code === 0 ? t('integrations.godot.exitOk') : t('integrations.godot.exitCode', { code: godotRun.exited.code })}
+                  </Badge>
+                ) : null}
+                <div className="flex-1" />
+                <Button size="icon" variant="ghost" className="size-6" onClick={() => void godotRestart()}>
+                  <RotateCcw className="size-3" />
+                </Button>
+                {godotRunning && (
+                  <Button size="icon" variant="ghost" className="size-6" onClick={() => void godotStop()}>
+                    <Square className="size-3 text-destructive" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <TerminalView runId={godotRun.runId} lines={godotRun.lines} />
+              </div>
+              {godotRun.exited?.error && <div className="shrink-0 px-3 py-1.5 font-mono text-xs text-red-400">{godotRun.exited.error}</div>}
+            </>
+          )}
+
           {activeKind === 'shell' && <div className="flex-1 overflow-hidden">{activeShellSession ? <ShellTerminal key={activeShellSession.sessionId} session={activeShellSession} /> : <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{t('integrations.shell.newSession')}</div>}</div>}
         </div>
 
@@ -322,6 +369,19 @@ export function ShellPane() {
                 }}
               />
             )}
+            {godotRun && (
+              <SessionItem
+                label={godotRun.scriptName}
+                active={activeKind === 'godot'}
+                running={godotRunning}
+                exited={godotRun.exited}
+                onSelect={() => setActiveKind('godot')}
+                onDelete={() => {
+                  godotClear();
+                  setActiveKind('shell');
+                }}
+              />
+            )}
           </div>
 
           <div className="shrink-0 border-t border-border/50 p-1">
@@ -372,7 +432,7 @@ function SessionItem({ label, active, running, exited, onSelect, onDelete }: { l
 }
 
 // Strip SOH/STX (\001/\002) and literal \[ \] emitted by bash/readline as PS1 markers.
-const cleanChunk = (s: string) => s.replace(/[\x01\x02]|\\[\[\]]/g, '');
+const cleanChunk = (s: string) => s.replace(/[\x01\x02]|\\[[\]]/g, '');
 
 function ShellTerminal({ session }: { session: ShellSession }) {
   const { sendInput, resize } = useShellRun();

@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { RunContext } from '@/features/integrations/create-run-context';
 import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
+import { useGodotRun } from '@/features/integrations/godot/godot-run-context';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { getLaunchTarget, withLaunchTarget } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
@@ -45,6 +46,7 @@ const LAUNCH_KIND_LABEL: Record<string, string> = {
   python: 'Python',
   csharp: 'C#',
   taskfile: 'Taskfile',
+  godot: 'Godot',
 };
 
 const PRESET_I18N: Record<string, string> = {
@@ -131,7 +133,8 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const python = usePythonRun();
   const csharp = useCSharpRun();
   const taskfile = useTaskfileRun();
-  const runs = useMemo<RunContext[]>(() => [nodejs, python, csharp, taskfile], [nodejs, python, csharp, taskfile]);
+  const godot = useGodotRun();
+  const runs = useMemo<RunContext[]>(() => [nodejs, python, csharp, taskfile, godot], [nodejs, python, csharp, taskfile, godot]);
 
   const launchCandidates = useMemo(
     () =>

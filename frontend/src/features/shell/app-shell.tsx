@@ -2,6 +2,7 @@ import { type ReactNode, useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CSharpRunProvider } from '@/features/integrations/csharp/csharp-run-context';
+import { GodotRunProvider } from '@/features/integrations/godot/godot-run-context';
 import { NodejsRunProvider } from '@/features/integrations/nodejs/nodejs-run-context';
 import { PythonRunProvider } from '@/features/integrations/python/python-run-context';
 import { ShellRunProvider } from '@/features/integrations/shell/shell-context';
@@ -50,13 +51,15 @@ export function AppShell({ children }: Props) {
               <PythonRunProvider>
                 <CSharpRunProvider>
                   <TaskfileRunProvider>
-                    <ShellRunProvider>
-                      <ShortcutsProvider>
-                        <ShellBody>{children}</ShellBody>
-                        <BackendHealthCheck />
-                        <Toaster position="bottom-right" richColors />
-                      </ShortcutsProvider>
-                    </ShellRunProvider>
+                    <GodotRunProvider>
+                      <ShellRunProvider>
+                        <ShortcutsProvider>
+                          <ShellBody>{children}</ShellBody>
+                          <BackendHealthCheck />
+                          <Toaster position="bottom-right" richColors />
+                        </ShortcutsProvider>
+                      </ShellRunProvider>
+                    </GodotRunProvider>
                   </TaskfileRunProvider>
                 </CSharpRunProvider>
               </PythonRunProvider>

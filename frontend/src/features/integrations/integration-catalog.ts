@@ -1,9 +1,23 @@
 import type { LucideIcon } from 'lucide-react';
-import { Boxes, Bug, Container, Hash, ListChecks, Mail, Package, Rocket } from 'lucide-react';
+import { Boxes, Bug, Container, Gamepad2, Hash, ListChecks, Mail, Package, Rocket } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { BitbucketIcon, DiscordIcon, GitHubIcon, GitLabIcon, JiraIcon, LinearIcon, SlackIcon, TelegramIcon } from '@/components/brand-icons';
 import type { IntegrationConfig } from '@/types';
-import { DetectAllCSharpProjects, DetectAllDockerProjects, DetectAllNodeProjects, DetectAllPythonProjects, DetectAllTaskfileProjects, DetectGitRemote, DetectProviderToken, ListCSharpScripts, ListDokployProjectNames, ListNodeScripts, ListPythonScripts, ListTaskfileTasks } from '@/wailsjs/go/main/App';
+import {
+  DetectAllCSharpProjects,
+  DetectAllDockerProjects,
+  DetectAllGodotProjects,
+  DetectAllNodeProjects,
+  DetectAllPythonProjects,
+  DetectAllTaskfileProjects,
+  DetectGitRemote,
+  DetectProviderToken,
+  ListCSharpScripts,
+  ListDokployProjectNames,
+  ListNodeScripts,
+  ListPythonScripts,
+  ListTaskfileTasks,
+} from '@/wailsjs/go/main/App';
 import { dokploy } from '@/wailsjs/go/models';
 
 export type IntegrationFieldType = 'text' | 'password' | 'url' | 'number' | 'select' | 'autocomplete';
@@ -257,6 +271,30 @@ export const INTEGRATIONS: Integration[] = [
     instanceLabel: (config, projectPath) => relativePath(String(config.dockerfilePath ?? ''), projectPath),
     fields: [{ key: 'dockerfilePath', label: 'Dockerfile path', type: 'text', placeholder: '/path/to/Dockerfile' }],
     detect: detectDocker,
+  },
+  {
+    id: 'godot',
+    name: 'Godot',
+    icon: Gamepad2,
+    tint: 'text-blue-300 bg-blue-400/10',
+    multi: true,
+    instanceLabel: (config, projectPath) => relativePath(String(config.manifestPath ?? ''), projectPath),
+    fields: [
+      {
+        key: 'runEnv',
+        label: 'Run environment',
+        type: 'select',
+        defaultValue: 'direct',
+        options: [
+          { value: 'direct', label: 'Direct (PATH)' },
+          { value: 'nix', label: 'Nix develop' },
+          { value: 'devcontainer', label: 'Devcontainer' },
+        ],
+      },
+      { key: 'manifestPath', label: 'project.godot path', type: 'text', placeholder: '/path/to/project.godot' },
+      { key: 'playCommand', label: 'Launch command', type: 'text', defaultValue: 'play', placeholder: 'play', help: 'Command that builds and launches the game. The editor opens with this command plus -e.' },
+    ],
+    detect: detectGodot,
   },
   {
     id: 'sentry',
@@ -595,6 +633,25 @@ async function detectDocker(projectPath: string): Promise<IntegrationConfig | In
   }
 
   const configs = projects.flatMap((p) => (p ? [{ dockerfilePath: p.dockerfilePath, composePath: p.composePath }] : []));
+  return configs.length === 1 ? configs[0] : configs;
+}
+
+async function detectGodot(projectPath: string): Promise<IntegrationConfig | IntegrationConfig[] | null> {
+  const projects = await DetectAllGodotProjects(projectPath);
+  if (!projects?.length) {
+    return null;
+  }
+
+  const configs = projects.flatMap((p) => {
+    if (!p) {
+      return [];
+    }
+    const c: IntegrationConfig = { manifestPath: p.manifestPath, playCommand: p.playCommand || 'play' };
+    if (p.runEnv) {
+      c.runEnv = p.runEnv;
+    }
+    return [c];
+  });
   return configs.length === 1 ? configs[0] : configs;
 }
 
