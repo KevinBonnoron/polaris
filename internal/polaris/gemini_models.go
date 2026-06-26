@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// Gemini API response types
+type geminiModelEntry struct {
+	Name                       string   `json:"name"`
+	DisplayName                string   `json:"displayName"`
+	SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
+}
+
+type geminiModelsResponse struct {
+	Models []geminiModelEntry `json:"models"`
+}
+
 func loadGeminiAPIKey() (string, error) {
 	if key := os.Getenv("GEMINI_API_KEY"); key != "" {
 		return key, nil
@@ -45,13 +56,7 @@ func FetchGeminiModels() ([]ModelInfo, error) {
 		return nil, fmt.Errorf("gemini models endpoint returned %d", resp.StatusCode)
 	}
 
-	var data struct {
-		Models []struct {
-			Name                       string   `json:"name"`
-			DisplayName                string   `json:"displayName"`
-			SupportedGenerationMethods []string `json:"supportedGenerationMethods"`
-		} `json:"models"`
-	}
+	var data geminiModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, fmt.Errorf("decode gemini models response: %w", err)
 	}
