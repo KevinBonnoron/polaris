@@ -30,14 +30,18 @@ var (
 	codexUsageHTTP    = &http.Client{Timeout: codexUsageHTTPTimeout}
 )
 
+// CodexUsage represents the usage statistics for Codex.
 type CodexUsage struct {
-	PercentUsed    int        `json:"percentUsed"`
-	ResetAt        string     `json:"resetAt,omitempty"`
-	WindowMinutes  int        `json:"windowMinutes,omitempty"`
-	PlanType       string     `json:"planType,omitempty"`
-	TotalTokens    TokenUsage `json:"totalTokens"`
-	LifetimeTokens int        `json:"lifetimeTokens,omitempty"`
-	LastUpdated    string     `json:"lastUpdated"`
+	PercentUsed         int        `json:"percentUsed"`
+	ResetAt             string     `json:"resetAt,omitempty"`
+	WindowMinutes       int        `json:"windowMinutes,omitempty"`
+	WeeklyPercentUsed   *int       `json:"weeklyPercentUsed"`
+	WeeklyResetAt       *string    `json:"weeklyResetAt"`
+	WeeklyWindowMinutes *int       `json:"weeklyWindowMinutes"`
+	PlanType            string     `json:"planType,omitempty"`
+	TotalTokens         TokenUsage `json:"totalTokens"`
+	LifetimeTokens      int        `json:"lifetimeTokens,omitempty"`
+	LastUpdated         string     `json:"lastUpdated"`
 }
 
 type codexAuthFile struct {
@@ -100,6 +104,8 @@ type codexTokenCountPayload struct {
 	} `json:"rate_limits"`
 }
 
+// FetchCodexUsage retrieves the current usage statistics for Codex.
+// If force is true, it bypasses the cache and fetches fresh data.
 func FetchCodexUsage(force bool) (*CodexUsage, error) {
 	codexUsageCacheMu.Lock()
 	defer codexUsageCacheMu.Unlock()
@@ -133,14 +139,30 @@ func fetchCodexUsageLive() (*CodexUsage, error) {
 	}
 
 	out := &CodexUsage{LastUpdated: time.Now().UTC().Format(time.RFC3339), PlanType: status.PlanType}
-	window := preferredCodexRateLimitWindow(status)
-	if window != nil {
-		out.PercentUsed = roundPct(window.UsedPercent)
-		if window.LimitWindowSecond > 0 {
-			out.WindowMinutes = (window.LimitWindowSecond + 59) / 60
+	// Primary window (session window)
+	primaryWindow := preferredCodexRateLimitWindow(status)
+	if primaryWindow != nil {
+		out.PercentUsed = roundPct(primaryWindow.UsedPercent)
+		if primaryWindow.LimitWindowSecond > 0 {
+			out.WindowMinutes = (primaryWindow.LimitWindowSecond + 59) / 60
 		}
-		if window.ResetAt > 0 {
-			out.ResetAt = time.Unix(window.ResetAt, 0).UTC().Format(time.RFC3339)
+		if primaryWindow.ResetAt > 0 {
+			out.ResetAt = time.Unix(primaryWindow.ResetAt, 0).UTC().Format(time.RFC3339)
+		}
+	}
+
+	// Secondary window (weekly window)
+	if status.RateLimit != nil && status.RateLimit.SecondaryWindow != nil {
+		secondary := status.RateLimit.SecondaryWindow
+		pct := roundPct(secondary.UsedPercent)
+		out.WeeklyPercentUsed = &pct
+		if secondary.LimitWindowSecond > 0 {
+			minutes := (secondary.LimitWindowSecond + 59) / 60
+			out.WeeklyWindowMinutes = &minutes
+		}
+		if secondary.ResetAt > 0 {
+			reset := time.Unix(secondary.ResetAt, 0).UTC().Format(time.RFC3339)
+			out.WeeklyResetAt = &reset
 		}
 	}
 
