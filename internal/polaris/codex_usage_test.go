@@ -168,6 +168,11 @@ func TestFetchCodexUsageLive(t *testing.T) {
 						"used_percent": 42,
 						"limit_window_seconds": 604800,
 						"reset_at": 1785000000
+					},
+					"secondary_window": {
+						"used_percent": 15,
+						"limit_window_seconds": 604800,
+						"reset_at": 1785604800
 					}
 				}
 			}`
@@ -196,6 +201,12 @@ func TestFetchCodexUsageLive(t *testing.T) {
 	}
 	if usage.PlanType != "plus" {
 		t.Fatalf("PlanType = %q, want plus", usage.PlanType)
+	}
+	if usage.WeeklyPercentUsed != 15 {
+		t.Fatalf("WeeklyPercentUsed = %d, want 15", usage.WeeklyPercentUsed)
+	}
+	if usage.WeeklyWindowMinutes != 10080 {
+		t.Fatalf("WeeklyWindowMinutes = %d, want 10080", usage.WeeklyWindowMinutes)
 	}
 	if usage.LifetimeTokens != 12345 {
 		t.Fatalf("LifetimeTokens = %d, want 12345", usage.LifetimeTokens)
