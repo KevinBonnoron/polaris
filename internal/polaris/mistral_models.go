@@ -36,7 +36,7 @@ type vibeConfig struct {
 }
 
 // listMistralModelsFromConfig reads ~/.vibe/config.toml and returns Mistral models.
-// It falls back to hardcoded defaults if the file can't be read.
+// It returns nil if the file can't be read or parsed.
 func listMistralModelsFromConfig() []ModelInfo {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -119,7 +119,7 @@ func FetchMistralModels() ([]ModelInfo, error) {
 	// Fallback: try the API
 	key, err := loadMistralAPIKey()
 	if err == nil {
-		if models, apiErr := fetchMistralModelsFromAPI(key); apiErr == nil {
+		if models, apiErr := fetchMistralModelsFromAPI(key); apiErr == nil && len(models) > 0 {
 			return models, nil
 		}
 	}
