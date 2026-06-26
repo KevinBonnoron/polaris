@@ -9,7 +9,58 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/pelletier/go-toml/v2"
 )
+
+// Mistral API response types
+type mistralModelEntry struct {
+	ID           string `json:"id"`
+	Capabilities struct {
+		CompletionChat bool `json:"completion_chat"`
+	} `json:"capabilities"`
+	Deprecated bool `json:"deprecated"`
+}
+
+type mistralModelsResponse struct {
+	Data []mistralModelEntry `json:"data"`
+}
+
+// vibeConfig represents the structure of ~/.vibe/config.toml
+type vibeConfig struct {
+	Models []struct {
+		Name     string `toml:"name"`
+		Alias    string `toml:"alias"`
+		Provider string `toml:"provider"`
+	} `toml:"models"`
+}
+
+// listMistralModelsFromConfig reads ~/.vibe/config.toml and returns Mistral models.
+// It falls back to hardcoded defaults if the file can't be read.
+func listMistralModelsFromConfig() []ModelInfo {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	data, err := os.ReadFile(filepath.Join(home, ".vibe", "config.toml"))
+	if err != nil {
+		return nil
+	}
+
+	var cfg vibeConfig
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return nil
+	}
+
+	var out []ModelInfo
+	for _, m := range cfg.Models {
+		if m.Provider == "mistral" && m.Alias != "" {
+			out = append(out, ModelInfo{Value: m.Alias, Name: m.Alias, Family: ""})
+		}
+	}
+	return out
+}
 
 func loadMistralAPIKey() (string, error) {
 	if key := os.Getenv("MISTRAL_API_KEY"); key != "" {
@@ -55,14 +106,29 @@ func mistralFamily(id string) string {
 	return id
 }
 
-// FetchMistralModels calls the Mistral API using the key from MISTRAL_API_KEY or
-// ~/.vibe/.env and returns one model per family (newest first, deprecated excluded).
+// FetchMistralModels returns Mistral models available in the local vibe config.
+// It first tries to read ~/.vibe/config.toml for models that are known to work
+// with the vibe CLI. If the config is not available, it falls back to the Mistral API.
+// The API may return models that are not yet available in the vibe CLI.
 func FetchMistralModels() ([]ModelInfo, error) {
-	key, err := loadMistralAPIKey()
-	if err != nil {
-		return nil, err
+	// Try local vibe config first - these are the models known to work with vibe CLI
+	if models := listMistralModelsFromConfig(); len(models) > 0 {
+		return models, nil
 	}
 
+	// Fallback: try the API
+	key, err := loadMistralAPIKey()
+	if err == nil {
+		if models, apiErr := fetchMistralModelsFromAPI(key); apiErr == nil {
+			return models, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no Mistral models found: no models in ~/.vibe/config.toml and API unavailable")
+}
+
+// fetchMistralModelsFromAPI calls the Mistral API and returns models.
+func fetchMistralModelsFromAPI(key string) ([]ModelInfo, error) {
 	req, err := http.NewRequest(http.MethodGet, "https://api.mistral.ai/v1/models", nil)
 	if err != nil {
 		return nil, err
@@ -81,15 +147,7 @@ func FetchMistralModels() ([]ModelInfo, error) {
 		return nil, fmt.Errorf("mistral models endpoint returned %d", resp.StatusCode)
 	}
 
-	var data struct {
-		Data []struct {
-			ID           string `json:"id"`
-			Capabilities struct {
-				CompletionChat bool `json:"completion_chat"`
-			} `json:"capabilities"`
-			Deprecated bool `json:"deprecated"`
-		} `json:"data"`
-	}
+	var data mistralModelsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return nil, fmt.Errorf("decode mistral models response: %w", err)
 	}
