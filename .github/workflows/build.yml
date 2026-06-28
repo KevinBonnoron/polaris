@@ -6,7 +6,31 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege by default: every job only reads the repo. The artifact
+# upload/download steps use the Actions artifact backend, not GITHUB_TOKEN
+# scopes, so they work fine under contents: read.
+permissions:
+  contents: read
+
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # The Go side (internal/...) needs no GTK/Wails/bindings — those are
+      # frontend/GUI concerns covered by the build job.
+      - name: Vet
+        run: go vet ./internal/...
+      - name: Test
+        run: go test -race ./internal/...
+
   bindings:
     name: Generate bindings
     runs-on: ubuntu-24.04

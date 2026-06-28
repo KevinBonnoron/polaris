@@ -202,11 +202,15 @@ func TestFetchCodexUsageLive(t *testing.T) {
 	if usage.PlanType != "plus" {
 		t.Fatalf("PlanType = %q, want plus", usage.PlanType)
 	}
-	if usage.WeeklyPercentUsed != 15 {
-		t.Fatalf("WeeklyPercentUsed = %d, want 15", usage.WeeklyPercentUsed)
+	if usage.WeeklyPercentUsed == nil {
+		t.Fatal("WeeklyPercentUsed = nil, want 15")
+	} else if *usage.WeeklyPercentUsed != 15 {
+		t.Fatalf("WeeklyPercentUsed = %d, want 15", *usage.WeeklyPercentUsed)
 	}
-	if usage.WeeklyWindowMinutes != 10080 {
-		t.Fatalf("WeeklyWindowMinutes = %d, want 10080", usage.WeeklyWindowMinutes)
+	if usage.WeeklyWindowMinutes == nil {
+		t.Fatal("WeeklyWindowMinutes = nil, want 10080")
+	} else if *usage.WeeklyWindowMinutes != 10080 {
+		t.Fatalf("WeeklyWindowMinutes = %d, want 10080", *usage.WeeklyWindowMinutes)
 	}
 	if usage.LifetimeTokens != 12345 {
 		t.Fatalf("LifetimeTokens = %d, want 12345", usage.LifetimeTokens)
