@@ -513,102 +513,6 @@ func sanitizeLeaf(branch string) string {
 	return strings.ReplaceAll(branch, "/", "-")
 }
 
-// relocateClaudeSession moves a Claude Code session transcript from the source
-// working directory's project slot to the destination's, so --resume works
-// after the agent's CWD changes (e.g. on worktree promotion). Best-effort.
-func relocateClaudeSession(srcDir, dstDir, sessionID string) {
-	src := filepath.Join(claudeProjectDir(srcDir), sessionID+".jsonl")
-	dst := filepath.Join(claudeProjectDir(dstDir), sessionID+".jsonl")
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return
-	}
-	_ = os.Rename(src, dst)
-}
-
-// forgetClaudeMessage rewinds Claude Code's own session transcript so a retracted
-// message and its aborted turn are gone from the model's context on the next
-// --resume, not just from the Polaris log. It removes everything from the last
-// user line whose text matches onward — a clean suffix trim that keeps the
-// parentUuid chain intact. Best-effort: the claude session process must already
-// be stopped (no concurrent writes), and a no-match leaves the file untouched.
-func forgetClaudeMessage(workDir, sessionID, text string) {
-	dir := claudeProjectDir(workDir)
-	if dir == "" || sessionID == "" {
-		return
-	}
-	path := filepath.Join(dir, sessionID+".jsonl")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return
-	}
-	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	want := normalizeClaudeText(text)
-	if want == "" {
-		return
-	}
-	cut := -1
-	for i := len(lines) - 1; i >= 0; i-- {
-		var l struct {
-			Type    string `json:"type"`
-			Message struct {
-				Role    string          `json:"role"`
-				Content json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if json.Unmarshal([]byte(lines[i]), &l) != nil {
-			continue
-		}
-		if l.Type != "user" || l.Message.Role != "user" {
-			continue
-		}
-		if normalizeClaudeText(claudeContentText(l.Message.Content)) == want {
-			cut = i
-			break
-		}
-	}
-	if cut < 0 {
-		return
-	}
-	out := ""
-	if cut > 0 {
-		out = strings.Join(lines[:cut], "\n") + "\n"
-	}
-	_ = os.WriteFile(path, []byte(out), 0o644)
-}
-
-// claudeContentText flattens a session message's content (a JSON string, or an
-// array of content blocks) down to its plain text for matching.
-func claudeContentText(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if json.Unmarshal(raw, &s) == nil {
-		return s
-	}
-	var blocks []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
-	}
-	if json.Unmarshal(raw, &blocks) == nil {
-		var parts []string
-		for _, b := range blocks {
-			if b.Type == "text" && b.Text != "" {
-				parts = append(parts, b.Text)
-			}
-		}
-		return strings.Join(parts, "\n")
-	}
-	return ""
-}
-
-// normalizeClaudeText strips the invisible leading marker escapeLeadingSlash adds
-// and surrounding whitespace, so the Polaris-logged text matches what Claude
-// recorded for the same message.
-func normalizeClaudeText(s string) string {
-	return strings.TrimSpace(strings.TrimPrefix(s, "\u200b"))
-}
-
 // agentRunDir picks the working directory for a follow-up turn. When the
 // agent was spawned with an isolated worktree we honour it (the live tree
 // still exists on disk); otherwise we fall back to the project root.
@@ -1328,155 +1232,39 @@ func (service *Service) ReadLogTail(agentID string, n int) ([]string, error) {
 	return buf, nil
 }
 
+// buildSpawnCommand dispatches to the per-CLI argv builder (see claude.go,
+// codex.go, gemini.go, cursor.go, copilot.go).
 func buildSpawnCommand(kind, binary, model, sessionID, task, source string, allowedTools []string) (string, []string, error) {
 	switch kind {
 	case "claude-code":
-		bin := binary
-		if bin == "" {
-			bin = "claude"
-		}
-		// In --print mode the agent has no TTY, so any permission prompt
-		// stalls the run indefinitely. Always bypass.
-		permissionMode := "bypassPermissions"
-		// stream-json (both directions) gives us a full-duplex JSON channel:
-		// stdout emits one event per assistant message / tool_use / result, and
-		// stdin lets us deliver the initial task and each follow-up as a new user
-		// turn on the same process.
-		args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", permissionMode}
-		if sessionID != "" {
-			args = append(args, "--session-id", sessionID)
-		}
-		// "auto" (or empty) lets claude pick the model itself — omit --model.
-		if model != "" && model != "auto" {
-			args = append(args, "--model", model)
-		}
-		appendToolArgs(&args, allowedTools)
-		_ = task // task is now sent on stdin as a JSON event by run()
-		return bin, args, nil
+		return claudeSpawnCommand(binary, model, sessionID, allowedTools)
 	case "codex":
-		bin := binary
-		if bin == "" {
-			bin = "codex"
-		}
-		args := []string{"exec", "--json", "--dangerously-bypass-approvals-and-sandbox"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		if task != "" {
-			args = append(args, "--")
-		}
-		args = append(args, task)
-		return bin, args, nil
+		return codexSpawnCommand(binary, model, task)
 	case "copilot":
-		bin := binary
-		if bin == "" {
-			bin = "copilot"
-		}
-		return bin, []string{task}, nil
+		return copilotSpawnCommand(binary, task)
 	case "gemini":
-		bin := binary
-		if bin == "" {
-			bin = "gemini"
-		}
-		args := []string{"--output-format", "stream-json"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		args = append(args, "--prompt", task)
-		return bin, args, nil
+		return geminiSpawnCommand(binary, model, task)
 	case "cursor":
-		bin := binary
-		if bin == "" {
-			bin = "agent"
-		}
-		args := []string{"--print", "--output-format", "stream-json", "--stream-partial-output", "--trust"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		args = append(args, task)
-		return bin, args, nil
+		return cursorSpawnCommand(binary, model, task)
 	default:
 		return "", nil, fmt.Errorf("unknown agent kind %q", kind)
 	}
 }
 
-// buildResumeCommand returns the command used to resume an existing session
-// with a follow-up message. The permission mode mirrors the original spawn so
-// automation-driven sessions keep their bypassPermissions setting across follow-ups.
+// buildResumeCommand dispatches to the per-CLI resume argv builder.
 func buildResumeCommand(kind, binary, sessionID, message, source, model string, allowedTools []string) (string, []string, error) {
 	switch kind {
 	case "claude-code":
-		bin := binary
-		if bin == "" {
-			bin = "claude"
-		}
-		permissionMode := "bypassPermissions"
-		_ = message // message is now sent on stdin as a JSON event by run()
-		args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", permissionMode, "--resume", sessionID}
-		// Pin the model explicitly on resume so a model the user (or an
-		// overload fallback) switched to is honoured, instead of defaulting to
-		// whatever the session was created with.
-		if model != "" && model != "auto" {
-			args = append(args, "--model", model)
-		}
-		appendToolArgs(&args, allowedTools)
-		return bin, args, nil
+		return claudeResumeCommand(binary, sessionID, model, allowedTools)
 	case "cursor":
-		bin := binary
-		if bin == "" {
-			bin = "agent"
-		}
-		args := []string{"--print", "--output-format", "stream-json", "--stream-partial-output", "--trust", "--continue"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		args = append(args, message)
-		return bin, args, nil
+		return cursorResumeCommand(binary, model, message)
 	case "codex":
-		bin := binary
-		if bin == "" {
-			bin = "codex"
-		}
-		args := []string{"exec", "resume", "--json", "--dangerously-bypass-approvals-and-sandbox"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		args = append(args, sessionID)
-		if message != "" {
-			args = append(args, "--", message)
-		}
-		return bin, args, nil
+		return codexResumeCommand(binary, sessionID, model, message)
 	case "gemini":
-		bin := binary
-		if bin == "" {
-			bin = "gemini"
-		}
-		args := []string{"--output-format", "stream-json"}
-		if model != "" {
-			args = append(args, "--model", model)
-		}
-		if message != "" {
-			args = append(args, "--prompt", message)
-		}
-		return bin, args, nil
+		return geminiResumeCommand(binary, model, message)
 	default:
 		return "", nil, fmt.Errorf("resume not supported for agent kind %q", kind)
 	}
-}
-
-// appendToolArgs appends the appropriate --tools or --allowed-tools flag to
-// args based on the stored AllowedTools slice. The sentinel ["__no_tools__"]
-// uses --tools "" which claude-code recognises as "disable all tools".
-// A non-empty list of specific tool names uses --allowed-tools.
-func appendToolArgs(args *[]string, tools []string) {
-	if len(tools) == 0 {
-		return
-	}
-	if len(tools) == 1 && tools[0] == "__no_tools__" {
-		*args = append(*args, "--tools", "")
-		return
-	}
-	*args = append(*args, "--allowed-tools", strings.Join(tools, ","))
 }
 
 // buildResume produces the command + extra env for a follow-up turn. opencode
@@ -1565,63 +1353,6 @@ func (runner *Runner) cancelAll() {
 	for _, cs := range claudes {
 		cs.shutdown()
 	}
-}
-
-// writeClaudeUserText sends a plain user message as a stream-json event on
-// claude's stdin.
-func writeClaudeUserText(w io.Writer, text string) error {
-	evt := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"role":    "user",
-			"content": escapeLeadingSlash(text),
-		},
-	}
-	return writeJSONLine(w, evt)
-}
-
-// escapeLeadingSlash neutralises a leading "/" so claude-code does not treat
-// the message as one of its own slash commands (unknown ones are rejected with
-// no turn). Slash commands belong to Polaris and are handled before sending, so
-// any "/" that reaches the CLI is meant as literal text. A zero-width space is
-// prepended: it is not Unicode whitespace, so it survives the CLI's trimming
-// while staying invisible to the model.
-func escapeLeadingSlash(text string) string {
-	if strings.HasPrefix(strings.TrimLeft(text, " \t\r\n"), "/") {
-		return string(rune(0x200b)) + text
-	}
-	return text
-}
-
-// writeClaudeToolResult answers a tool_use mid-turn with a tool_result event.
-// Used by AskUserQuestion: the user's selection is delivered as the proper
-// tool_result so Claude sees it as the tool's return value, not a new message.
-func writeClaudeToolResult(w io.Writer, toolUseID, content string, isError bool) error {
-	evt := map[string]any{
-		"type": "user",
-		"message": map[string]any{
-			"role": "user",
-			"content": []map[string]any{
-				{
-					"type":        "tool_result",
-					"tool_use_id": toolUseID,
-					"content":     content,
-					"is_error":    isError,
-				},
-			},
-		},
-	}
-	return writeJSONLine(w, evt)
-}
-
-func writeJSONLine(w io.Writer, v any) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-	_, err = w.Write(b)
-	return err
 }
 
 // writeStdin sends a line to a non-claude agent currently waiting on stdin.
