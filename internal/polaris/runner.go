@@ -308,7 +308,7 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 	// when PatchAgent emits. Generated once, at launch only. If generation fails,
 	// the truncated first line is used as a fallback — but only on failure, never
 	// while it is still pending.
-	go service.applyGeneratedTitle(created.ID, task, summaryFromTask(task))
+	go service.applyGeneratedTitle(created, task, summaryFromTask(task))
 
 	if isACP {
 		_ = service.appendAgentEvent(created.ID, StreamEvent{Type: "user_message", Content: task})

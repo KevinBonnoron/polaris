@@ -217,7 +217,14 @@ func (app *App) GenerateCommitMessageForAgent(agentID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("get diff: %w", err)
 	}
-	return app.svc.GenerateCommitMessage(diff)
+	agent, err := app.store.GetAgent(agentID)
+	if err != nil {
+		return "", fmt.Errorf("get agent: %w", err)
+	}
+	if agent == nil {
+		return "", fmt.Errorf("agent %s not found", agentID)
+	}
+	return app.svc.GenerateCommitMessageForAgent(*agent, diff)
 }
 
 func (app *App) ArchiveAgent(agentID string) error {
