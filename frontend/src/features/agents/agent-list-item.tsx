@@ -18,7 +18,7 @@ import { useConfirm } from '@/providers/confirm';
 import { findAgentKind, OPENCODE_DESCRIPTOR } from './agent-kinds';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
 
-const KNOWN_STATUSES = new Set(['working', 'waiting', 'error', 'completed', 'idle', 'archived']);
+const KNOWN_STATUSES = new Set(['working', 'waiting', 'error', 'completed', 'stopped', 'idle', 'archived']);
 
 interface Props {
   agent: Agent;

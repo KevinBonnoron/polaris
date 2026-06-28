@@ -47,6 +47,7 @@ const AGENT_STATUS_SEVERITY: Record<string, Severity> = {
   waiting: 'warning',
   error: 'error',
   completed: 'success',
+  stopped: 'neutral',
   idle: 'neutral',
   archived: 'neutral',
 };

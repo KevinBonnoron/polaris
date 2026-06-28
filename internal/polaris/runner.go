@@ -2828,14 +2828,14 @@ func (service *Service) markAgentCompleted(agentID string) {
 }
 
 // markAgentStopped finalises an agent the user cancelled. The session is left
-// resumable (sessionId is kept), so a stop lands on "completed" rather than
-// "error"; any pending question is cleared so its panel disappears.
+// resumable (sessionId is kept); any pending question is cleared so its panel
+// disappears.
 func (service *Service) markAgentStopped(agentID string) {
 	if service.store == nil {
 		return
 	}
 	_ = service.appendAgentEvent(agentID, StreamEvent{Type: "system", Content: "(stopped by user)"})
-	_ = service.store.PatchAgent(agentID, map[string]any{"status": "completed", "pendingQuestion": nil})
+	_ = service.store.PatchAgent(agentID, map[string]any{"status": "stopped", "pendingQuestion": nil})
 }
 
 // markAgentWaiting flips the agent to "waiting" when the subprocess emits an

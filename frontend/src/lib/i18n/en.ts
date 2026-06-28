@@ -115,6 +115,7 @@ export const en = {
       waiting: 'Waiting input',
       error: 'Error',
       completed: 'Done',
+      stopped: 'Stopped',
       archived: 'Archived',
     },
     new: {

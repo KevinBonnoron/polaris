@@ -17,7 +17,7 @@ export type Project = {
   updatedAt?: number;
 };
 
-export type AgentStatus = 'working' | 'idle' | 'waiting' | 'error' | 'completed' | 'draft';
+export type AgentStatus = 'working' | 'idle' | 'waiting' | 'error' | 'completed' | 'stopped' | 'draft';
 
 export type AgentKind = 'claude-code' | 'copilot' | 'codex' | 'gemini' | 'mistral' | 'cursor' | 'opencode' | 'other';
 
