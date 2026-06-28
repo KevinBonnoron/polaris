@@ -11,8 +11,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
 import { AddIntegrationModal } from '@/features/integrations/add-integration-modal';
-import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
 import { useCSharpRun } from '@/features/integrations/csharp/csharp-run-context';
+import { INTEGRATIONS } from '@/features/integrations/integration-catalog';
 import { useNodejsRun } from '@/features/integrations/nodejs/nodejs-run-context';
 import { getIntegrations, isIntegrationConnected } from '@/features/integrations/project-integrations';
 import { usePythonRun } from '@/features/integrations/python/python-run-context';
@@ -32,6 +32,7 @@ const NAV_ROUTES: Record<string, string> = {
   python: '/python',
   csharp: '/csharp',
   taskfile: '/taskfile',
+  godot: '/godot',
   docker: '/docker',
   resend: '/resend',
   sentry: '/sentry',

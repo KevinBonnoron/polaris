@@ -16,6 +16,7 @@ import (
 
 	"github.com/KevinBonnoron/polaris/internal/polaris"
 	"github.com/KevinBonnoron/polaris/internal/providers/csharp"
+	"github.com/KevinBonnoron/polaris/internal/providers/godot"
 	"github.com/KevinBonnoron/polaris/internal/providers/nodejs"
 	"github.com/KevinBonnoron/polaris/internal/providers/python"
 	"github.com/KevinBonnoron/polaris/internal/providers/shell"
@@ -128,6 +129,7 @@ type App struct {
 	csharpRunner    *csharp.Runner
 	shellRunner     *shell.Runner
 	taskfileRunner  *taskfile.Runner
+	godotRunner     *godot.Runner
 
 	statusMu sync.RWMutex
 	ready    bool
@@ -230,6 +232,7 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 	app.csharpRunner = csharp.NewRunner(wailsEmitter{})
 	app.shellRunner = shell.NewRunner(wailsEmitter{})
 	app.taskfileRunner = taskfile.NewRunner(wailsEmitter{})
+	app.godotRunner = godot.NewRunner(wailsEmitter{})
 
 	app.setReady(true)
 	app.setError(nil)

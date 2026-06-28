@@ -1,9 +1,9 @@
-import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ResizeShell, StartShell, StopShell, WriteToShell } from '@/wailsjs/go/main/App';
-import { EventsOn } from '@/wailsjs/runtime/runtime';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toastError } from '@/lib/toast-error';
 import { useCurrentProject } from '@/state/projects';
-import { useTranslation } from 'react-i18next';
+import { ResizeShell, StartShell, StopShell, WriteToShell } from '@/wailsjs/go/main/App';
+import { EventsOn } from '@/wailsjs/runtime/runtime';
 
 export interface ShellSession {
   sessionId: string;
@@ -12,7 +12,7 @@ export interface ShellSession {
   exited?: { code: number };
 }
 
-type TerminalKind = 'shell' | 'nodejs' | 'python' | 'csharp' | 'taskfile';
+type TerminalKind = 'shell' | 'nodejs' | 'python' | 'csharp' | 'taskfile' | 'godot';
 
 interface ShellContextValue {
   sessions: ShellSession[];
