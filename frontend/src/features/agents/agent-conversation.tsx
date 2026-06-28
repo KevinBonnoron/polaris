@@ -606,7 +606,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         </TabsContent>
 
         <TabsContent forceMount value="files" className={cn('m-0 flex min-h-0 flex-1 flex-col', activeTab !== 'files' && 'hidden')}>
-          <AgentDetailFilesTab agent={agent} onCountChange={setLiveFileCount} />
+          <AgentDetailFilesTab agent={agent} active={activeTab === 'files'} onCountChange={setLiveFileCount} />
         </TabsContent>
       </Tabs>
 
