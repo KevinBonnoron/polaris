@@ -40,7 +40,11 @@ export interface GitChangesOps {
 
 interface Props {
   ops: GitChangesOps;
-  // 0 = no polling; otherwise milliseconds between refreshes when not busy.
+  // Whether the panel is currently shown. While false it never polls or refreshes
+  // (the panel can stay mounted but hidden). Defaults to true.
+  active?: boolean;
+  // 0 = no polling; otherwise milliseconds between refreshes when active and not
+  // busy. Reflects only whether the agent is live — visibility is `active`.
   pollInterval?: number;
   // Rendered above the file list / diff row, e.g. branch selector.
   headerSlot?: React.ReactNode;
@@ -177,7 +181,7 @@ function splitPath(path: string): { name: string; dir: string } {
   return { name: path.slice(idx + 1), dir: path.slice(0, idx) };
 }
 
-export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange }: Props) {
+export function GitChangesPanel({ ops, active = true, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange }: Props) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { viewMode: view, setViewMode: setView } = useGitChangesViewMode();
@@ -230,28 +234,67 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
     [listWidth],
   );
 
-  const refresh = useMemo(
-    () => async () => {
-      const [d, s, g] = await Promise.all([ops.getDiff().catch(() => null), ops.getFileStatuses().catch(() => null), ops.getGitState().catch(() => null)]);
-      if (d === null && s === null) {
-        setError(true);
-        return;
+  // A single in-flight refresh is shared by every caller (reset, poll, manual,
+  // post-operation). Each refresh runs three whole-tree git commands in parallel;
+  // on a large repo they outlast the poll interval, so without deduping the
+  // overlapping callers stack up and spawn a pile of git processes.
+  const inFlightRefresh = useRef<Promise<void> | null>(null);
+  // Bumped on every reset so a refresh that started for a previous target can't
+  // apply its now-stale results or clear the ref out from under the new one.
+  const refreshVersion = useRef(0);
+  // Set when a caller arrives mid-flight so exactly one more fetch runs after the
+  // current one settles — a post-mutation refresh never reuses a snapshot taken
+  // before the write (e.g. stage/commit then refresh).
+  const followupRefresh = useRef(false);
+  const refresh = useMemo(() => {
+    const run = (): Promise<void> => {
+      if (inFlightRefresh.current) {
+        followupRefresh.current = true;
+        return inFlightRefresh.current;
       }
-      if (d !== null) {
-        setDiff(d);
-      }
-      if (s !== null) {
-        setStatuses(s);
-        onCountChange?.(s.length);
-      }
-      if (g !== null) {
-        setGitState(g);
-      }
-    },
-    [ops],
-  );
+      const version = refreshVersion.current;
+      const work = (async () => {
+        const [d, s, g] = await Promise.all([ops.getDiff().catch(() => null), ops.getFileStatuses().catch(() => null), ops.getGitState().catch(() => null)]);
+        if (version !== refreshVersion.current) {
+          return;
+        }
+        if (d === null && s === null) {
+          setError(true);
+          return;
+        }
+        setError(false);
+        if (d !== null) {
+          setDiff(d);
+        }
+        if (s !== null) {
+          setStatuses(s);
+          onCountChange?.(s.length);
+        }
+        if (g !== null) {
+          setGitState(g);
+        }
+      })();
+      const pending = work.finally(() => {
+        if (inFlightRefresh.current === pending) {
+          inFlightRefresh.current = null;
+        }
+        if (followupRefresh.current) {
+          followupRefresh.current = false;
+          void run();
+        }
+      });
+      inFlightRefresh.current = pending;
+      return pending;
+    };
+    return run;
+  }, [ops]);
 
   useEffect(() => {
+    // A new target abandons any in-flight refresh from the previous one so its
+    // stale data is neither applied nor blocks the fresh request.
+    refreshVersion.current += 1;
+    inFlightRefresh.current = null;
+    followupRefresh.current = false;
     setDiff(null);
     setStatuses(null);
     setGitState(null);
@@ -263,8 +306,23 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
     void refresh();
   }, [refresh, resetKey]);
 
+  const prevPoll = useRef({ active, polling: pollInterval > 0 });
   useEffect(() => {
-    if (pollInterval <= 0) {
+    const wasActive = prevPoll.current.active;
+    const wasPolling = prevPoll.current.polling;
+    const polling = pollInterval > 0;
+    prevPoll.current = { active, polling };
+    if (!active) {
+      return;
+    }
+    // While visible, refresh once whenever polling starts or stops (the agent
+    // started/finished) and on becoming visible, so the panel never lingers on a
+    // pre-change snapshot — e.g. an agent that finishes between ticks, leaving
+    // pollInterval at 0 with no further refresh.
+    if (!wasActive || wasPolling !== polling) {
+      void refresh();
+    }
+    if (!polling) {
       return;
     }
     const id = window.setInterval(() => {
@@ -273,7 +331,7 @@ export function GitChangesPanel({ ops, pollInterval = 0, headerSlot, resetKey, o
       }
     }, pollInterval);
     return () => window.clearInterval(id);
-  }, [pollInterval, busy, refresh]);
+  }, [active, pollInterval, busy, refresh]);
 
   const diffFiles = useMemo(() => (diff ? parseDiff(diff) : new Map<string, DiffFile>()), [diff]);
 

@@ -25,7 +25,7 @@ import {
 } from '@/wailsjs/go/main/App';
 import { clearSelection } from '@/state/agent-selection';
 
-export function AgentDetailFilesTab({ agent, onCountChange }: { agent: Agent | null; onCountChange?: (count: number) => void }) {
+export function AgentDetailFilesTab({ agent, active = true, onCountChange }: { agent: Agent | null; active?: boolean; onCountChange?: (count: number) => void }) {
   const { project } = useCurrentProject();
   const ops: GitChangesOps | null = useMemo(() => {
     if (!agent?.id) {
@@ -78,5 +78,8 @@ export function AgentDetailFilesTab({ agent, onCountChange }: { agent: Agent | n
     return null;
   }
 
-  return <GitChangesPanel ops={ops} pollInterval={agent?.status === 'working' ? 2000 : 0} resetKey={agent?.id} onOpenFile={project?.path ? onOpenFile : undefined} onClose={onClose} onCountChange={onCountChange} />;
+  // Pass visibility (`active`) and liveness (`pollInterval`) separately: the panel
+  // is force-mounted, so it must not poll whole-tree git while hidden, but it still
+  // needs a final refresh when the agent finishes (pollInterval → 0) while visible.
+  return <GitChangesPanel ops={ops} active={active} pollInterval={agent?.status === 'working' ? 2000 : 0} resetKey={agent?.id} onOpenFile={project?.path ? onOpenFile : undefined} onClose={onClose} onCountChange={onCountChange} />;
 }
