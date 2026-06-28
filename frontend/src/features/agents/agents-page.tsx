@@ -19,7 +19,7 @@ import { AgentListItem } from './agent-list-item';
 import { AgentsEmpty } from './agents-empty';
 import { NewAgentButton } from './new-agent-button';
 
-const STATUS_ORDER = ['draft', 'waiting', 'error', 'working', 'completed', 'idle', 'archived'] as const;
+const STATUS_ORDER = ['draft', 'waiting', 'error', 'working', 'completed', 'stopped', 'idle', 'archived'] as const;
 type AgentStatus = (typeof STATUS_ORDER)[number];
 
 export function AgentsPage() {
@@ -32,7 +32,7 @@ export function AgentsPage() {
 
   const agents = useMemo(() => {
     const filtered = projectId ? list.filter((a) => a.projectId === projectId) : list;
-    const rank: Record<string, number> = { draft: 0, waiting: 1, error: 2, working: 3, completed: 4, idle: 5, archived: 6 };
+    const rank: Record<string, number> = { draft: 0, waiting: 1, error: 2, working: 3, completed: 4, stopped: 5, idle: 6, archived: 7 };
     return [...filtered].sort((a, b) => {
       const ra = rank[a.status] ?? 6;
       const rb = rank[b.status] ?? 6;

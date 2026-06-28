@@ -117,6 +117,7 @@ export const fr: Translation = {
       waiting: 'En attente',
       error: 'Erreur',
       completed: 'Terminé',
+      stopped: 'Arrêté',
       archived: 'Archivé',
     },
     new: {

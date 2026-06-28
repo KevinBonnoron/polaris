@@ -749,7 +749,7 @@ func (store *Store) GetDashboardStats(kind, model string) (DashboardStats, error
 			byDay[idx].CostUsd += costUsd
 		}
 
-		if (status == "completed" || status == "archived") && updatedAt > startedAt {
+		if (status == "completed" || status == "stopped" || status == "archived") && updatedAt > startedAt {
 			totalDurationSec += updatedAt - startedAt
 			durationCount++
 		}
