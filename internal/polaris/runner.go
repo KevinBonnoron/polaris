@@ -25,10 +25,14 @@ import (
 
 type SpawnAgentInput struct {
 	ProjectID string `json:"projectId"`
-	Kind      string `json:"kind"`
-	Task      string `json:"task"`
-	Model     string `json:"model,omitempty"`
-	Binary    string `json:"binary,omitempty"`
+	// ID, when set, is reused as the agent's id so a draft already in the UI is
+	// promoted to a running agent in place (no new row, no flicker). Empty lets the
+	// store assign one (automations and other non-draft spawns).
+	ID     string `json:"id,omitempty"`
+	Kind   string `json:"kind"`
+	Task   string `json:"task"`
+	Model  string `json:"model,omitempty"`
+	Binary string `json:"binary,omitempty"`
 	// ProviderID, when set, routes the spawn through the opencode harness
 	// against the referenced custom provider (Kind is forced to "opencode").
 	ProviderID string `json:"providerId,omitempty"`
@@ -166,6 +170,26 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 	if in.ProjectID == "" {
 		return nil, errors.New("projectId is required")
 	}
+	// in.ID is client-controlled (a draft being promoted in place) and becomes the
+	// agent's log filename, so reject anything that could escape logsRoot and only
+	// allow reusing a draft id from the same project.
+	if in.ID != "" {
+		if in.ID != strings.TrimSpace(in.ID) || strings.ContainsAny(in.ID, `/\`) {
+			return nil, errors.New("invalid agent id")
+		}
+		existing, err := service.store.GetAgent(in.ID)
+		if err != nil {
+			return nil, fmt.Errorf("find existing agent: %w", err)
+		}
+		// A provided id must name an existing draft in this project — a reused id is
+		// a promotion, never a way to create a fresh agent with a client-chosen id.
+		if existing == nil {
+			return nil, fmt.Errorf("draft agent %q not found", in.ID)
+		}
+		if existing.ProjectID != in.ProjectID || existing.Status != "draft" {
+			return nil, fmt.Errorf("agent %q cannot be promoted", in.ID)
+		}
+	}
 
 	project, err := service.store.GetProject(in.ProjectID)
 	if err != nil {
@@ -255,6 +279,7 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 	}
 	now := time.Now()
 	created, err := service.store.UpsertAgent(Agent{
+		ID:        in.ID,
 		ProjectID: in.ProjectID,
 		Kind:      in.Kind,
 		Summary:   "",
