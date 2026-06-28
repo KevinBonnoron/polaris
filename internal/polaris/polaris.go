@@ -502,6 +502,13 @@ type Service struct {
 	// frontend notification per agent per debounce window, keyed by agentId.
 	logEmitMu    sync.Mutex
 	logEmitTimer map[string]*time.Timer
+
+	// tokenEmit throttles high-frequency live-token snapshots to at most one
+	// frontend emit per agent per debounce window, always carrying the latest
+	// figures, keyed by agentId.
+	tokenEmitMu     sync.Mutex
+	tokenEmitTimer  map[string]*time.Timer
+	tokenEmitLatest map[string]tokenSnapshot
 }
 
 func NewService(store *Store) *Service {
