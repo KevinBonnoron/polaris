@@ -13,9 +13,10 @@ import { useAgentDefaults } from '@/state/agent-defaults';
 import { selectAgent } from '@/state/agent-selection';
 import { useCurrentProject } from '@/state/projects';
 import type { Agent } from '@/types';
-import { CancelAgent, ClearAgentLog, ClearAgentQueuedMessage, GetProjectFileStatuses, InterruptAndSendToAgent, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, SpawnAgent, StopAndRetractLastMessage, TeleportClaudeSession } from '@/wailsjs/go/main/App';
+import { CancelAgent, ClearAgentLog, ClearAgentQueuedMessage, GetProjectFileStatuses, InterruptAndSendToAgent, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, StopAndRetractLastMessage, TeleportClaudeSession } from '@/wailsjs/go/main/App';
 import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
+import { spawnDraftAgent } from './spawn-draft-agent';
 import { type Attachment, AttachmentPreviews, loadAttachment } from './attachments';
 import { stripFileMentions } from './file-mentions';
 import { MentionTextarea, type SlashCommand } from './mention-textarea';
@@ -408,21 +409,16 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
             : cliCfg
               ? { projectId: pid, kind: cliCfg.id, task: text, model, binary: cliCfg.binary, isolated, allowedTools: allowedTools.length > 0 ? allowedTools : undefined }
               : null;
-        const spawned = input ? await SpawnAgent(input) : null;
-        if (spawned) {
+        if (input) {
+          // Promote the draft to a running agent in place: the optimistic action
+          // flips the row to "working" instantly while SpawnAgent runs in the
+          // background (reusing the draft id), and the next sync reconciles. The
+          // draft is already selected, so the open conversation transitions without
+          // a remount; a failed spawn rolls the row back to a draft. Clear the input
+          // only after it succeeds so a failed spawn doesn't lose the user's text.
+          await spawnDraftAgent({ id: agent.id, input }).isPersisted.promise;
           setMessage('');
           setAttachments([]);
-          // Point the selection at the spawned agent BEFORE removing the draft, so
-          // the selected id is never momentarily a row that's being deleted (which
-          // renders the blank "no selection" pane). The backend already persisted
-          // the spawned agent and emitted a change event, so the collection syncs
-          // it in on its own — re-inserting it here would clobber the async title.
-          selectAgent(spawned.id);
-          try {
-            await agentsCollection.delete(agent.id);
-          } catch {
-            // draft cleanup is best effort; the spawned agent is what matters
-          }
         }
       } catch (err) {
         toastError({ title: t('agents.new.couldNotStart'), err });
