@@ -465,14 +465,90 @@ func writeWorkingTree(ctx context.Context, repoPath string) (string, error) {
 		return cmd
 	}
 
+	// Seed the throwaway index from the repo's real index so `git add -A` reuses
+	// git's stat cache and only re-hashes files that actually changed. An empty
+	// index forces a cold hash of the entire working tree, which pegs the CPU for
+	// seconds on a large repo and stalls agent spawn. Best effort: any failure
+	// falls back to the cold path, which still produces the correct tree.
+	seeded := seedIndexFromRepo(ctx, repoPath, tmpIndexPath)
+
 	if err := gitCmd("add", "-A").Run(); err != nil {
-		return "", fmt.Errorf("git add -A: %w", err)
+		if !seeded {
+			return "", fmt.Errorf("git add -A: %w", err)
+		}
+		// The seeded index turned out unusable (e.g. a corrupt real index git could
+		// still read); degrade to the cold empty-index path instead of failing the
+		// whole snapshot.
+		_ = os.Remove(tmpIndexPath)
+		if err := gitCmd("add", "-A").Run(); err != nil {
+			return "", fmt.Errorf("git add -A: %w", err)
+		}
 	}
 	out, err := gitCmd("write-tree").Output()
 	if err != nil {
 		return "", fmt.Errorf("git write-tree: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// envWithout returns env with any assignment of key removed, so a child process
+// isn't influenced by an ambient value of it.
+func envWithout(env []string, key string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		if !strings.HasPrefix(e, prefix) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// seedIndexFromRepo copies the repo's real index to destIndex so a snapshot can
+// build on git's stat cache instead of hashing every file from cold. Best
+// effort: it returns true only when destIndex holds a usable copy; callers fall
+// back to an empty index otherwise.
+func seedIndexFromRepo(ctx context.Context, repoPath, destIndex string) bool {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-path", "index")
+	cmd.Dir = repoPath
+	// `git rev-parse --git-path index` honours an ambient GIT_INDEX_FILE, which
+	// would point this probe at the wrong staging area; strip it so we always copy
+	// the repo's real index.
+	cmd.Env = envWithout(os.Environ(), "GIT_INDEX_FILE")
+	sysexec.Hide(cmd)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	realIndex := strings.TrimSpace(string(out))
+	if realIndex == "" {
+		return false
+	}
+	if !filepath.IsAbs(realIndex) {
+		realIndex = filepath.Join(repoPath, realIndex)
+	}
+	src, err := os.Open(realIndex)
+	if err != nil {
+		return false
+	}
+	defer src.Close()
+	dst, err := os.Create(destIndex)
+	if err != nil {
+		return false
+	}
+	// A truncated or zero-byte copy leaves an index git can't read, so drop it and
+	// report failure so the caller uses the cold empty-index path.
+	n, err := io.Copy(dst, src)
+	if err != nil {
+		_ = dst.Close()
+		_ = os.Remove(destIndex)
+		return false
+	}
+	if err := dst.Close(); err != nil || n == 0 {
+		_ = os.Remove(destIndex)
+		return false
+	}
+	return true
 }
 
 // SnapshotTree records the current working tree of repoPath as a tree object and
