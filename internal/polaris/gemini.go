@@ -198,3 +198,31 @@ func mapGeminiToolName(name string) string {
 		return name
 	}
 }
+
+func geminiSpawnCommand(binary, model, task string) (string, []string, error) {
+	bin := binary
+	if bin == "" {
+		bin = "gemini"
+	}
+	args := []string{"--output-format", "stream-json"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	args = append(args, "--prompt", task)
+	return bin, args, nil
+}
+
+func geminiResumeCommand(binary, model, message string) (string, []string, error) {
+	bin := binary
+	if bin == "" {
+		bin = "gemini"
+	}
+	args := []string{"--output-format", "stream-json"}
+	if model != "" {
+		args = append(args, "--model", model)
+	}
+	if message != "" {
+		args = append(args, "--prompt", message)
+	}
+	return bin, args, nil
+}
