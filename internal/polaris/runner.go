@@ -2491,15 +2491,49 @@ const agentTokensEvent = "agent:tokens:updated"
 // live token updates.
 func AgentTokensEventName() string { return agentTokensEvent }
 
+type tokenSnapshot struct {
+	tokens  int
+	parts   usageParts
+	costUSD float64
+}
+
+// tokenEmitDebounce caps how often a live-token snapshot reaches the frontend.
+// The stream parser pushes a new total on every assistant message; un-throttled,
+// each one woke every agent list item's token handler. Mirrors logEmitDebounce.
+const tokenEmitDebounce = 100 * time.Millisecond
+
+// emitTokens pushes the running token/cost total to the frontend, throttled to at
+// most one emit per agent per debounce window while always carrying the latest
+// snapshot. The authoritative end-of-turn figure is persisted separately, so a
+// dropped intermediate snapshot is never the final value.
 func (service *Service) emitTokens(agentID string, tokens int, parts usageParts, costUSD float64) {
 	if service.store == nil {
 		return
 	}
-	service.store.Emit(agentTokensEvent, map[string]any{
-		"agentId": agentID,
-		"tokens":  tokens,
-		"costUsd": costUSD,
-		"parts":   parts,
+	service.tokenEmitMu.Lock()
+	defer service.tokenEmitMu.Unlock()
+	if service.tokenEmitLatest == nil {
+		service.tokenEmitLatest = make(map[string]tokenSnapshot)
+	}
+	service.tokenEmitLatest[agentID] = tokenSnapshot{tokens: tokens, parts: parts, costUSD: costUSD}
+	if service.tokenEmitTimer == nil {
+		service.tokenEmitTimer = make(map[string]*time.Timer)
+	}
+	if _, scheduled := service.tokenEmitTimer[agentID]; scheduled {
+		return
+	}
+	service.tokenEmitTimer[agentID] = time.AfterFunc(tokenEmitDebounce, func() {
+		service.tokenEmitMu.Lock()
+		snap := service.tokenEmitLatest[agentID]
+		delete(service.tokenEmitTimer, agentID)
+		delete(service.tokenEmitLatest, agentID)
+		service.tokenEmitMu.Unlock()
+		service.store.Emit(agentTokensEvent, map[string]any{
+			"agentId": agentID,
+			"tokens":  snap.tokens,
+			"costUsd": snap.costUSD,
+			"parts":   snap.parts,
+		})
 	})
 }
 

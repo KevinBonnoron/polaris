@@ -1,5 +1,10 @@
 import type { CollectionConfig, DeleteMutationFnParams, InsertMutationFnParams, SyncConfig, UpdateMutationFnParams } from '@tanstack/db';
-import { EventsOff, EventsOn } from '@/wailsjs/runtime/runtime';
+import { EventsOn } from '@/wailsjs/runtime/runtime';
+
+// Window over which rapid change events for one collection collapse into a single
+// refetch. Long enough to absorb a streaming agent's PatchAgent bursts, short
+// enough to stay imperceptible for one-off updates like a rename.
+const refreshDebounceMs = 80;
 
 export interface WailsCollectionConfig<TItem extends { id: string }> {
   /** Logical name — matches the `collection:<name>:changed` event the Go store emits. */
@@ -74,14 +79,31 @@ export function wailsCollectionOptions<TItem extends { id: string }>(config: Wai
         }
       };
 
-      EventsOn(eventName, () => {
-        void refresh();
-      });
+      // Coalesce bursts of change events into one refetch. A working agent emits
+      // many PatchAgent-driven changes per turn; without this each one re-runs the
+      // full list() + per-item diff + whole-list re-render, which is what makes the
+      // UI lag while agents stream. The in-flight guard above still settles on the
+      // latest state after the window.
+      let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleRefresh = () => {
+        if (refreshTimer != null) {
+          return;
+        }
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          void refresh();
+        }, refreshDebounceMs);
+      };
+
+      const off = EventsOn(eventName, scheduleRefresh);
 
       void refresh().finally(() => markReady());
 
       return () => {
-        EventsOff(eventName);
+        if (refreshTimer != null) {
+          clearTimeout(refreshTimer);
+        }
+        off();
       };
     },
   };
