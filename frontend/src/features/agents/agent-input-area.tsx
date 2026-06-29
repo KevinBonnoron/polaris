@@ -412,16 +412,17 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
         if (spawned) {
           setMessage('');
           setAttachments([]);
-          // The backend already persisted the spawned agent and emitted a change
-          // event, so the collection syncs it in on its own. Re-inserting it here
-          // would re-upsert the (intentionally empty) summary and race with — and
-          // clobber — the title the backend generates asynchronously.
+          // Point the selection at the spawned agent BEFORE removing the draft, so
+          // the selected id is never momentarily a row that's being deleted (which
+          // renders the blank "no selection" pane). The backend already persisted
+          // the spawned agent and emitted a change event, so the collection syncs
+          // it in on its own — re-inserting it here would clobber the async title.
+          selectAgent(spawned.id);
           try {
             await agentsCollection.delete(agent.id);
           } catch {
             // draft cleanup is best effort; the spawned agent is what matters
           }
-          selectAgent(spawned.id);
         }
       } catch (err) {
         toastError({ title: t('agents.new.couldNotStart'), err });
