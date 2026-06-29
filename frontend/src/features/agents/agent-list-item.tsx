@@ -16,9 +16,8 @@ import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
 import { useCardAnimationStyle } from '@/providers/appearance';
 import { useConfirm } from '@/providers/confirm';
 import { findAgentKind, OPENCODE_DESCRIPTOR } from './agent-kinds';
+import { normalizeAgentStatus } from './agent-status';
 import { tokenTotal, useLiveTokens } from './use-live-tokens';
-
-const KNOWN_STATUSES = new Set(['working', 'waiting', 'error', 'completed', 'stopped', 'idle', 'archived']);
 
 interface Props {
   agent: Agent;
@@ -37,7 +36,7 @@ export function AgentListItem({ agent, selected, onSelect, providerIcon }: Props
   const { style: cardAnimation } = useCardAnimationStyle();
   const liveTokens = useLiveTokens(agent.id, tokenTotal(agent.tokens));
   const displayTokens = liveTokens?.tokens ?? tokenTotal(agent.tokens);
-  const statusKey = KNOWN_STATUSES.has(agent.status) ? agent.status : 'idle';
+  const statusKey = normalizeAgentStatus(agent.status);
   const statusLabel = t(`agents.status.${statusKey}`);
 
   const prUrl = agent.worktree?.prUrl ?? '';

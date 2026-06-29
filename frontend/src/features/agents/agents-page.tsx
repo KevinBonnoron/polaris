@@ -16,11 +16,9 @@ import type { Notification } from '@/types';
 import { AgentConversation } from './agent-conversation';
 import { AgentDraftCard } from './agent-draft-card';
 import { AgentListItem } from './agent-list-item';
+import { type AgentStatus, normalizeAgentStatus, STATUS_ORDER } from './agent-status';
 import { AgentsEmpty } from './agents-empty';
 import { NewAgentButton } from './new-agent-button';
-
-const STATUS_ORDER = ['draft', 'waiting', 'error', 'working', 'completed', 'stopped', 'idle', 'archived'] as const;
-type AgentStatus = (typeof STATUS_ORDER)[number];
 
 export function AgentsPage() {
   const { t } = useTranslation();
@@ -32,10 +30,10 @@ export function AgentsPage() {
 
   const agents = useMemo(() => {
     const filtered = projectId ? list.filter((a) => a.projectId === projectId) : list;
-    const rank: Record<string, number> = { draft: 0, waiting: 1, error: 2, working: 3, completed: 4, stopped: 5, idle: 6, archived: 7 };
+    const rank = Object.fromEntries(STATUS_ORDER.map((status, index) => [status, index])) as Record<AgentStatus, number>;
     return [...filtered].sort((a, b) => {
-      const ra = rank[a.status] ?? 6;
-      const rb = rank[b.status] ?? 6;
+      const ra = rank[normalizeAgentStatus(a.status)];
+      const rb = rank[normalizeAgentStatus(b.status)];
       if (ra !== rb) {
         return ra - rb;
       }
@@ -62,7 +60,7 @@ export function AgentsPage() {
   const statusCounts = useMemo(() => {
     const counts: Partial<Record<AgentStatus, number>> = {};
     for (const a of agents) {
-      const s = a.status as AgentStatus;
+      const s = normalizeAgentStatus(a.status);
       counts[s] = (counts[s] ?? 0) + 1;
     }
     return counts;
@@ -73,8 +71,8 @@ export function AgentsPage() {
   const effectiveFilter = statusFilter && activeStatuses.includes(statusFilter) ? statusFilter : null;
 
   const groups = useMemo(() => {
-    const toShow = effectiveFilter ? agents.filter((a) => a.status === effectiveFilter) : agents;
-    return STATUS_ORDER.map((status) => ({ status, items: toShow.filter((a) => a.status === status) })).filter((g) => g.items.length > 0);
+    const toShow = effectiveFilter ? agents.filter((a) => normalizeAgentStatus(a.status) === effectiveFilter) : agents;
+    return STATUS_ORDER.map((status) => ({ status, items: toShow.filter((a) => normalizeAgentStatus(a.status) === status) })).filter((g) => g.items.length > 0);
   }, [agents, effectiveFilter]);
 
   return (
