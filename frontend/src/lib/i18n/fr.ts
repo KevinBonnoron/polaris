@@ -247,6 +247,8 @@ export const fr: Translation = {
       commandLogs: 'Afficher les logs',
       commandFiles: 'Afficher les fichiers modifiés',
       commandClear: 'Vider la conversation',
+      commandCompact: 'Compacter la conversation',
+      couldNotCompact: 'Impossible de compacter la conversation',
       commandTeleport: 'Reprendre une session Claude Code du terminal',
       commandTools: 'Restreindre les outils disponibles',
       toolsAll: 'Tous les outils',
