@@ -13,7 +13,7 @@ import { useAgentDefaults } from '@/state/agent-defaults';
 import { selectAgent } from '@/state/agent-selection';
 import { useCurrentProject } from '@/state/projects';
 import type { Agent } from '@/types';
-import { CancelAgent, ClearAgentLog, ClearAgentQueuedMessage, GetProjectFileStatuses, InterruptAndSendToAgent, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, StopAndRetractLastMessage, TeleportClaudeSession } from '@/wailsjs/go/main/App';
+import { CancelAgent, ClearAgentLog, ClearAgentQueuedMessage, CompactAgent, GetProjectFileStatuses, InterruptAndSendToAgent, ListClaudeCodeSessions, PickFiles, RespondToAgentQuestion, SendToAgent, SetAgentModel, StopAndRetractLastMessage, TeleportClaudeSession } from '@/wailsjs/go/main/App';
 import { EventsOn } from '@/wailsjs/runtime/runtime';
 import { AskUserQuestionPanel, type AskUserQuestionPayload } from './ask-user-question-panel';
 import { spawnDraftAgent } from './spawn-draft-agent';
@@ -452,6 +452,9 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     list.push({ name: 'logs', description: t('agents.detail.commandLogs') });
     list.push({ name: 'files', description: t('agents.detail.commandFiles') });
     list.push({ name: 'clear', description: t('agents.detail.commandClear') });
+    if (!isDraft) {
+      list.push({ name: 'compact', description: t('agents.detail.commandCompact') });
+    }
     if (isDraft && cliCfg?.id === 'claude-code') {
       list.push({
         name: 'tools',
@@ -501,6 +504,9 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       case 'clear':
         onClearLog();
         void ClearAgentLog(agentId).catch((err) => toastError({ title: t('agents.detail.couldNotClear'), err }));
+        break;
+      case 'compact':
+        void CompactAgent(agentId).catch((err) => toastError({ title: t('agents.detail.couldNotCompact'), err }));
         break;
       case 'tools': {
         const preset = TOOL_PRESETS[args];

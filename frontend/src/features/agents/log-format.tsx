@@ -108,7 +108,13 @@ type AgentGroupBlock = {
   resultLines?: string[];
 };
 
-export type LogBlock = LogLineBlock | ThinkingBlock | TextBlock | ToolResultBlock | UserMessageBlock | AgentGroupBlock;
+type CompactBlock = {
+  type: 'compact';
+  summary: string;
+  key: string;
+};
+
+export type LogBlock = LogLineBlock | ThinkingBlock | TextBlock | ToolResultBlock | UserMessageBlock | AgentGroupBlock | CompactBlock;
 
 function stripXmlTags(text: string): string {
   return text.replace(/<\/?[a-z_]+>/gi, '').trim();
@@ -253,6 +259,15 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
         const content = evt.content ?? '';
         if (content) {
           target().push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
+        }
+        break;
+      }
+      case 'compact': {
+        flushText();
+        flushThinking();
+        const summary = evt.content ?? '';
+        if (summary) {
+          out.push({ type: 'compact', summary, key: `compact-${blockIndex++}-${i}` });
         }
         break;
       }
@@ -578,6 +593,14 @@ export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true
         }
         if (block.type === 'user-message') {
           return <UserMessageContent key={block.key} content={block.content} />;
+        }
+        if (block.type === 'compact') {
+          return (
+            <div key={block.key} className="col-span-2 my-3 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Compacted</p>
+              <p className="whitespace-pre-wrap text-xs text-foreground/80">{block.summary}</p>
+            </div>
+          );
         }
         if (block.type === 'thinking') {
           return <ThinkingGroup key={block.key} lines={block.lines} />;
