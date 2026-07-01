@@ -107,3 +107,11 @@ func (app *App) ClearAgentLog(agentID string) error {
 	}
 	return app.svc.ClearLog(agentID)
 }
+
+func (app *App) CompactAgent(agentID string) error {
+	if app.svc == nil {
+		return fmt.Errorf("service not ready")
+	}
+	go app.svc.Compact(agentID)
+	return nil
+}
