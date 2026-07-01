@@ -247,6 +247,7 @@ export const en = {
       commandClear: 'Clear the conversation',
       commandCompact: 'Compact the conversation',
       couldNotCompact: 'Could not compact the conversation',
+      compactedLabel: 'Compacted',
       commandTeleport: 'Resume a terminal Claude Code session',
       commandTools: 'Restrict available tools',
       toolsAll: 'All tools',

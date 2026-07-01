@@ -30,6 +30,10 @@ func buildConversationText(events []StreamEvent) string {
 	var b strings.Builder
 	for _, ev := range events {
 		switch ev.Type {
+		case "compact":
+			b.WriteString("[Previous summary: ")
+			b.WriteString(ev.Content)
+			b.WriteString("]\n\n")
 		case "user_message":
 			b.WriteString("User: ")
 			b.WriteString(ev.Content)
@@ -64,6 +68,11 @@ func (service *Service) compact(agentID string) error {
 		return errors.New("agentId is required")
 	}
 
+	if _, loaded := service.compacting.LoadOrStore(agentID, true); loaded {
+		return errors.New("compact already in progress for this agent")
+	}
+	defer service.compacting.Delete(agentID)
+
 	agent, err := service.store.GetAgent(agentID)
 	if err != nil {
 		return fmt.Errorf("find agent: %w", err)
@@ -76,6 +85,21 @@ func (service *Service) compact(agentID string) error {
 	progressEvt := StreamEvent{Type: "system", Content: "Compacting conversation…"}
 	_ = service.appendAgentEvent(agentID, progressEvt)
 	service.emitLogEvent(agentID, progressEvt)
+
+	// Grab the claude session before cancelling so we can wait for its writer
+	// to finish before we read the log — prevents a partial read mid-write.
+	service.runner.mu.Lock()
+	cs := service.runner.claude[agentID]
+	service.runner.mu.Unlock()
+
+	_ = service.runner.cancel(agentID)
+
+	if cs != nil {
+		select {
+		case <-cs.done:
+		case <-time.After(3 * time.Second):
+		}
+	}
 
 	events, err := service.ReadLogEvents(agentID)
 	if err != nil {
@@ -104,20 +128,6 @@ func (service *Service) compact(agentID string) error {
 		})
 		if err != nil {
 			return fmt.Errorf("generate summary: %w", err)
-		}
-	}
-
-	_ = service.runner.cancel(agentID)
-
-	// For claude-code: wait for the reader goroutine to finish writing before
-	// we truncate the log file.
-	service.runner.mu.Lock()
-	cs := service.runner.claude[agentID]
-	service.runner.mu.Unlock()
-	if cs != nil {
-		select {
-		case <-cs.done:
-		case <-time.After(3 * time.Second):
 		}
 	}
 
@@ -171,7 +181,7 @@ func (service *Service) compact(agentID string) error {
 		return service.runner.startACPSession(service, agentID, rt, workDir, contextMsg, env, 0, 0, "")
 
 	default:
-		service.markAgentCompleted(agentID)
+		_ = service.store.PatchAgent(agentID, map[string]any{"status": "idle"})
 		return nil
 	}
 }

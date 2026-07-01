@@ -1,6 +1,7 @@
 import 'highlight.js/styles/github-dark.css';
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
 import { Fragment, memo, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -585,6 +586,7 @@ interface LogBlocksGridProps {
 }
 
 export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true, showTimestamps = false }: LogBlocksGridProps) {
+  const { t } = useTranslation();
   return (
     <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 font-mono text-xs leading-relaxed">
       {blocks.map((block) => {
@@ -597,7 +599,7 @@ export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true
         if (block.type === 'compact') {
           return (
             <div key={block.key} className="col-span-2 my-3 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
-              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Compacted</p>
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{t('agents.compactedLabel')}</p>
               <p className="whitespace-pre-wrap text-xs text-foreground/80">{block.summary}</p>
             </div>
           );

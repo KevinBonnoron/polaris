@@ -509,6 +509,10 @@ type Service struct {
 	tokenEmitMu     sync.Mutex
 	tokenEmitTimer  map[string]*time.Timer
 	tokenEmitLatest map[string]tokenSnapshot
+
+	// compacting serialises concurrent /compact calls per agent: a bool stored
+	// under agentId prevents a second compact from starting while one is running.
+	compacting sync.Map
 }
 
 func NewService(store *Store) *Service {
