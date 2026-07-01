@@ -122,6 +122,9 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 	if service.runner == nil {
 		return errors.New("runner not initialised")
 	}
+	if service.store == nil {
+		return errors.New("store not initialised")
+	}
 	// Read the agent once: we need PendingQuestion.Input before clearing it
 	// (to craft the resume message) and the session/project info for the spawn.
 	agent, err := service.store.GetAgent(agentID)
@@ -130,6 +133,11 @@ func (service *Service) RespondToAgentQuestion(agentID, toolUseID, answer string
 	}
 	if agent == nil {
 		return fmt.Errorf("agent %q not found", agentID)
+	}
+	// Reject a stale answer aimed at a tool_use the agent is no longer awaiting,
+	// so it can't clear an unrelated (newer) pending question.
+	if agent.PendingQuestion != nil && toolUseID != "" && agent.PendingQuestion.ToolUseID != toolUseID {
+		return fmt.Errorf("agent %q is awaiting tool_use %q, not %q", agentID, agent.PendingQuestion.ToolUseID, toolUseID)
 	}
 	var pendingInput json.RawMessage
 	if agent.PendingQuestion != nil {

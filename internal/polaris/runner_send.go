@@ -101,21 +101,22 @@ func (service *Service) Send(agentID, message string) error {
 			if service.runner.queueIfRunning(agentID, message) {
 				return nil
 			}
-			// The process exited between isRunning and queueIfRunning. Fall
-			// through to the resume path without logging the message twice.
-		}
+			// The process exited between isRunning and queueIfRunning: fall out
+			// to the resume path below (never into the stdin write — a turn-based
+			// CLI has no live stdin pipe).
+		} else {
+			// Interactive CLIs (copilot) use direct stdin.
+			if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
+				return fmt.Errorf("write log: %w", err)
+			}
 
-		// Interactive CLIs (copilot) use direct stdin.
-		if err := service.appendAgentEvent(agentID, StreamEvent{Type: "user_message", Content: message}); err != nil {
-			return fmt.Errorf("write log: %w", err)
-		}
+			if !service.runner.writeStdin(agentID, message) {
+				return fmt.Errorf("cannot write to %q stdin", agent.Kind)
+			}
 
-		if !service.runner.writeStdin(agentID, message) {
-			return fmt.Errorf("cannot write to %q stdin", agent.Kind)
+			_ = service.store.PatchAgent(agentID, map[string]any{"status": "working"})
+			return nil
 		}
-
-		_ = service.store.PatchAgent(agentID, map[string]any{"status": "working"})
-		return nil
 	}
 
 	// 2. Not running: try to resume the session with a fresh process.

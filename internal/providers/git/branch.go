@@ -16,15 +16,22 @@ import (
 // resulting name stays under git's practical 250-char ref limit.
 func BranchNameForIssue(issueType, key, summary string) string {
 	prefix := branchPrefixForIssueType(issueType)
+	keySlug := slugify(key)
 	slug := slugify(summary)
-	if slug == "" {
-		return prefix + "/" + strings.ToLower(key)
-	}
 	const maxSlug = 60
 	if len(slug) > maxSlug {
 		slug = strings.TrimRight(slug[:maxSlug], "-")
 	}
-	return prefix + "/" + strings.ToLower(key) + "-" + slug
+	switch {
+	case keySlug == "" && slug == "":
+		return prefix + "/change"
+	case slug == "":
+		return prefix + "/" + keySlug
+	case keySlug == "":
+		return prefix + "/" + slug
+	default:
+		return prefix + "/" + keySlug + "-" + slug
+	}
 }
 
 func branchPrefixForIssueType(issueType string) string {
@@ -90,9 +97,9 @@ func providerFor(host string) Provider {
 	switch {
 	case host == "github.com" || strings.HasSuffix(host, ".github.com"):
 		return ProviderGitHub
-	case host == "gitlab.com" || strings.HasSuffix(host, "gitlab.com") || strings.Contains(host, "gitlab"):
+	case host == "gitlab.com" || strings.HasSuffix(host, ".gitlab.com") || strings.HasPrefix(host, "gitlab."):
 		return ProviderGitLab
-	case host == "bitbucket.org" || strings.HasSuffix(host, "bitbucket.org") || strings.Contains(host, "bitbucket"):
+	case host == "bitbucket.org" || strings.HasSuffix(host, ".bitbucket.org") || strings.HasPrefix(host, "bitbucket."):
 		return ProviderBitbucket
 	default:
 		return ProviderUnknown

@@ -51,7 +51,7 @@ func SnapshotScopedPaths(repoPath, baseTree string) ([]string, error) {
 
 	var paths []string
 	for _, p := range strings.Split(string(out), "\x00") {
-		if p = strings.TrimSpace(p); p != "" {
+		if p != "" {
 			paths = append(paths, p)
 		}
 	}
@@ -152,7 +152,9 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
