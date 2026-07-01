@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 )
@@ -223,8 +224,8 @@ func agentKindLabel(service *Service, agent *Agent) string {
 
 func agentNotificationTitle(service *Service, agent *Agent, event AgentEvent, severity NotificationSeverity, detail string) string {
 	task := strings.TrimSpace(agent.Summary)
-	if len(task) > 80 {
-		task = task[:77] + "..."
+	if utf8.RuneCountInString(task) > 80 {
+		task = truncateRunes(task, 77) + "..."
 	}
 	label := agentKindLabel(service, agent)
 

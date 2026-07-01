@@ -16,6 +16,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/git"
 	"github.com/KevinBonnoron/polaris/internal/providers/repository"
@@ -214,8 +215,8 @@ func agentPRMessage(agent *Agent) (title, body string) {
 			head = head[:idx]
 		}
 		head = strings.TrimSpace(head)
-		if len(head) > 80 {
-			head = head[:77] + "..."
+		if utf8.RuneCountInString(head) > 80 {
+			head = truncateRunes(head, 77) + "..."
 		}
 		if head == "" {
 			title = agent.Worktree.IssueKey
@@ -227,8 +228,8 @@ func agentPRMessage(agent *Agent) (title, body string) {
 		if idx := strings.IndexAny(title, "\r\n"); idx >= 0 {
 			title = title[:idx]
 		}
-		if len(title) > 80 {
-			title = title[:77] + "..."
+		if utf8.RuneCountInString(title) > 80 {
+			title = truncateRunes(title, 77) + "..."
 		}
 	}
 	if title == "" {
@@ -906,11 +907,14 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 
 func streamLines(reader io.Reader, sink io.Writer, onEvent func(StreamEvent)) {
 	scanner := bufio.NewScanner(reader)
-	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
 		if text := strings.TrimSpace(scanner.Text()); text != "" {
 			emitEvent(sink, onEvent, StreamEvent{Type: "text", Content: text})
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		emitEvent(sink, onEvent, StreamEvent{Type: "system", Content: "✗ output stream truncated: " + err.Error()})
 	}
 }
 

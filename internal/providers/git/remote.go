@@ -69,6 +69,9 @@ func findGitDir(start string) (string, error) {
 	for {
 		candidate := filepath.Join(dir, ".git")
 		info, err := os.Stat(candidate)
+		if err != nil && !os.IsNotExist(err) {
+			return "", err
+		}
 		if err == nil && info.IsDir() {
 			return candidate, nil
 		}
@@ -213,7 +216,7 @@ type ProviderToken struct {
 // the active token on stdout when asked. Returns (nil, nil) if no token is
 // found — callers treat that as "user has to type it themselves".
 func DetectProviderToken(provider string) (*ProviderToken, error) {
-	switch Provider(provider) {
+	switch Provider(strings.ToLower(strings.TrimSpace(provider))) {
 	case ProviderGitHub:
 		if tok, err := runForToken("gh", "auth", "token"); err == nil && tok != "" {
 			return &ProviderToken{Provider: ProviderGitHub, Token: tok, Source: "gh"}, nil

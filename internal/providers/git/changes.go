@@ -148,14 +148,20 @@ func ProjectFileStatuses(dir string) ([]FileChangeStatus, error) {
 			return
 		}
 		records := strings.Split(string(b), "\x00")
-		for _, rec := range records {
+		for i := 0; i < len(records); i++ {
+			rec := records[i]
 			if len(rec) < 3 {
 				continue
 			}
 			xy := rec[:2]
 			path := rec[3:]
-			entry := upsert(path)
 			x, y := rune(xy[0]), rune(xy[1])
+			// Rename/copy records emit two NUL fields: `XY <dest>\0<orig>\0`.
+			// Consume the origin field so it isn't parsed as a bogus entry.
+			if x == 'R' || x == 'C' || y == 'R' || y == 'C' {
+				i++
+			}
+			entry := upsert(path)
 			switch {
 			case x == '?' && y == '?':
 				entry.Status = "?"
