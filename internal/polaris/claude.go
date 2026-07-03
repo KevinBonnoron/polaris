@@ -717,14 +717,17 @@ func renderClaudeAssistant(evt map[string]any, files map[string]struct{}, toolIn
 				onAsk(id, exitPlanModeQuestion(input, toolInputs))
 			}
 			se := StreamEvent{
-				Type:  "tool_call",
-				ID:    id,
-				Name:  name,
-				Input: input,
+				Type: "tool_call",
+				ID:   id,
+				Name: name,
 			}
-			// Embed a summary detail in Content so the frontend doesn't need
-			// to re-derive it from Input for the compact display.
-			if detail := summarizeToolInput(name, input); detail != "" {
+			// The Agent tool carries structured fields (description, subagent_type)
+			// the frontend needs to group sub-agent output; every other tool ships
+			// only the Go-translated detail, so we never send the raw input and its
+			// summary twice.
+			if name == "Agent" {
+				se.Input = input
+			} else if detail := summarizeToolInput(name, input); detail != "" {
 				se.Content = strings.TrimPrefix(detail, " · ")
 			}
 			events = append(events, se)

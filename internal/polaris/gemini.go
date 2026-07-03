@@ -145,12 +145,13 @@ func renderGeminiToolUse(evt map[string]any, files map[string]struct{}, toolInpu
 		onAsk(id, input)
 	}
 	se := StreamEvent{
-		Type:  "tool_call",
-		ID:    id,
-		Name:  name,
-		Input: input,
+		Type: "tool_call",
+		ID:   id,
+		Name: name,
 	}
-	if detail := summarizeToolInput(name, input); detail != "" {
+	if name == "Agent" {
+		se.Input = input
+	} else if detail := summarizeToolInput(name, input); detail != "" {
 		se.Content = strings.TrimPrefix(detail, " · ")
 	}
 	return []StreamEvent{se}

@@ -1,6 +1,6 @@
 import 'highlight.js/styles/github-dark.css';
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { Fragment, memo, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -134,6 +134,27 @@ function cleanResultLines(lines: string[]): string[] {
     end--;
   }
   return stripped.slice(start, end);
+}
+
+// Tracks whether a single-line, CSS-truncated element is actually clipping its
+// text, so callers can offer an expand affordance only when there's more to show.
+function useOverflow<T extends HTMLElement>(dep: unknown): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [clipped, setClipped] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dep is a re-measure trigger (its value drives the rendered text, read via ref)
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      setClipped(false);
+      return;
+    }
+    const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dep]);
+  return [ref, clipped];
 }
 
 const TOOL_ID_RE = /^\[#([^\]]+)\]\s?/;
@@ -334,16 +355,7 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
 }
 
 function AgentGroup({ description, subagentType, children, resultLines, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
-  const isPending = toolStatus === 'pending';
-  const [open, setOpen] = useState(isPending);
-  const prevStatus = useRef(toolStatus);
-
-  useEffect(() => {
-    if (prevStatus.current === 'pending' && toolStatus !== 'pending') {
-      setOpen(false);
-    }
-    prevStatus.current = toolStatus;
-  }, [toolStatus]);
+  const [open, setOpen] = useState(false);
 
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
   const hasChildren = children.length > 0;
@@ -355,9 +367,9 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
     <div className="col-start-2 my-0.5 min-w-0">
       <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
-        <span className="min-w-0 flex-1 break-words">
-          <span className="text-violet-400">{label}</span>
-          {description && <span className="ml-1.5 text-muted-foreground/50">{description}</span>}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <span className="shrink-0 text-violet-400">{label}</span>
+          {description && <span className="min-w-0 truncate text-muted-foreground/50">{description}</span>}
         </span>
         {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
@@ -470,27 +482,43 @@ function ToolResultPanel({ lines, toolName }: { lines: string[]; toolName?: stri
 function ToolCallLine({ stamp, rest, toolStatus, toolResultLines }: { stamp: string | null; rest: string; toolStatus?: 'success' | 'error' | 'pending'; toolResultLines?: string[] }) {
   const [open, setOpen] = useState(false);
   const parsed = parseToolCall(rest);
+  const detail = parsed ? parsed.detail : rest.slice('→ '.length);
+  // The detail carries the full, backend-translated text; the collapsed line
+  // clips it with a CSS ellipsis, so only offer expansion when it's truncated.
+  const [detailRef, detailClipped] = useOverflow<HTMLSpanElement>(detail);
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
-  const canExpand = toolResultLines && toolResultLines.length > 0;
+  const hasResult = (toolResultLines?.length ?? 0) > 0;
+  const canExpand = hasResult || detailClipped;
   return (
     <Fragment>
       <span className="self-start text-muted-foreground/70 tabular-nums">{stamp ?? ' '}</span>
       <span className="flex min-w-0 flex-col">
         <button type="button" disabled={!canExpand} onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
           <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
-          <span className="min-w-0 flex-1 break-words">
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
             {parsed ? (
               <>
-                <span className="text-violet-400">{parsed.name}</span>
-                {parsed.detail && <span className="ml-1.5 text-muted-foreground/50">{parsed.detail}</span>}
+                <span className="shrink-0 text-violet-400">{parsed.name}</span>
+                {detail && (
+                  <span ref={detailRef} className="min-w-0 truncate text-muted-foreground/50">
+                    {detail}
+                  </span>
+                )}
               </>
             ) : (
-              <span className="text-violet-400">{rest.slice('→ '.length)}</span>
+              <span ref={detailRef} className="min-w-0 truncate text-violet-400">
+                {detail}
+              </span>
             )}
           </span>
           {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
         </button>
-        {open && canExpand && <ToolResultPanel lines={toolResultLines} toolName={parsed?.name} />}
+        {open && detailClipped && (
+          <ScrollArea className="mt-1 rounded border border-border/60 bg-muted/30 text-muted-foreground/80" viewportProps={{ className: 'max-h-64' }}>
+            <pre className="whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/70">{detail}</pre>
+          </ScrollArea>
+        )}
+        {open && toolResultLines && toolResultLines.length > 0 && <ToolResultPanel lines={toolResultLines} toolName={parsed?.name} />}
       </span>
     </Fragment>
   );

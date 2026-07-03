@@ -134,12 +134,11 @@ func codexResponseItemToStreamEvents(payload map[string]any) []StreamEvent {
 
 func codexCommandCall(item map[string]any) StreamEvent {
 	se := StreamEvent{
-		Type:  "tool_call",
-		ID:    codexItemID(item),
-		Name:  "Bash",
-		Input: map[string]any{"command": strAny(item["command"])},
+		Type: "tool_call",
+		ID:   codexItemID(item),
+		Name: "Bash",
 	}
-	if detail := summarizeToolInput("Bash", se.Input); detail != "" {
+	if detail := summarizeToolInput("Bash", map[string]any{"command": strAny(item["command"])}); detail != "" {
 		se.Content = strings.TrimPrefix(detail, " · ")
 	}
 	return se
@@ -169,12 +168,13 @@ func codexFunctionCall(item map[string]any) (StreamEvent, bool) {
 	name := codexToolName(rawName)
 	input := codexToolInput(item)
 	se := StreamEvent{
-		Type:  "tool_call",
-		ID:    codexItemID(item),
-		Name:  name,
-		Input: input,
+		Type: "tool_call",
+		ID:   codexItemID(item),
+		Name: name,
 	}
-	if detail := summarizeToolInput(name, input); detail != "" {
+	if name == "Agent" {
+		se.Input = input
+	} else if detail := summarizeToolInput(name, input); detail != "" {
 		se.Content = strings.TrimPrefix(detail, " · ")
 	}
 	return se, true

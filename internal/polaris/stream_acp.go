@@ -37,12 +37,15 @@ func (a *acpSession) emitToolCall(id string) {
 	a.mu.Unlock()
 
 	se := StreamEvent{
-		Type:  "tool_call",
-		ID:    id,
-		Name:  name,
-		Input: input,
+		Type: "tool_call",
+		ID:   id,
+		Name: name,
 	}
-	if detail != "" {
+	// Only the Agent tool needs its raw input on the wire (for sub-agent grouping);
+	// other tools ship just the translated detail so we never double-send.
+	if name == "Agent" {
+		se.Input = input
+	} else if detail != "" {
 		se.Content = detail
 	}
 	a.emitEvent(se)
