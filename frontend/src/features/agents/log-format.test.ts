@@ -68,6 +68,17 @@ describe('buildLogBlocks', () => {
     expect((call as any).toolStatus).toBe('error');
   });
 
+  it('stop event fails the in-flight sub-agent and its pending tool calls', () => {
+    const blocks = buildLogBlocks([evt('tool_call', { id: 'ag1', name: 'Agent', input: { subagent_type: 'Explore', description: 'Explore the code' } }), evt('tool_call', { id: 'b1', name: 'Bash', content: 'find . -name "*.go"' }), evt('system', { content: '(stopped by user)' })] as any);
+    const group = blocks.find((b) => b.type === 'agent-group') as any;
+    expect(group?.toolStatus).toBe('error');
+    const bash = group.children.find((b: any) => b.type === 'line' && b.rest.startsWith('→ Bash'));
+    expect(bash?.toolStatus).toBe('error');
+    // the notice lands at the top level, not nested under the killed agent
+    const notice = blocks.find((b) => b.type === 'line' && (b as any).rest === '(stopped by user)');
+    expect(notice).toBeDefined();
+  });
+
   it('AskUserQuestion stays pending on error result', () => {
     const blocks = buildLogBlocks([evt('tool_call', { id: 'ask1', name: 'AskUserQuestion', content: 'Proceed?' }), evt('tool_result', { id: 'ask1', content: '', error: true })] as any);
     const call = blocks.find((b) => b.type === 'line' && (b as any).rest.startsWith('→ AskUserQuestion'));

@@ -15,6 +15,10 @@ type StreamEvent = polaris.StreamEvent;
 
 const TIMESTAMP_RE = /^(\[\d{2}:\d{2}:\d{2}\])\s?/;
 
+// Emitted by the backend (runner_status.go) as a system event when the user
+// kills the run; used to fail any tool calls / sub-agents left in flight.
+const STOP_MARKER = '(stopped by user)';
+
 function isStructuredLine(rest: string): boolean {
   const t = rest.trimStart();
   return t.startsWith('→ ') || t.startsWith('← ') || t.startsWith('(thinking) ') || t.startsWith('[system]') || t.startsWith('[result]') || t.startsWith('>') || /^(✓|✔|✅|✗|✘|❌)/.test(t);
@@ -177,6 +181,9 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
 
   // Stack for nesting sub-agent events under their Agent tool call
   const agentStack: Array<{ id: string; block: AgentGroupBlock }> = [];
+  // Set when the run was killed: in-flight tool calls / sub-agents get no
+  // result event, so they'd otherwise stay stuck "pending" (blue) forever.
+  let stopped = false;
 
   function target(): LogBlock[] {
     return agentStack.length > 0 ? agentStack[agentStack.length - 1].block.children : out;
@@ -279,6 +286,15 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
         flushText();
         flushThinking();
         const content = evt.content ?? '';
+        if (content.includes(STOP_MARKER)) {
+          // Killed run: fail any open sub-agents and stop nesting so the notice
+          // lands at the top level (mirrors the user_message interrupt).
+          stopped = true;
+          for (const a of agentStack) {
+            a.block.toolStatus = 'error';
+          }
+          agentStack.length = 0;
+        }
         if (content) {
           target().push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
         }
@@ -351,7 +367,27 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
     return blocks.filter((_, i) => !absorbed.has(i));
   }
 
-  return pairToolResults(out);
+  const paired = pairToolResults(out);
+  if (stopped) {
+    failPendingBlocks(paired);
+  }
+  return paired;
+}
+
+// After a killed run, any block still "pending" never received its result;
+// flag it as an error, recursing into sub-agent groups. AskUserQuestion /
+// ExitPlanMode stay pending — those legitimately wait on the user.
+function failPendingBlocks(blocks: LogBlock[]): void {
+  for (const b of blocks) {
+    if (b.type === 'agent-group') {
+      if (b.toolStatus === 'pending') {
+        b.toolStatus = 'error';
+      }
+      failPendingBlocks(b.children);
+    } else if (b.type === 'line' && b.toolStatus === 'pending' && b.rest.startsWith('→ ') && !b.rest.startsWith('→ AskUserQuestion') && !b.rest.startsWith('→ ExitPlanMode')) {
+      b.toolStatus = 'error';
+    }
+  }
 }
 
 function escapeRegExp(s: string): string {
