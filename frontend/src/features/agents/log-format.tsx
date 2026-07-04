@@ -356,11 +356,12 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
 
 function AgentGroup({ description, subagentType, children, resultLines, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
   const [open, setOpen] = useState(false);
+  const [descRef, descClipped] = useOverflow<HTMLSpanElement>(description);
 
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
   const hasChildren = children.length > 0;
   const hasResult = (resultLines?.length ?? 0) > 0;
-  const canExpand = hasChildren || hasResult;
+  const canExpand = hasChildren || hasResult || descClipped;
   const label = subagentType ? `Agent · ${subagentType}` : 'Agent';
 
   return (
@@ -369,12 +370,17 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
           <span className="shrink-0 text-violet-400">{label}</span>
-          {description && <span className="min-w-0 truncate text-muted-foreground/50">{description}</span>}
+          {description && (
+            <span ref={descRef} className="min-w-0 truncate text-muted-foreground/50">
+              {description}
+            </span>
+          )}
         </span>
         {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
       {open && canExpand && (
         <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
+          {descClipped && <div className="mb-0.5 whitespace-pre-wrap break-words text-muted-foreground/70">{description}</div>}
           {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} />}
           {hasResult && <ToolResultPanel lines={cleanResultLines(resultLines!)} toolName="Agent" />}
         </div>
