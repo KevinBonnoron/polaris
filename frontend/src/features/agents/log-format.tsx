@@ -431,9 +431,9 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
         {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
       {open && canExpand && (
-        <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
+        <div className="ml-1.5 mt-0.5 border-l border-border/30 pl-2">
           {descClipped && <div className="mb-0.5 whitespace-pre-wrap break-words text-muted-foreground/70">{desc}</div>}
-          {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} />}
+          {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} compact />}
           {hasResult && <ToolResultPanel lines={cleanResultLines(resultLines!)} toolName="Agent" />}
         </div>
       )}
@@ -669,12 +669,13 @@ interface LogBlocksGridProps {
   restClassName?: string;
   preserveWhitespace?: boolean;
   showTimestamps?: boolean;
+  compact?: boolean;
 }
 
-export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true, showTimestamps = false }: LogBlocksGridProps) {
+export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true, showTimestamps = false, compact = false }: LogBlocksGridProps) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 font-mono text-xs leading-relaxed">
+    <div className={cn('grid grid-cols-[auto_minmax(0,1fr)] font-mono text-xs leading-relaxed', compact ? 'gap-x-1.5' : 'gap-x-3')}>
       {blocks.map((block) => {
         if (block.type === 'agent-group') {
           return <AgentGroup key={block.key} description={block.description} subagentType={block.subagentType} children={block.children} toolStatus={block.toolStatus} toolId={block.toolId} resultLines={block.resultLines} />;
