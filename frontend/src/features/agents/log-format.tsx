@@ -390,26 +390,10 @@ function failPendingBlocks(blocks: LogBlock[]): void {
   }
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Sub-agent task descriptions usually restate the agent type as their leading
-// word (e.g. "Explore …" for an Explore agent). Drop that echo so the type,
-// shown as a tag, isn't repeated in the description prose right after it.
-function stripLeadingType(description: string, type?: string): string {
-  if (!type) {
-    return description;
-  }
-  const stripped = description.replace(new RegExp(`^${escapeRegExp(type)}\\b[\\s:—-]*`, 'i'), '').trim();
-  return stripped || description;
-}
-
 function AgentGroup({ description, subagentType, children, resultLines, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
   const [open, setOpen] = useState(false);
   const type = subagentType?.trim();
-  const desc = stripLeadingType(description, type);
-  const [descRef, descClipped] = useOverflow<HTMLSpanElement>(desc);
+  const [descRef, descClipped] = useOverflow<HTMLSpanElement>(description);
 
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
   const hasChildren = children.length > 0;
@@ -421,10 +405,12 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
       <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
         <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
-          {type ? <span className="shrink-0 rounded-sm bg-violet-400/10 px-1 text-violet-300">{type}</span> : <span className="shrink-0 text-violet-400">Agent</span>}
-          {desc && (
+          <span className="shrink-0 rounded-sm bg-violet-400/10 px-1 text-violet-300" title={type}>
+            Agent
+          </span>
+          {description && (
             <span ref={descRef} className="min-w-0 truncate text-muted-foreground/50">
-              {desc}
+              {description}
             </span>
           )}
         </span>
@@ -432,7 +418,7 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
       </button>
       {open && canExpand && (
         <div className="ml-1.5 mt-0.5 border-l border-border/30 pl-2">
-          {descClipped && <div className="mb-0.5 whitespace-pre-wrap break-words text-muted-foreground/70">{desc}</div>}
+          {descClipped && <div className="mb-0.5 whitespace-pre-wrap break-words text-muted-foreground/70">{description}</div>}
           {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} compact />}
           {hasResult && <ToolResultPanel lines={cleanResultLines(resultLines!)} toolName="Agent" />}
         </div>
