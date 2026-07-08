@@ -16,9 +16,10 @@ const (
 )
 
 var (
-	modelsCache   []ModelInfo
-	modelsCacheAt time.Time
-	modelsCacheMu sync.Mutex
+	modelsCache      []ModelInfo
+	modelsCacheAt    time.Time
+	modelsCacheMu    sync.Mutex
+	claudeModelsHTTP = &http.Client{Timeout: 15 * time.Second}
 )
 
 // Claude API response types
@@ -66,8 +67,7 @@ func fetchClaudeModelsLive() ([]ModelInfo, error) {
 	req.Header.Set("anthropic-beta", usageBetaHdr)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := claudeModelsHTTP.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("call models endpoint: %w", err)
 	}
@@ -103,7 +103,7 @@ func fetchClaudeModelsLive() ([]ModelInfo, error) {
 			continue
 		}
 		seen[family] = true
-		out = append(out, ModelInfo{Value: family, Name: m.DisplayName, Family: family})
+		out = append(out, ModelInfo{Value: m.ID, Name: m.DisplayName, Family: family})
 	}
 	return out, nil
 }
