@@ -113,6 +113,7 @@ export const en = {
       working: 'Working',
       idle: 'Idle',
       waiting: 'Waiting input',
+      sleeping: 'Sleeping',
       error: 'Error',
       completed: 'Done',
       stopped: 'Stopped',

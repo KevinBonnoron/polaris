@@ -45,6 +45,7 @@ export function sentryLevelSeverity(level: string | undefined): Severity {
 const AGENT_STATUS_SEVERITY: Record<string, Severity> = {
   working: 'info',
   waiting: 'warning',
+  sleeping: 'warning',
   error: 'error',
   completed: 'success',
   stopped: 'neutral',

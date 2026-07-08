@@ -59,6 +59,10 @@ type streamTurnStats struct {
 	ToolsUsed     int
 	// Succeeded is set when a result event arrives cleanly (no error flag).
 	Succeeded bool
+	// ScheduledWakeup is set when the agent called ScheduleWakeup this turn,
+	// meaning it intends to resume later — the agent should be shown as
+	// "sleeping" rather than "completed" at the turn boundary.
+	ScheduledWakeup bool
 }
 
 type usageParts = TokenUsage

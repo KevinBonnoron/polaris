@@ -262,7 +262,16 @@ func (service *Service) Cancel(agentID string) error {
 	if service.runner == nil {
 		return errors.New("runner not initialised")
 	}
-	return service.runner.cancel(agentID)
+	err := service.runner.cancel(agentID)
+	if err != nil {
+		// No active process — allow cancelling a sleeping agent (e.g. waiting for a
+		// RemoteTrigger that never resumes the current session).
+		if agent, _ := service.store.GetAgent(agentID); agent != nil && agent.Status == "sleeping" {
+			service.markAgentStopped(agentID)
+			return nil
+		}
+	}
+	return err
 }
 
 // ResetAll cancels every running agent, wipes the database, and deletes every
@@ -902,7 +911,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		return
 	}
 	svc.persistTurnStats(agentID, stats)
-	svc.onTurnFinished(agentID)
+	svc.onTurnFinished(agentID, stats)
 }
 
 func streamLines(reader io.Reader, sink io.Writer, onEvent func(StreamEvent)) {
