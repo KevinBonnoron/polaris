@@ -115,6 +115,7 @@ export const fr: Translation = {
       working: 'En cours',
       idle: 'Inactif',
       waiting: 'En attente',
+      sleeping: 'En veille',
       error: 'Erreur',
       completed: 'Terminé',
       stopped: 'Arrêté',

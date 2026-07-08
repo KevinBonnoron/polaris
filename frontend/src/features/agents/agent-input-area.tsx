@@ -56,6 +56,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   const status = agent?.status;
   const isDraft = status === 'draft';
   const isWorking = status === 'working';
+  const isSleeping = status === 'sleeping';
   const queuedMessage = agent?.queuedMessage ?? '';
 
   const provider = providers.find((p) => p.id === agent?.providerId) ?? undefined;
@@ -284,6 +285,11 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const el = inputRef.current;
+      if (e.key === 'Escape' && isSleeping) {
+        e.preventDefault();
+        void cancel();
+        return;
+      }
       if (e.key === 'Escape' && isWorking) {
         e.preventDefault();
         // A queued message would be dropped by the stop, so bring it back into the
@@ -341,7 +347,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isWorking, agentId, t, onLogRefresh, queuedMessage, recallIntoInput, clearQueued, inputRef]);
+  }, [isWorking, isSleeping, agentId, t, onLogRefresh, queuedMessage, recallIntoInput, clearQueued, inputRef]);
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -446,7 +452,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     if (models.length > 0) {
       list.push({ name: 'model', description: t('agents.detail.commandModel'), takesArg: true, args: models.map((m) => ({ value: m.value, label: m.label })) });
     }
-    if (isWorking) {
+    if (isWorking || isSleeping) {
       list.push({ name: 'stop', description: t('agents.detail.commandStop') });
     }
     list.push({ name: 'logs', description: t('agents.detail.commandLogs') });
@@ -472,7 +478,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       list.push({ name: 'teleport', description: t('agents.detail.commandTeleport'), takesArg: true, args: teleportSessions });
     }
     return list;
-  }, [models, isWorking, t, isDraft, teleportSessions, cliCfg]);
+  }, [models, isWorking, isSleeping, t, isDraft, teleportSessions, cliCfg]);
 
   const runCommand = (name: string, args: string) => {
     switch (name) {
@@ -641,7 +647,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
                     <Zap className="size-4" />
                   </Button>
                 )}
-                {message.trim() || attachments.length > 0 || !isWorking ? (
+                {message.trim() || attachments.length > 0 || (!isWorking && !isSleeping) ? (
                   <Button size="icon" title={t('agents.detail.send')} disabled={sending || (!message.trim() && attachments.length === 0) || (isDraft && !spawnModel)} onClick={() => void send()} className="size-10">
                     <Send className="size-4" />
                   </Button>

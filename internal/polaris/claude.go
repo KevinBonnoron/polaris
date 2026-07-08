@@ -267,7 +267,7 @@ func (c *claudeSession) onTurnEnd(s streamTurnStats) {
 	c.mu.Lock()
 	c.running = false
 	c.mu.Unlock()
-	c.svc.markAgentCompleted(c.agentID)
+	c.svc.finishTurn(c.agentID, s)
 }
 
 // retryOverload re-runs a turn that hit a transient upstream error, escalating to
@@ -600,6 +600,9 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 					continue
 				}
 			}
+			if se.Type == "tool_call" && isSchedulingTool(se.Name) {
+				stats.ScheduledWakeup = true
+			}
 			emitEvent(sink, onEvent, se)
 		}
 		// Activated after the event that surfaced the question is fully emitted, so
@@ -616,6 +619,7 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 			if onResult != nil && len(askPending) == 0 {
 				stats.FilesModified = len(filesSet)
 				onResult(stats)
+				stats.ScheduledWakeup = false
 			}
 			suppressTrailing = false
 			surfacedIDs = map[string]struct{}{}
@@ -731,6 +735,16 @@ func renderClaudeAssistant(evt map[string]any, files map[string]struct{}, toolIn
 		}
 	}
 	return events
+}
+
+// isSchedulingTool reports whether a tool call indicates the agent intends to
+// resume later via an external trigger (scheduled wakeup, remote routine, etc.).
+func isSchedulingTool(name string) bool {
+	switch name {
+	case "ScheduleWakeup", "CronCreate":
+		return true
+	}
+	return false
 }
 
 func claudeToolName(name string) string {

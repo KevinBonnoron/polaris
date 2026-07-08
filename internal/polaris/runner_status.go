@@ -133,6 +133,32 @@ func (service *Service) markAgentCompleted(agentID string) {
 	service.notifyAgentEvent(agentID, "completed", "")
 }
 
+// finishTurn transitions an agent to sleeping or completed based on whether the
+// turn contained a scheduling tool call. Centralised here so both the
+// claudeSession and the one-shot runner paths stay in sync.
+func (service *Service) finishTurn(agentID string, stats streamTurnStats) {
+	if stats.ScheduledWakeup {
+		service.markAgentSleeping(agentID)
+	} else {
+		service.markAgentCompleted(agentID)
+	}
+}
+
+// markAgentSleeping marks an agent that called ScheduleWakeup this turn — it
+// is scheduled to resume and should not appear as completed in the UI.
+func (service *Service) markAgentSleeping(agentID string) {
+	if service.store == nil {
+		return
+	}
+	// Same guard as markAgentCompleted: --print mode can exit before the
+	// AskUserQuestion tool_result arrives, so a pending question takes priority.
+	agent, _ := service.store.GetAgent(agentID)
+	if agent != nil && agent.PendingQuestion != nil {
+		return
+	}
+	_ = service.store.PatchAgent(agentID, map[string]any{"status": "sleeping"})
+}
+
 // markAgentStopped finalises an agent the user cancelled. The session is left
 // resumable (sessionId is kept); any pending question is cleared so its panel
 // disappears.

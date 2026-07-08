@@ -385,11 +385,11 @@ func (service *Service) appendAgentLog(agentID, line string) error {
 }
 
 // onTurnFinished drains the next queued message (if any) and chains a new
-// turn, or marks the agent as completed when the queue is empty.
-func (service *Service) onTurnFinished(agentID string) {
+// turn, or marks the agent as completed/sleeping when the queue is empty.
+func (service *Service) onTurnFinished(agentID string, stats streamTurnStats) {
 	next, has := service.runner.popPending(agentID)
 	if !has {
-		service.markAgentCompleted(agentID)
+		service.finishTurn(agentID, stats)
 		return
 	}
 
