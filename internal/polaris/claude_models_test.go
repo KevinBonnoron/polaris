@@ -62,3 +62,33 @@ func TestFetchClaudeModelsLive_ValueIsFullID(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchClaudeModelsLive_OmitsBetaHeader(t *testing.T) {
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-token")
+	resetClaudeModelsCacheForTest(t)
+
+	old := claudeModelsHTTP
+	defer func() { claudeModelsHTTP = old }()
+	claudeModelsHTTP = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("anthropic-beta"); got != "" {
+			t.Fatalf("anthropic-beta header = %q, want empty", got)
+		}
+		body := `{"data":[{"id":"claude-sonnet-5","display_name":"Claude Sonnet 5"}]}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(bytes.NewBufferString(body)),
+		}, nil
+	})}
+
+	models, err := FetchClaudeModels(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(models) != 1 {
+		t.Fatalf("got %d models, want 1", len(models))
+	}
+	if models[0].Value != "claude-sonnet-5" {
+		t.Fatalf("models[0].Value = %q, want claude-sonnet-5", models[0].Value)
+	}
+}
