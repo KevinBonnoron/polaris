@@ -64,7 +64,6 @@ func fetchClaudeModelsLive() ([]ModelInfo, error) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", usageUserAgent)
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("anthropic-beta", usageBetaHdr)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
 	resp, err := claudeModelsHTTP.Do(req)
