@@ -59,6 +59,10 @@ type streamTurnStats struct {
 	ToolsUsed     int
 	// Succeeded is set when a result event arrives cleanly (no error flag).
 	Succeeded bool
+	// ScheduledWakeup is set when the agent called ScheduleWakeup this turn,
+	// meaning it intends to resume later — the agent should be shown as
+	// "sleeping" rather than "completed" at the turn boundary.
+	ScheduledWakeup bool
 }
 
 type usageParts = TokenUsage
@@ -222,7 +226,7 @@ func summarizeToolInput(name string, input map[string]any) string {
 	switch name {
 	case "Bash":
 		if cmd, ok := input["command"].(string); ok && cmd != "" {
-			return " · " + truncate(strings.ReplaceAll(cmd, "\n", " "), 160)
+			return " · " + strings.TrimSpace(strings.ReplaceAll(cmd, "\n", " "))
 		}
 	case "Read":
 		if path, ok := readToolPath(input); ok {
@@ -251,7 +255,7 @@ func summarizeToolInput(name string, input map[string]any) string {
 		if pattern == "" {
 			return ""
 		}
-		parts := []string{"/" + truncate(pattern, 80) + "/"}
+		parts := []string{"/" + pattern + "/"}
 		if path, ok := input["path"].(string); ok && path != "" {
 			parts = append(parts, "in "+path)
 		}
@@ -263,7 +267,7 @@ func summarizeToolInput(name string, input map[string]any) string {
 		return " · " + strings.Join(parts, " ")
 	case "Glob":
 		if p, ok := input["pattern"].(string); ok {
-			return " · " + truncate(p, 120)
+			return " · " + p
 		}
 	case "AskUserQuestion":
 		return " · " + summarizeQuestionLine(input)
@@ -271,10 +275,10 @@ func summarizeToolInput(name string, input map[string]any) string {
 		return " · Plan ready for review"
 	case "WebFetch", "WebSearch":
 		if u, ok := input["url"].(string); ok && u != "" {
-			return " · " + truncate(u, 120)
+			return " · " + u
 		}
 		if q, ok := input["query"].(string); ok && q != "" {
-			return " · " + truncate(q, 120)
+			return " · " + q
 		}
 	case "TodoWrite":
 		todos, _ := input["todos"].([]any)
@@ -326,7 +330,7 @@ func summarizeQuestionLine(input map[string]any) string {
 	if h, _ := first["header"].(string); h != "" {
 		q = h + ": " + q
 	}
-	label := truncate(q, 120)
+	label := q
 	if len(questions) > 1 {
 		label += fmt.Sprintf(" (+%d)", len(questions)-1)
 	}

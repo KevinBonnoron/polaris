@@ -1,4 +1,4 @@
-export const STATUS_ORDER = ['draft', 'waiting', 'error', 'working', 'completed', 'stopped', 'idle', 'archived'] as const;
+export const STATUS_ORDER = ['draft', 'waiting', 'sleeping', 'error', 'working', 'completed', 'stopped', 'idle', 'archived'] as const;
 export type AgentStatus = (typeof STATUS_ORDER)[number];
 
 const KNOWN_STATUSES = new Set<string>(STATUS_ORDER);

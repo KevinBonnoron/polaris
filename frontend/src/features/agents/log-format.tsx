@@ -1,6 +1,6 @@
 import 'highlight.js/styles/github-dark.css';
 import { Check, ChevronDown, ChevronRight, Copy } from 'lucide-react';
-import { Fragment, memo, useEffect, useRef, useState } from 'react';
+import { Fragment, memo, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
@@ -14,6 +14,10 @@ import { UserMessageContent } from './user-message';
 type StreamEvent = polaris.StreamEvent;
 
 const TIMESTAMP_RE = /^(\[\d{2}:\d{2}:\d{2}\])\s?/;
+
+// Emitted by the backend (runner_status.go) as a system event when the user
+// kills the run; used to fail any tool calls / sub-agents left in flight.
+const STOP_MARKER = '(stopped by user)';
 
 function isStructuredLine(rest: string): boolean {
   const t = rest.trimStart();
@@ -136,6 +140,27 @@ function cleanResultLines(lines: string[]): string[] {
   return stripped.slice(start, end);
 }
 
+// Tracks whether a single-line, CSS-truncated element is actually clipping its
+// text, so callers can offer an expand affordance only when there's more to show.
+function useOverflow<T extends HTMLElement>(dep: unknown): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [clipped, setClipped] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dep is a re-measure trigger (its value drives the rendered text, read via ref)
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) {
+      setClipped(false);
+      return;
+    }
+    const measure = () => setClipped(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dep]);
+  return [ref, clipped];
+}
+
 const TOOL_ID_RE = /^\[#([^\]]+)\]\s?/;
 
 function extractToolId(rest: string): { id: string | null; rest: string } {
@@ -156,6 +181,9 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
 
   // Stack for nesting sub-agent events under their Agent tool call
   const agentStack: Array<{ id: string; block: AgentGroupBlock }> = [];
+  // Set when the run was killed: in-flight tool calls / sub-agents get no
+  // result event, so they'd otherwise stay stuck "pending" (blue) forever.
+  let stopped = false;
 
   function target(): LogBlock[] {
     return agentStack.length > 0 ? agentStack[agentStack.length - 1].block.children : out;
@@ -258,6 +286,15 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
         flushText();
         flushThinking();
         const content = evt.content ?? '';
+        if (content.includes(STOP_MARKER)) {
+          // Killed run: fail any open sub-agents and stop nesting so the notice
+          // lands at the top level (mirrors the user_message interrupt).
+          stopped = true;
+          for (const a of agentStack) {
+            a.block.toolStatus = 'error';
+          }
+          agentStack.length = 0;
+        }
         if (content) {
           target().push({ type: 'line', stamp: evt.ts ?? null, rest: content, key: `sys-${blockIndex++}-${i}` });
         }
@@ -330,40 +367,59 @@ export function buildLogBlocks(events: StreamEvent[]): LogBlock[] {
     return blocks.filter((_, i) => !absorbed.has(i));
   }
 
-  return pairToolResults(out);
+  const paired = pairToolResults(out);
+  if (stopped) {
+    failPendingBlocks(paired);
+  }
+  return paired;
+}
+
+// After a killed run, any block still "pending" never received its result;
+// flag it as an error, recursing into sub-agent groups. AskUserQuestion /
+// ExitPlanMode stay pending — those legitimately wait on the user.
+function failPendingBlocks(blocks: LogBlock[]): void {
+  for (const b of blocks) {
+    if (b.type === 'agent-group') {
+      if (b.toolStatus === 'pending') {
+        b.toolStatus = 'error';
+      }
+      failPendingBlocks(b.children);
+    } else if (b.type === 'line' && b.toolStatus === 'pending' && b.rest.startsWith('→ ') && !b.rest.startsWith('→ AskUserQuestion') && !b.rest.startsWith('→ ExitPlanMode')) {
+      b.toolStatus = 'error';
+    }
+  }
 }
 
 function AgentGroup({ description, subagentType, children, resultLines, toolStatus }: Omit<AgentGroupBlock, 'type' | 'key'>) {
-  const isPending = toolStatus === 'pending';
-  const [open, setOpen] = useState(isPending);
-  const prevStatus = useRef(toolStatus);
-
-  useEffect(() => {
-    if (prevStatus.current === 'pending' && toolStatus !== 'pending') {
-      setOpen(false);
-    }
-    prevStatus.current = toolStatus;
-  }, [toolStatus]);
+  const [open, setOpen] = useState(false);
+  const type = subagentType?.trim();
+  const [descRef, descClipped] = useOverflow<HTMLSpanElement>(description);
 
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
   const hasChildren = children.length > 0;
   const hasResult = (resultLines?.length ?? 0) > 0;
-  const canExpand = hasChildren || hasResult;
-  const label = subagentType ? `Agent · ${subagentType}` : 'Agent';
+  const canExpand = hasChildren || hasResult || descClipped;
 
   return (
     <div className="col-start-2 my-0.5 min-w-0">
       <button type="button" onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
         <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
-        <span className="min-w-0 flex-1 break-words">
-          <span className="text-violet-400">{label}</span>
-          {description && <span className="ml-1.5 text-muted-foreground/50">{description}</span>}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <span className="shrink-0 rounded-sm bg-violet-400/10 px-1 text-violet-300" title={type}>
+            Agent
+          </span>
+          {description && (
+            <span ref={descRef} className="min-w-0 truncate text-muted-foreground/50">
+              {description}
+            </span>
+          )}
         </span>
         {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
       </button>
       {open && canExpand && (
-        <div className="ml-3 mt-0.5 border-l border-border/30 pl-3">
-          {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} />}
+        <div className="ml-1.5 mt-0.5 border-l border-border/30 pl-2">
+          {descClipped && <div className="mb-0.5 whitespace-pre-wrap break-words text-muted-foreground/70">{description}</div>}
+          {hasChildren && <LogBlocksGrid blocks={children} showTimestamps={false} compact />}
           {hasResult && <ToolResultPanel lines={cleanResultLines(resultLines!)} toolName="Agent" />}
         </div>
       )}
@@ -470,27 +526,43 @@ function ToolResultPanel({ lines, toolName }: { lines: string[]; toolName?: stri
 function ToolCallLine({ stamp, rest, toolStatus, toolResultLines }: { stamp: string | null; rest: string; toolStatus?: 'success' | 'error' | 'pending'; toolResultLines?: string[] }) {
   const [open, setOpen] = useState(false);
   const parsed = parseToolCall(rest);
+  const detail = parsed ? parsed.detail : rest.slice('→ '.length);
+  // The detail carries the full, backend-translated text; the collapsed line
+  // clips it with a CSS ellipsis, so only offer expansion when it's truncated.
+  const [detailRef, detailClipped] = useOverflow<HTMLSpanElement>(detail);
   const dotClass = toolStatus === 'success' ? 'bg-emerald-400' : toolStatus === 'error' ? 'bg-red-400' : 'bg-blue-400 animate-pulse';
-  const canExpand = toolResultLines && toolResultLines.length > 0;
+  const hasResult = (toolResultLines?.length ?? 0) > 0;
+  const canExpand = hasResult || detailClipped;
   return (
     <Fragment>
       <span className="self-start text-muted-foreground/70 tabular-nums">{stamp ?? ' '}</span>
       <span className="flex min-w-0 flex-col">
         <button type="button" disabled={!canExpand} onClick={() => canExpand && setOpen((v) => !v)} className={cn('flex w-full min-w-0 items-start gap-1.5 text-left', canExpand && 'cursor-pointer')}>
           <span className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', dotClass)} />
-          <span className="min-w-0 flex-1 break-words">
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
             {parsed ? (
               <>
-                <span className="text-violet-400">{parsed.name}</span>
-                {parsed.detail && <span className="ml-1.5 text-muted-foreground/50">{parsed.detail}</span>}
+                <span className="shrink-0 text-violet-400">{parsed.name}</span>
+                {detail && (
+                  <span ref={detailRef} className="min-w-0 truncate text-muted-foreground/50">
+                    {detail}
+                  </span>
+                )}
               </>
             ) : (
-              <span className="text-violet-400">{rest.slice('→ '.length)}</span>
+              <span ref={detailRef} className="min-w-0 truncate text-violet-400">
+                {detail}
+              </span>
             )}
           </span>
           {canExpand && (open ? <ChevronDown className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" /> : <ChevronRight className="mt-0.5 size-3 shrink-0 text-muted-foreground/40" />)}
         </button>
-        {open && canExpand && <ToolResultPanel lines={toolResultLines} toolName={parsed?.name} />}
+        {open && detailClipped && (
+          <ScrollArea className="mt-1 rounded border border-border/60 bg-muted/30 text-muted-foreground/80" viewportProps={{ className: 'max-h-64' }}>
+            <pre className="whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/70">{detail}</pre>
+          </ScrollArea>
+        )}
+        {open && toolResultLines && toolResultLines.length > 0 && <ToolResultPanel lines={toolResultLines} toolName={parsed?.name} />}
       </span>
     </Fragment>
   );
@@ -583,12 +655,13 @@ interface LogBlocksGridProps {
   restClassName?: string;
   preserveWhitespace?: boolean;
   showTimestamps?: boolean;
+  compact?: boolean;
 }
 
-export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true, showTimestamps = false }: LogBlocksGridProps) {
+export function LogBlocksGrid({ blocks, restClassName, preserveWhitespace = true, showTimestamps = false, compact = false }: LogBlocksGridProps) {
   const { t } = useTranslation();
   return (
-    <div className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 font-mono text-xs leading-relaxed">
+    <div className={cn('grid grid-cols-[auto_minmax(0,1fr)] font-mono text-xs leading-relaxed', compact ? 'gap-x-1.5' : 'gap-x-3')}>
       {blocks.map((block) => {
         if (block.type === 'agent-group') {
           return <AgentGroup key={block.key} description={block.description} subagentType={block.subagentType} children={block.children} toolStatus={block.toolStatus} toolId={block.toolId} resultLines={block.resultLines} />;
