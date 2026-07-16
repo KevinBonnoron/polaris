@@ -158,3 +158,67 @@ func TestAcpEmit_MsgLines(t *testing.T) {
 		t.Errorf("unexpected first line: %q", texts[0])
 	}
 }
+
+// TestAcpAppendThought_StreamsLinesProgressively verifies that appendThought emits
+// complete lines immediately without waiting for flushThought.
+func TestAcpAppendThought_StreamsLinesProgressively(t *testing.T) {
+	sess, svc, agentID := newTestACPSession(t)
+
+	sess.appendThought("first line\nsecond line\n")
+
+	evts := readLogEvents(t, svc, agentID)
+	var thinking []string
+	for _, e := range evts {
+		if e.Type == "thinking" {
+			thinking = append(thinking, e.Content)
+		}
+	}
+	if len(thinking) != 2 {
+		t.Fatalf("expected 2 thinking events after appendThought, got %d: %v", len(thinking), thinking)
+	}
+	if thinking[0] != "first line" {
+		t.Errorf("thinking[0] = %q, want %q", thinking[0], "first line")
+	}
+	if thinking[1] != "second line" {
+		t.Errorf("thinking[1] = %q, want %q", thinking[1], "second line")
+	}
+}
+
+// TestAcpAppendThought_HoldsPartialLine verifies that a fragment without a trailing
+// newline stays buffered and is only emitted by flushThought.
+func TestAcpAppendThought_HoldsPartialLine(t *testing.T) {
+	sess, svc, agentID := newTestACPSession(t)
+
+	sess.appendThought("complete line\npartial")
+
+	evts := readLogEvents(t, svc, agentID)
+	var thinking []string
+	for _, e := range evts {
+		if e.Type == "thinking" {
+			thinking = append(thinking, e.Content)
+		}
+	}
+	if len(thinking) != 1 {
+		t.Fatalf("expected 1 thinking event (partial held back), got %d: %v", len(thinking), thinking)
+	}
+	if thinking[0] != "complete line" {
+		t.Errorf("thinking[0] = %q, want %q", thinking[0], "complete line")
+	}
+
+	// flushThought must emit the buffered tail.
+	sess.flushThought()
+
+	evts = readLogEvents(t, svc, agentID)
+	thinking = nil
+	for _, e := range evts {
+		if e.Type == "thinking" {
+			thinking = append(thinking, e.Content)
+		}
+	}
+	if len(thinking) != 2 {
+		t.Fatalf("expected 2 thinking events after flush, got %d: %v", len(thinking), thinking)
+	}
+	if thinking[1] != "partial" {
+		t.Errorf("thinking[1] = %q, want %q", thinking[1], "partial")
+	}
+}

@@ -77,10 +77,25 @@ func (a *acpSession) emitMsgLines(s string) {
 	}
 }
 
+// appendThought buffers streamed thinking and emits complete lines progressively.
 func (a *acpSession) appendThought(s string) {
 	a.mu.Lock()
 	a.curThought.WriteString(s)
+	buf := a.curThought.String()
+	idx := strings.LastIndex(buf, "\n")
+	if idx < 0 {
+		a.mu.Unlock()
+		return
+	}
+	ready := buf[:idx]
+	a.curThought.Reset()
+	a.curThought.WriteString(buf[idx+1:])
 	a.mu.Unlock()
+	for _, ln := range strings.Split(ready, "\n") {
+		if strings.TrimSpace(ln) != "" {
+			a.emitEvent(StreamEvent{Type: "thinking", Content: ln})
+		}
+	}
 }
 
 // appendMsg buffers streamed text and emits complete lines progressively.

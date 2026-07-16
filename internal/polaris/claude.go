@@ -553,6 +553,13 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 	toolInputs := make(map[string]toolInputSnapshot)
 	var stats streamTurnStats
 
+	// hasStreamingThinking is set as soon as a thinking content_block_start arrives,
+	// so that the duplicate thinking blocks in the assembled assistant event are
+	// suppressed regardless of whether any lines have been emitted yet.
+	var hasStreamingThinking bool
+	var inThinkingBlock bool
+	var thinkingBuf strings.Builder
+
 	askPending := map[string]struct{}{}
 	// surfacedIDs holds the tool_use ids of AskUserQuestion/ExitPlanMode calls we
 	// surfaced this turn. In --print mode claude auto-dismisses these itself: it
@@ -585,6 +592,74 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 			continue
 		}
 		kind, _ := evt["type"].(string)
+
+		// Handle streaming deltas emitted by --include-partial-messages. Extract
+		// thinking content progressively and skip everything else (text/tool deltas
+		// are redundant: the assembled assistant event covers them).
+		if kind == "stream_event" {
+			inner, _ := evt["event"].(map[string]any)
+			if inner != nil {
+				switch inner["type"] {
+				case "content_block_start":
+					block, _ := inner["content_block"].(map[string]any)
+					if btype, _ := block["type"].(string); btype == "thinking" {
+						inThinkingBlock = true
+						hasStreamingThinking = true
+					}
+				case "content_block_delta":
+					if inThinkingBlock {
+						delta, _ := inner["delta"].(map[string]any)
+						if dtype, _ := delta["type"].(string); dtype == "thinking_delta" {
+							text, _ := delta["thinking"].(string)
+							thinkingBuf.WriteString(text)
+							// Emit complete lines immediately.
+							s := thinkingBuf.String()
+							idx := strings.LastIndex(s, "\n")
+							if idx >= 0 {
+								ready := s[:idx]
+								thinkingBuf.Reset()
+								thinkingBuf.WriteString(s[idx+1:])
+								for _, ln := range strings.Split(ready, "\n") {
+									if strings.TrimSpace(ln) != "" && !suppressTrailing {
+										emitEvent(sink, onEvent, StreamEvent{Type: "thinking", Content: ln})
+									}
+								}
+							}
+						}
+					}
+				case "content_block_stop":
+					if inThinkingBlock {
+						// Flush any remaining partial line.
+						if s := strings.TrimRight(thinkingBuf.String(), "\n"); s != "" {
+							thinkingBuf.Reset()
+							for _, ln := range strings.Split(s, "\n") {
+								if strings.TrimSpace(ln) != "" && !suppressTrailing {
+									emitEvent(sink, onEvent, StreamEvent{Type: "thinking", Content: ln})
+								}
+							}
+						}
+						inThinkingBlock = false
+					}
+				}
+			}
+			continue
+		}
+
+		// If the assistant event arrives while a thinking block is still open
+		// (thinking-only responses have no text block after), flush the tail now
+		// so it precedes any content the assistant event might emit.
+		if kind == "assistant" && inThinkingBlock {
+			if s := strings.TrimRight(thinkingBuf.String(), "\n"); s != "" {
+				thinkingBuf.Reset()
+				for _, ln := range strings.Split(s, "\n") {
+					if strings.TrimSpace(ln) != "" && !suppressTrailing {
+						emitEvent(sink, onEvent, StreamEvent{Type: "thinking", Content: ln})
+					}
+				}
+			}
+			inThinkingBlock = false
+		}
+
 		if kind == "user" {
 			for _, id := range userToolResultIDs(evt) {
 				delete(askPending, id)
@@ -593,6 +668,10 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 		prevTokens := stats.Tokens
 		for _, se := range claudeEventToStreamEvents(evt, filesSet, toolInputs, wrappedAsk, &stats) {
 			if suppressTrailing && (se.Type == "text" || se.Type == "thinking") {
+				continue
+			}
+			// Skip thinking blocks already emitted via stream_event deltas.
+			if hasStreamingThinking && se.Type == "thinking" {
 				continue
 			}
 			if se.Type == "tool_result" {
@@ -623,6 +702,9 @@ func streamClaudeJSON(reader io.Reader, sink io.Writer, onEvent func(StreamEvent
 			}
 			suppressTrailing = false
 			surfacedIDs = map[string]struct{}{}
+			hasStreamingThinking = false
+			inThinkingBlock = false
+			thinkingBuf.Reset()
 		}
 	}
 
@@ -1091,7 +1173,7 @@ func claudeSpawnCommand(binary, model, sessionID string, allowedTools []string) 
 	// --print has no TTY so any permission prompt would stall; always bypass.
 	// stream-json both ways gives a full-duplex JSON channel (events out, the
 	// task and each follow-up delivered as a new user turn on stdin).
-	args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"}
+	args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions", "--include-partial-messages"}
 	if sessionID != "" {
 		args = append(args, "--session-id", sessionID)
 	}
@@ -1107,7 +1189,7 @@ func claudeResumeCommand(binary, sessionID, model string, allowedTools []string)
 	if bin == "" {
 		bin = "claude"
 	}
-	args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions", "--resume", sessionID}
+	args := []string{"--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions", "--include-partial-messages", "--resume", sessionID}
 	// Pin the model on resume so a fallback/user switch is honoured rather than
 	// defaulting to whatever the session was created with.
 	if model != "" && model != "auto" {

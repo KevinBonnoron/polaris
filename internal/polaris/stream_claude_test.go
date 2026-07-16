@@ -344,3 +344,150 @@ func TestStreamClaudeJSON_UnknownEvent(t *testing.T) {
 		}
 	}
 }
+
+// streamEvent wraps an inner Anthropic API event the way --include-partial-messages does.
+func streamEvent(inner map[string]any) string {
+	return mustJSON(map[string]any{"type": "stream_event", "event": inner})
+}
+
+func thinkingStartEvent() string {
+	return streamEvent(map[string]any{
+		"type":          "content_block_start",
+		"index":         0,
+		"content_block": map[string]any{"type": "thinking", "thinking": ""},
+	})
+}
+
+func thinkingDeltaEvent(text string) string {
+	return streamEvent(map[string]any{
+		"type":  "content_block_delta",
+		"index": 0,
+		"delta": map[string]any{"type": "thinking_delta", "thinking": text},
+	})
+}
+
+func thinkingStopEvent() string {
+	return streamEvent(map[string]any{"type": "content_block_stop", "index": 0})
+}
+
+func assistantWithThinkingAndText(thinking, text string) string {
+	return mustJSON(map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"content": []any{
+				map[string]any{"type": "thinking", "thinking": thinking},
+				map[string]any{"type": "text", "text": text},
+			},
+		},
+	})
+}
+
+// TestStreamClaudeJSON_ThinkingStreamedProgressively verifies that thinking lines
+// are emitted from stream_event deltas and NOT duplicated by the assistant event.
+func TestStreamClaudeJSON_ThinkingStreamedProgressively(t *testing.T) {
+	lines := []string{
+		thinkingStartEvent(),
+		thinkingDeltaEvent("step one\n"),
+		thinkingDeltaEvent("step two\n"),
+		thinkingStopEvent(),
+		assistantWithThinkingAndText("step one\nstep two\n", "done"),
+		mustJSON(map[string]any{"type": "result", "status": "success"}),
+	}
+	events, _ := collectClaudeEvents(lines...)
+
+	var thinkingEvents, textEvents []StreamEvent
+	for _, e := range events {
+		switch e.Type {
+		case "thinking":
+			thinkingEvents = append(thinkingEvents, e)
+		case "text":
+			textEvents = append(textEvents, e)
+		}
+	}
+
+	if len(thinkingEvents) != 2 {
+		t.Fatalf("expected 2 thinking events (one per line), got %d: %v", len(thinkingEvents), thinkingEvents)
+	}
+	if thinkingEvents[0].Content != "step one" {
+		t.Errorf("thinking[0].Content = %q, want %q", thinkingEvents[0].Content, "step one")
+	}
+	if thinkingEvents[1].Content != "step two" {
+		t.Errorf("thinking[1].Content = %q, want %q", thinkingEvents[1].Content, "step two")
+	}
+	if len(textEvents) == 0 {
+		t.Error("expected text event from assistant, got none")
+	}
+}
+
+// TestStreamClaudeJSON_ThinkingNoNewlines verifies single-line thinking (no \n in deltas)
+// is still deduplicated: the assistant event's thinking block must be suppressed even
+// though no line was emitted from the deltas before hasStreamingThinking was set.
+func TestStreamClaudeJSON_ThinkingNoNewlines(t *testing.T) {
+	lines := []string{
+		thinkingStartEvent(),
+		thinkingDeltaEvent("no newline here"),
+		thinkingStopEvent(),
+		assistantWithThinkingAndText("no newline here", "answer"),
+		mustJSON(map[string]any{"type": "result", "status": "success"}),
+	}
+	events, _ := collectClaudeEvents(lines...)
+
+	var thinkingContents []string
+	for _, e := range events {
+		if e.Type == "thinking" {
+			thinkingContents = append(thinkingContents, e.Content)
+		}
+	}
+
+	if len(thinkingContents) != 1 {
+		t.Fatalf("expected exactly 1 thinking event (no duplicate from assistant), got %d: %v", len(thinkingContents), thinkingContents)
+	}
+	if thinkingContents[0] != "no newline here" {
+		t.Errorf("thinking content = %q, want %q", thinkingContents[0], "no newline here")
+	}
+}
+
+// TestStreamClaudeJSON_ThinkingStateResetsOnResult verifies that thinking state
+// is cleared at the result boundary so a subsequent turn starts fresh.
+func TestStreamClaudeJSON_ThinkingStateResetsOnResult(t *testing.T) {
+	turn1 := []string{
+		thinkingStartEvent(),
+		thinkingDeltaEvent("turn one thinking\n"),
+		thinkingStopEvent(),
+		assistantWithThinkingAndText("turn one thinking\n", "turn one text"),
+		mustJSON(map[string]any{"type": "result", "status": "success"}),
+	}
+	// Second turn has no stream_events (simulates a turn without --include-partial-messages
+	// or where thinking arrives only via the assembled assistant event).
+	turn2 := []string{
+		mustJSON(map[string]any{
+			"type": "assistant",
+			"message": map[string]any{
+				"content": []any{
+					map[string]any{"type": "thinking", "thinking": "turn two thinking"},
+					map[string]any{"type": "text", "text": "turn two text"},
+				},
+			},
+		}),
+	}
+	events, _ := collectClaudeEvents(append(turn1, turn2...)...)
+
+	var thinkingContents []string
+	for _, e := range events {
+		if e.Type == "thinking" {
+			thinkingContents = append(thinkingContents, e.Content)
+		}
+	}
+
+	// Turn 1: one thinking event from stream_events (assistant suppressed).
+	// Turn 2: no stream_events so assistant thinking must pass through.
+	if len(thinkingContents) != 2 {
+		t.Fatalf("expected 2 thinking events (one per turn), got %d: %v", len(thinkingContents), thinkingContents)
+	}
+	if thinkingContents[0] != "turn one thinking" {
+		t.Errorf("turn1 thinking = %q", thinkingContents[0])
+	}
+	if thinkingContents[1] != "turn two thinking" {
+		t.Errorf("turn2 thinking = %q, want 'turn two thinking'", thinkingContents[1])
+	}
+}
