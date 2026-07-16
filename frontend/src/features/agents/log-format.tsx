@@ -429,12 +429,13 @@ function AgentGroup({ description, subagentType, children, resultLines, toolStat
 
 function ThinkingGroup({ lines }: { lines: string[] }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   const content = lines.join('\n');
   return (
     <div className="col-span-2 my-0.5">
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-1 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
         {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-        <span className="italic">{open ? 'Thinking' : `Thinking (${lines.length} block${lines.length > 1 ? 's' : ''})`}</span>
+        <span className="italic">{open ? t('agents.detail.thinkingOpen') : t('agents.detail.thinkingCollapsed', { count: lines.length })}</span>
       </button>
       {open && (
         <div className="mt-1 border-l border-border pl-3 text-sm italic text-muted-foreground/70 [&_*]:font-sans [&_code]:font-mono [&_pre]:not-italic [&_pre_*]:not-italic">
