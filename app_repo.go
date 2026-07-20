@@ -169,3 +169,22 @@ func (app *App) SwitchProjectBranch(projectID, branch string) error {
 	}
 	return git.CheckoutBranch(dir, branch)
 }
+
+func (app *App) CreateProjectBranch(projectID, branchName, startPoint string) error {
+	dir, err := app.projectGitDir(projectID)
+	if err != nil {
+		return err
+	}
+	return git.CreateBranch(app.ctx, dir, branchName, startPoint)
+}
+
+func (app *App) DeleteProjectBranch(projectID, branchName string, force bool) error {
+	dir, err := app.projectGitDir(projectID)
+	if err != nil {
+		return err
+	}
+	if branchName == "main" || branchName == "master" {
+		return fmt.Errorf("refusing to delete protected branch %q", branchName)
+	}
+	return git.DeleteBranch(app.ctx, dir, branchName, force)
+}

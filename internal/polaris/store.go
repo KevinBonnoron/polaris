@@ -24,9 +24,10 @@ type Emitter interface {
 }
 
 type Store struct {
-	db      *sql.DB
-	emitter Emitter
-	emitMu  sync.Mutex
+	db            *sql.DB
+	emitter       Emitter
+	emitMu        sync.Mutex
+	agentModelsMu sync.Mutex
 }
 
 func OpenStore(path string) (*Store, error) {
@@ -1050,12 +1051,19 @@ func (store *Store) GetAgentDefaultModels() (map[string]string, error) {
 	}
 	out := map[string]string{}
 	if raw != "" {
-		_ = json.Unmarshal([]byte(raw), &out)
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return nil, err
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
 	}
 	return out, nil
 }
 
 func (store *Store) SetAgentDefaultModel(id, model string) error {
+	store.agentModelsMu.Lock()
+	defer store.agentModelsMu.Unlock()
 	current, err := store.GetAgentDefaultModels()
 	if err != nil {
 		return err
@@ -1078,6 +1086,76 @@ func (store *Store) SetAgentDefaultModel(id, model string) error {
 	}
 	store.emit("agentDefaultModels")
 	return nil
+}
+
+func (store *Store) GetProjectAgentDefaultModels(projectID string) (map[string]string, error) {
+	key := agentDefaultModelsKey + "_" + projectID
+	row := store.db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, key)
+	var raw string
+	if err := row.Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]string{}, nil
+		}
+		return nil, err
+	}
+	out := map[string]string{}
+	if raw != "" {
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return nil, err
+		}
+		if out == nil {
+			out = map[string]string{}
+		}
+	}
+	return out, nil
+}
+
+func (store *Store) SetProjectAgentDefaultModel(projectID, agentKind, modelID string) error {
+	store.agentModelsMu.Lock()
+	defer store.agentModelsMu.Unlock()
+	current, err := store.GetProjectAgentDefaultModels(projectID)
+	if err != nil {
+		return err
+	}
+	if modelID == "" {
+		delete(current, agentKind)
+	} else {
+		current[agentKind] = modelID
+	}
+	payload, err := json.Marshal(current)
+	if err != nil {
+		return err
+	}
+	key := agentDefaultModelsKey + "_" + projectID
+	if _, err := store.db.Exec(
+		`INSERT INTO app_settings (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+		key, string(payload),
+	); err != nil {
+		return err
+	}
+	store.emit("agentDefaultModels")
+	return nil
+}
+
+// GetEffectiveAgentDefaultModel returns the model to use for agentKind in
+// projectID: the project-level override if one is set, otherwise the global
+// default, and "" if neither is configured.
+func (store *Store) GetEffectiveAgentDefaultModel(projectID, agentKind string) (string, error) {
+	if projectID != "" {
+		project, err := store.GetProjectAgentDefaultModels(projectID)
+		if err != nil {
+			return "", err
+		}
+		if model, ok := project[agentKind]; ok && model != "" {
+			return model, nil
+		}
+	}
+	global, err := store.GetAgentDefaultModels()
+	if err != nil {
+		return "", err
+	}
+	return global[agentKind], nil
 }
 
 const appearanceSettingsKey = "appearance"

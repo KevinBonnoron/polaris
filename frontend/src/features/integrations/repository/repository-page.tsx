@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ConfigureIntegrationModal } from '@/features/integrations/configure-integration-modal';
 import { getIntegrations } from '@/features/integrations/project-integrations';
 import { useCurrentProject } from '@/state/projects';
+import { BranchSelector } from './branch-selector';
 import { ChangesTab } from './changes-tab';
 import { IssuesTab } from './issues-tab';
 import { PullRequestsTab } from './pull-requests-tab';
@@ -26,6 +27,7 @@ export function RepositoryPage() {
 
   const [activeTab, setActiveTab] = useState('changes');
   const [reloadApi, setReloadApi] = useState<ReloadApi | null>(null);
+  const [currentBranch, setCurrentBranch] = useState<string | null>(null);
   const onRegister = useCallback((api: ReloadApi | null) => setReloadApi(api), []);
   const onTabChange = useCallback((value: string) => {
     setReloadApi(null);
@@ -56,8 +58,9 @@ export function RepositoryPage() {
         subtitle={project.name}
         actions={
           <>
+            <BranchSelector projectId={project.id} onBranchChange={setCurrentBranch} />
             {remoteUrl && <OpenExternalAction url={remoteUrl} />}
-            {canFetch && activeTab !== 'changes' && <RefreshAction onRefresh={reloadApi?.reload ?? (() => {})} loading={reloadApi?.loading} disabled={!reloadApi} />}
+            {<RefreshAction onRefresh={reloadApi?.reload ?? (() => {})} loading={reloadApi?.loading} disabled={!reloadApi} />}
             <ConfigureIntegrationModal projectId={project.id} integrationId="repository">
               <Button variant="outline" size="sm">
                 <Settings className="size-3.5" />
@@ -92,19 +95,19 @@ export function RepositoryPage() {
           )}
         </TabsList>
 
-        <TabsContent value="changes" className="m-0 h-0 flex-1">
-          <ChangesTab projectId={project.id} />
+        <TabsContent value="changes" className="m-0 h-0 w-full flex-1 flex flex-col overflow-hidden">
+          <ChangesTab projectId={project.id} onRegister={onRegister} />
         </TabsContent>
         {canFetch && (
           <>
-            <TabsContent value="prs" className="m-0 h-0 flex-1">
+            <TabsContent value="prs" className="m-0 h-0 w-full flex-1 flex flex-col overflow-hidden">
               <PullRequestsTab owner={owner} repo={repo} onRegister={onRegister} />
             </TabsContent>
-            <TabsContent value="issues" className="m-0 h-0 flex-1">
+            <TabsContent value="issues" className="m-0 h-0 w-full flex-1 flex flex-col overflow-hidden">
               <IssuesTab owner={owner} repo={repo} onRegister={onRegister} />
             </TabsContent>
-            <TabsContent value="ci" className="m-0 h-0 flex-1">
-              <RunsTab owner={owner} repo={repo} onRegister={onRegister} />
+            <TabsContent value="ci" className="m-0 h-0 w-full flex-1 flex flex-col overflow-hidden">
+              <RunsTab owner={owner} repo={repo} onRegister={onRegister} defaultBranch={currentBranch ?? undefined} />
             </TabsContent>
           </>
         )}

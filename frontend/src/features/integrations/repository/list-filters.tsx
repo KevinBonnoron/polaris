@@ -29,7 +29,7 @@ export function ListFilters({ query, onQueryChange, selectValue, selectOptions, 
   const filteredOptions = currentUser ? selectOptions.filter((opt) => opt !== currentUser) : selectOptions;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 px-6 pb-3">
+    <div className="flex flex-wrap items-center gap-2 pb-3">
       <div className="relative min-w-0 flex-1">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder={searchPlaceholder} className="pl-9" />
