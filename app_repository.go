@@ -25,19 +25,6 @@ func (app *App) ListRepoIssues(owner, repo string) ([]repository.Issue, error) {
 }
 
 func (app *App) ListRepoWorkflowRuns(owner, repo string, page int) (*repository.WorkflowRunsPage, error) {
-	if page > 1 {
-		return repository.ListWorkflowRuns(owner, repo, page)
-	}
-	if app.repositoryStore != nil {
-		if err := app.repositoryStore.Refresh(app.ctx, owner, repo); err != nil {
-			return nil, err
-		}
-		runs, err := app.repositoryStore.GetRuns(app.ctx, owner, repo)
-		if err != nil {
-			return nil, err
-		}
-		return &repository.WorkflowRunsPage{Runs: runs, HasMore: len(runs) >= 30}, nil
-	}
 	return repository.ListWorkflowRuns(owner, repo, page)
 }
 
