@@ -1,16 +1,15 @@
-import { Check, ChevronDown, ChevronsUpDown, ExternalLink, GitBranch, Loader2, RotateCw, Timer, Workflow, X } from 'lucide-react';
+import { Check, ChevronDown, ExternalLink, Loader2, RotateCw, Timer, Workflow, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { FilterBar, type FilterToken } from '@/components/atoms/filter-bar';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { getWorkflowRunsEntry } from '@/collections/github.repository.collection';
 import { toastError } from '@/lib/toast-error';
 import { cn } from '@/lib/utils';
 import { CancelRepoWorkflowRun, RerunRepoWorkflowRun } from '@/wailsjs/go/main/App';
 import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
-import { FILTER_ALL, ListFilters } from './list-filters';
+import { FILTER_ALL } from './list-filters';
 import { ListShell } from './list-shell';
 import { TriggerWorkflowPopover } from './trigger-workflow-popover';
 import type { WorkflowDispatchSpec, WorkflowRun } from './types';
@@ -23,6 +22,7 @@ interface Props {
   owner: string;
   repo: string;
   onRegister?: ReloadRegister;
+  defaultBranch?: string;
 }
 
 function isActive(run: WorkflowRun): boolean {
@@ -40,13 +40,21 @@ function useTick(active: boolean, intervalMs = 1000) {
   }, [active, intervalMs]);
 }
 
-export function RunsTab({ owner, repo, onRegister }: Props) {
+export function RunsTab({ owner, repo, onRegister, defaultBranch }: Props) {
   const { t } = useTranslation();
   const entry = useMemo(() => getWorkflowRunsEntry(owner, repo), [owner, repo]);
   const { data, loading, initial, error, hasMore, reload, loadMore } = useGhEntry(entry);
   useRegisterReload(onRegister, { reload, loading });
-  const [query, setQuery] = useState('');
-  const [branch, setBranch] = useState(FILTER_ALL);
+  const [tokens, setTokens] = useState<FilterToken[]>(defaultBranch ? [{ key: 'branch', value: defaultBranch }] : []);
+
+  useEffect(() => {
+    if (defaultBranch) {
+      setTokens((prev) => [...prev.filter((t) => t.key !== 'branch'), { key: 'branch', value: defaultBranch }]);
+    }
+  }, [defaultBranch]);
+
+  const branch = tokens.find((t) => t.key === 'branch')?.value ?? FILTER_ALL;
+  const query = tokens.find((t) => t.key === 'term')?.value ?? '';
 
   const sorted = useMemo(() => [...data].sort((a, b) => b.createdAt - a.createdAt), [data]);
   const hasActive = useMemo(() => sorted.some(isActive), [sorted]);
@@ -69,20 +77,10 @@ export function RunsTab({ owner, repo, onRegister }: Props) {
   const workflowIds = useMemo(() => groups.map(([, runs]) => runs[0].workflowId).filter((id) => id > 0), [groups]);
   const specs = useWorkflowDispatches(owner, repo, workflowIds);
 
-  const branchSlot = <BranchFilterCombobox value={branch} options={branches} onChange={setBranch} placeholder={t('integrations.repository.branch')} allLabel={t('integrations.repository.allBranches')} />;
-  const filters = (
-    <ListFilters
-      query={query}
-      onQueryChange={setQuery}
-      selectValue={branch}
-      onSelectChange={setBranch}
-      selectOptions={branches}
-      selectPlaceholder={t('integrations.repository.branch')}
-      allOptionLabel={t('integrations.repository.allBranches')}
-      searchPlaceholder={t('integrations.repository.searchRuns')}
-      selectSlot={branchSlot}
-    />
-  );
+  const branchOptions = useMemo(() => branches.map((b) => ({ value: b, label: b })), [branches]);
+  const defs = useMemo(() => [{ key: 'branch', label: t('integrations.repository.branch'), options: branchOptions }], [branchOptions, t]);
+
+  const filters = <FilterBar tokens={tokens} onTokensChange={setTokens} defs={defs} placeholder={t('integrations.repository.searchRuns')} />;
 
   return (
     <ListShell title={t('integrations.repository.recentRuns')} initial={initial} error={error} empty={filtered.length === 0} emptyText={t('integrations.repository.noRuns')} filters={filters}>
@@ -259,66 +257,6 @@ function CancelRunButton({ owner, repo, run, onCancelled }: CancelRunButtonProps
       {pending ? <Loader2 className="size-3.5 animate-spin" /> : <X className="size-3.5" />}
       {t('integrations.repository.cancel')}
     </Button>
-  );
-}
-
-interface BranchFilterComboboxProps {
-  value: string;
-  options: string[];
-  onChange: (value: string) => void;
-  placeholder: string;
-  allLabel: string;
-}
-
-function BranchFilterCombobox({ value, options, onChange, placeholder, allLabel }: BranchFilterComboboxProps) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const isAll = value === FILTER_ALL;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen} modal>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" role="combobox" aria-expanded={open} className="h-9 w-48 justify-between font-normal">
-          <span className="flex min-w-0 items-center gap-2">
-            <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className={cn('truncate', isAll && 'text-muted-foreground')}>{isAll ? placeholder : value}</span>
-          </span>
-          <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start" onCloseAutoFocus={(e) => e.preventDefault()}>
-        <Command>
-          <CommandInput placeholder={t('integrations.repository.searchBranchPlaceholder')} />
-          <CommandList>
-            <CommandEmpty>{t('integrations.repository.noBranchMatch')}</CommandEmpty>
-            <CommandItem
-              value={allLabel}
-              onSelect={() => {
-                onChange(FILTER_ALL);
-                setOpen(false);
-              }}
-            >
-              <span className="truncate">{allLabel}</span>
-              <Check className={cn('ml-auto size-3.5', isAll ? 'opacity-100' : 'opacity-0')} />
-            </CommandItem>
-            {options.map((opt) => (
-              <CommandItem
-                key={opt}
-                value={opt}
-                onSelect={() => {
-                  onChange(opt);
-                  setOpen(false);
-                }}
-              >
-                <GitBranch className="size-3.5" />
-                <span className="truncate">{opt}</span>
-                <Check className={cn('ml-auto size-3.5', value === opt ? 'opacity-100' : 'opacity-0')} />
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   );
 }
 

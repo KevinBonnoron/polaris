@@ -39,5 +39,5 @@ export function useGhListTab<T extends ListItem>(entry: EntryParam<T>) {
     });
   }, [sorted, query, effectiveAuthor, currentUser]);
 
-  return { items, loading, initial, error, reload, currentUser, defaultAuthor, effectiveAuthor, query, setQuery, author, setAuthor, authors };
+  return { items, data, loading, initial, error, reload, currentUser, defaultAuthor, effectiveAuthor, query, setQuery, author, setAuthor, authors };
 }
