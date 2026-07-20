@@ -7,6 +7,7 @@ export type TicketsConfig = {
   projectKey?: string;
   boardId?: number;
   hiddenColumnsByBoard?: Record<string, string[]>;
+  customFields?: Array<{ id: string; label: string }>;
 };
 
 export type ConnectedTicketsConfig = {
@@ -15,6 +16,7 @@ export type ConnectedTicketsConfig = {
   token: string;
   projectKey: string;
   boardId?: number;
+  customFields?: Array<{ id: string; label: string }>;
 };
 
 export type Issue = tickets.Issue;

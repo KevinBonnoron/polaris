@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { formatDuration } from '@/lib/format';
 import { toastError } from '@/lib/toast-error';
 import { type DialogModeProps, useDialogMode } from '@/lib/use-dialog-mode';
 import { AssignTicketsIssue, FetchTicketsIssueDetail, GetTicketsCurrentUser, ListTicketsIssueComments, ListTicketsIssueHistory } from '@/wailsjs/go/main/App';
@@ -290,6 +291,21 @@ function DetailBody({ detail, formatDate, isAssignedToMe, assigning, onAssignToM
             </div>
           </MetaField>
         )}
+        {detail.originalEstimateSec != null && (
+          <MetaField label={t('integrations.tickets.detail.originalEstimate')}>
+            <span className="text-sm text-foreground">{formatDuration(detail.originalEstimateSec)}</span>
+          </MetaField>
+        )}
+        {detail.remainingEstimateSec != null && (
+          <MetaField label={t('integrations.tickets.detail.remainingEstimate')}>
+            <span className="text-sm text-foreground">{formatDuration(detail.remainingEstimateSec)}</span>
+          </MetaField>
+        )}
+        {(detail.customFields ?? []).map((cf) => (
+          <MetaField key={cf.id} label={cf.label}>
+            <span className={cf.value ? 'text-sm text-foreground' : 'text-sm text-muted-foreground'}>{cf.value || '—'}</span>
+          </MetaField>
+        ))}
       </aside>
     </div>
   );

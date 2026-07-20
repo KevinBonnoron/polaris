@@ -566,6 +566,14 @@ export const fr: Translation = {
     generic: {
       description: "Vue générique d'intégration.",
     },
+    jira: {
+      customFields: 'Champs personnalisés',
+      addField: 'Ajouter un champ',
+      searchFields: 'Rechercher des champs…',
+      noCustomFields: 'Aucun champ personnalisé configuré.',
+      fieldLabelPlaceholder: "Libellé d'affichage",
+      loadFieldsFailed: 'Impossible de charger les champs Jira',
+    },
     resend: {
       title: 'Resend',
       selectProject: 'Sélectionnez un projet pour voir son intégration Resend.',
@@ -733,6 +741,8 @@ export const fr: Translation = {
         assignToMe: "M'assigner",
         assigning: 'Assignation...',
         assignFailed: "Impossible d'assigner le ticket",
+        originalEstimate: 'Estimation originale',
+        remainingEstimate: 'Estimation restante',
       },
     },
     nodejs: {
