@@ -564,6 +564,14 @@ export const en = {
     generic: {
       description: 'Generic integration view.',
     },
+    jira: {
+      customFields: 'Custom fields',
+      addField: 'Add field',
+      searchFields: 'Search fields…',
+      noCustomFields: 'No custom fields configured.',
+      fieldLabelPlaceholder: 'Display label',
+      loadFieldsFailed: 'Could not load Jira fields',
+    },
     resend: {
       title: 'Resend',
       selectProject: 'Select a project to view its Resend integration.',
@@ -731,6 +739,8 @@ export const en = {
         assignToMe: 'Assign to me',
         assigning: 'Assigning…',
         assignFailed: 'Could not assign issue',
+        originalEstimate: 'Original estimate',
+        remainingEstimate: 'Remaining estimate',
       },
     },
     nodejs: {

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -186,14 +187,14 @@ func activeSprint(base string, cfg Config, boardID int64) (*sprintInfo, error) {
 func sprintIssues(base string, cfg Config, sprintID int64) ([]Issue, error) {
 	q := url.Values{}
 	q.Set("maxResults", "100")
-	q.Set("fields", "summary,status,priority,issuetype,assignee,labels,updated")
+	q.Set("fields", "summary,status,priority,issuetype,assignee,labels,updated,timeoriginalestimate,timeestimate")
 	return fetchIssues(fmt.Sprintf("%s/rest/agile/1.0/sprint/%d/issue?%s", base, sprintID, q.Encode()), cfg, base)
 }
 
 func backlogIssues(base string, cfg Config, boardID int64) ([]Issue, error) {
 	q := url.Values{}
 	q.Set("maxResults", "100")
-	q.Set("fields", "summary,status,priority,issuetype,assignee,labels,updated")
+	q.Set("fields", "summary,status,priority,issuetype,assignee,labels,updated,timeoriginalestimate,timeestimate")
 	return fetchIssues(fmt.Sprintf("%s/rest/agile/1.0/board/%d/issue?%s", base, boardID, q.Encode()), cfg, base)
 }
 
@@ -222,6 +223,8 @@ func fetchIssues(endpoint string, cfg Config, base string) ([]Issue, error) {
 					DisplayName  string `json:"displayName"`
 					EmailAddress string `json:"emailAddress"`
 				} `json:"assignee"`
+				OriginalEstimateSec  *int64 `json:"timeoriginalestimate"`
+				RemainingEstimateSec *int64 `json:"timeestimate"`
 			} `json:"fields"`
 		} `json:"issues"`
 	}
@@ -232,18 +235,20 @@ func fetchIssues(endpoint string, cfg Config, base string) ([]Issue, error) {
 	for _, i := range raw.Issues {
 		updated := parseJiraTime(i.Fields.Updated)
 		out = append(out, Issue{
-			Key:            i.Key,
-			Summary:        i.Fields.Summary,
-			IssueType:      i.Fields.IssueType.Name,
-			Priority:       i.Fields.Priority.Name,
-			Status:         i.Fields.Status.Name,
-			StatusID:       i.Fields.Status.ID,
-			StatusCategory: i.Fields.Status.StatusCategory.Key,
-			Assignee:       i.Fields.Assignee.DisplayName,
-			AssigneeEmail:  i.Fields.Assignee.EmailAddress,
-			Labels:         i.Fields.Labels,
-			URL:            fmt.Sprintf("%s/browse/%s", base, i.Key),
-			UpdatedAt:      unixOrZero(updated),
+			Key:                  i.Key,
+			Summary:              i.Fields.Summary,
+			IssueType:            i.Fields.IssueType.Name,
+			Priority:             i.Fields.Priority.Name,
+			Status:               i.Fields.Status.Name,
+			StatusID:             i.Fields.Status.ID,
+			StatusCategory:       i.Fields.Status.StatusCategory.Key,
+			Assignee:             i.Fields.Assignee.DisplayName,
+			AssigneeEmail:        i.Fields.Assignee.EmailAddress,
+			Labels:               i.Fields.Labels,
+			URL:                  fmt.Sprintf("%s/browse/%s", base, i.Key),
+			UpdatedAt:            unixOrZero(updated),
+			OriginalEstimateSec:  i.Fields.OriginalEstimateSec,
+			RemainingEstimateSec: i.Fields.RemainingEstimateSec,
 		})
 	}
 	return out, nil
@@ -464,9 +469,15 @@ func (jiraProvider) FetchIssueDetail(cfg Config, issueKey string) (*IssueDetail,
 				DisplayName  string `json:"displayName"`
 				EmailAddress string `json:"emailAddress"`
 			} `json:"reporter"`
+			OriginalEstimateSec  *int64 `json:"timeoriginalestimate"`
+			RemainingEstimateSec *int64 `json:"timeestimate"`
 		} `json:"fields"`
 	}
-	if err := getJSON(endpoint, cfg, &raw); err != nil {
+	rawBytes, err := fetchRaw(endpoint, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(rawBytes, &raw); err != nil {
 		return nil, err
 	}
 	created := parseJiraTime(raw.Fields.Created)
@@ -476,21 +487,24 @@ func (jiraProvider) FetchIssueDetail(cfg Config, issueKey string) (*IssueDetail,
 		labels = []string{}
 	}
 	return &IssueDetail{
-		Key:            raw.Key,
-		Summary:        raw.Fields.Summary,
-		Description:    adfToMarkdown(raw.Fields.Description),
-		IssueType:      raw.Fields.IssueType.Name,
-		Priority:       raw.Fields.Priority.Name,
-		Status:         raw.Fields.Status.Name,
-		StatusCategory: raw.Fields.Status.StatusCategory.Key,
-		Assignee:       raw.Fields.Assignee.DisplayName,
-		AssigneeEmail:  raw.Fields.Assignee.EmailAddress,
-		Reporter:       raw.Fields.Reporter.DisplayName,
-		ReporterEmail:  raw.Fields.Reporter.EmailAddress,
-		Labels:         labels,
-		URL:            fmt.Sprintf("%s/browse/%s", base, raw.Key),
-		CreatedAt:      unixOrZero(created),
-		UpdatedAt:      unixOrZero(updated),
+		Key:                  raw.Key,
+		Summary:              raw.Fields.Summary,
+		Description:          adfToMarkdown(raw.Fields.Description),
+		IssueType:            raw.Fields.IssueType.Name,
+		Priority:             raw.Fields.Priority.Name,
+		Status:               raw.Fields.Status.Name,
+		StatusCategory:       raw.Fields.Status.StatusCategory.Key,
+		Assignee:             raw.Fields.Assignee.DisplayName,
+		AssigneeEmail:        raw.Fields.Assignee.EmailAddress,
+		Reporter:             raw.Fields.Reporter.DisplayName,
+		ReporterEmail:        raw.Fields.Reporter.EmailAddress,
+		Labels:               labels,
+		URL:                  fmt.Sprintf("%s/browse/%s", base, raw.Key),
+		CreatedAt:            unixOrZero(created),
+		UpdatedAt:            unixOrZero(updated),
+		OriginalEstimateSec:  raw.Fields.OriginalEstimateSec,
+		RemainingEstimateSec: raw.Fields.RemainingEstimateSec,
+		CustomFields:         resolveCustomFields(rawBytes, cfg.CustomFields),
 	}, nil
 }
 
@@ -848,8 +862,128 @@ func renderListItem(b *strings.Builder, content []any, depth int, walk func(any,
 	}
 }
 
+// fetchRaw performs an authenticated GET and returns the raw response body.
+// Callers that need both typed and dynamic field access can unmarshal twice.
+func fetchRaw(endpoint string, cfg Config) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), apiTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	creds := base64.StdEncoding.EncodeToString([]byte(cfg.Email + ":" + cfg.Token))
+	req.Header.Set("Authorization", "Basic "+creds)
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := strings.TrimSpace(string(body))
+		if len(msg) > 240 {
+			msg = msg[:240] + "..."
+		}
+		return nil, &httpError{status: resp.StatusCode, body: msg}
+	}
+	return body, nil
+}
+
 func getJSON(endpoint string, cfg Config, out any) error {
 	return doRequest(http.MethodGet, endpoint, cfg, nil, out)
+}
+
+// ListJiraFields returns the custom fields available on the Jira instance,
+// filtered to types that are meaningful to display (number, string, option, …).
+func ListJiraFields(cfg Config) ([]JiraField, error) {
+	if cfg.BaseURL == "" || cfg.Email == "" || cfg.Token == "" {
+		return nil, ErrMissingConfig
+	}
+	base := strings.TrimRight(cfg.BaseURL, "/")
+	var raw []struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Custom bool   `json:"custom"`
+		Schema struct {
+			Type string `json:"type"`
+		} `json:"schema"`
+	}
+	if err := getJSON(base+"/rest/api/3/field", cfg, &raw); err != nil {
+		return nil, err
+	}
+	useful := map[string]bool{
+		"number": true, "string": true, "option": true,
+		"array": true, "date": true, "datetime": true, "any": true,
+	}
+	out := make([]JiraField, 0, len(raw))
+	for _, f := range raw {
+		if !f.Custom || !useful[f.Schema.Type] {
+			continue
+		}
+		out = append(out, JiraField{ID: f.ID, Name: f.Name, Type: f.Schema.Type})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+// resolveCustomFields extracts the configured custom fields from raw issue JSON.
+func resolveCustomFields(rawBytes []byte, fields []CustomFieldConfig) []CustomFieldValue {
+	if len(fields) == 0 {
+		return nil
+	}
+	var wrapper struct {
+		Fields map[string]json.RawMessage `json:"fields"`
+	}
+	if err := json.Unmarshal(rawBytes, &wrapper); err != nil {
+		return nil
+	}
+	out := make([]CustomFieldValue, 0, len(fields))
+	for _, cf := range fields {
+		val := ""
+		if v, ok := wrapper.Fields[cf.ID]; ok {
+			val = jiraFieldToString(v)
+		}
+		out = append(out, CustomFieldValue{ID: cf.ID, Label: cf.Label, Value: val})
+	}
+	return out
+}
+
+// jiraFieldToString converts a raw Jira field value to a display string.
+// Handles numbers, strings, option objects, and arrays.
+func jiraFieldToString(raw json.RawMessage) string {
+	if string(raw) == "null" {
+		return ""
+	}
+	var num json.Number
+	if json.Unmarshal(raw, &num) == nil {
+		return num.String()
+	}
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return s
+	}
+	var opt struct {
+		Value string `json:"value"`
+		Name  string `json:"name"`
+	}
+	if json.Unmarshal(raw, &opt) == nil && (opt.Value != "" || opt.Name != "") {
+		if opt.Value != "" {
+			return opt.Value
+		}
+		return opt.Name
+	}
+	var arr []json.RawMessage
+	if json.Unmarshal(raw, &arr) == nil {
+		parts := make([]string, 0, len(arr))
+		for _, item := range arr {
+			if v := jiraFieldToString(item); v != "" {
+				parts = append(parts, v)
+			}
+		}
+		return strings.Join(parts, ", ")
+	}
+	return ""
 }
 
 func sendJSON(method, endpoint string, cfg Config, body any, out any) error {

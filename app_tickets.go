@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/KevinBonnoron/polaris/internal/providers/tickets"
@@ -60,4 +61,14 @@ func (app *App) GetTicketsCurrentUser(cfg tickets.Config) (*tickets.User, error)
 
 func (app *App) AssignTicketsIssue(cfg tickets.Config, issueKey, accountID string) error {
 	return tickets.AssignIssue(cfg, issueKey, accountID)
+}
+
+// ListTicketsFields returns the custom fields available on the Jira instance.
+// Only custom fields with display-friendly types (number, string, option, …)
+// are returned. Returns an error for non-Jira providers.
+func (app *App) ListTicketsFields(cfg tickets.Config) ([]tickets.JiraField, error) {
+	if cfg.Provider != "" && cfg.Provider != "jira" {
+		return nil, fmt.Errorf("tickets: field listing is only supported for jira, got %q", cfg.Provider)
+	}
+	return tickets.ListJiraFields(cfg)
 }

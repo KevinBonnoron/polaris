@@ -1,16 +1,17 @@
 import type { AnyFieldApi } from '@tanstack/react-form';
 import { useForm } from '@tanstack/react-form';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, Loader2, Plus, X } from 'lucide-react';
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { projectsCollection } from '@/collections/projects.collection';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FieldError, isInvalid, validators } from '@/lib/form';
@@ -19,7 +20,8 @@ import { type DialogModeProps, useDialogMode } from '@/lib/use-dialog-mode';
 import { cn } from '@/lib/utils';
 import { useProjects } from '@/state/projects';
 import type { Project } from '@/types';
-import { DetectGitRemote, DetectProviderToken, OpenExternalURL } from '@/wailsjs/go/main/App';
+import { DetectGitRemote, DetectProviderToken, ListTicketsFields, OpenExternalURL } from '@/wailsjs/go/main/App';
+import { tickets } from '@/wailsjs/go/models';
 import { findIntegration, findIntegrationForStorageKey, type Integration, type IntegrationField, type IntegrationFieldOption } from './integration-catalog';
 import { effectiveStorageKey, getInstance, getInstances, isIntegrationConnected, withInstanceRemoved, withInstanceUpdate, withIntegration, withoutIntegration } from './project-integrations';
 
@@ -41,7 +43,7 @@ export function ConfigureIntegrationModal({ projectId, integrationId, instanceIn
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {children !== undefined && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="w-[min(95vw,560px)] sm:max-w-[560px] gap-4">
+      <DialogContent className="w-[min(95vw,560px)] sm:max-w-[560px]">
         {!project || !integration ? (
           <>
             <DialogHeader>
@@ -108,6 +110,15 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
   const [detectedHint, setDetectedHint] = useState<string | null>(null);
   const [tokenHint, setTokenHint] = useState<string | null>(null);
 
+  const storedCustomFields = useMemo(() => {
+    if (integration.id !== 'jira') return [];
+    const stored = (isMulti ? getInstance(project, storageKey, instanceIndex) : undefined) ?? getInstance(project, storageKey, 0) ?? {};
+    const raw = (stored as Record<string, unknown>).customFields;
+    return Array.isArray(raw) ? (raw as Array<{ id: string; label: string }>) : [];
+  }, [integration.id, isMulti, project, storageKey, instanceIndex]);
+
+  const customFieldsRef = useRef<Array<{ id: string; label: string }>>(storedCustomFields);
+
   const form = useForm({
     defaultValues: initial,
     onSubmit: async ({ value }) => {
@@ -118,6 +129,9 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
           if (v) {
             config[f.key] = v;
           }
+        }
+        if (integration.id === 'jira' && customFieldsRef.current.length > 0) {
+          config.customFields = customFieldsRef.current;
         }
         const next = isMulti ? withInstanceUpdate(project, storageKey, instanceIndex, config) : withIntegration(project, storageKey, config);
         const tx = projectsCollection.update(project.id, (draft) => {
@@ -234,72 +248,78 @@ function Body({ project, integration, connected, onClose, instanceIndex }: BodyP
         }}
         className="flex flex-col gap-4"
       >
-        {detectedHint && (
-          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            {t('integrations.configure.detectedFrom')} <span className="font-mono">{detectedHint}</span>
-          </p>
-        )}
-        {tokenHint && (
-          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-            {t('integrations.configure.tokenFrom')} <span className="font-mono">{tokenHint}</span>
-          </p>
-        )}
-        {integration.fields.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('integrations.configure.noConfig')}</p>
-        ) : (
-          integration.fields.map((f) => {
-            const validate = fieldValidator(f);
-            return (
-              <form.Field key={f.key} name={f.key} validators={validate ? { onChange: validate, onBlur: validate } : undefined}>
-                {(field) => (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor={`int-${integration.id}-${f.key}`} className="text-xs text-muted-foreground">
-                        {f.label}
-                        {f.required && <span className="ml-1 text-destructive">*</span>}
-                      </Label>
-                      {f.helpUrl && (
-                        <button type="button" className="text-xs text-primary hover:underline" onClick={() => OpenExternalURL(f.helpUrl!)}>
-                          {f.help}
-                        </button>
-                      )}
-                    </div>
-                    {f.type === 'select' ? (
-                      <Select value={field.state.value ?? ''} onValueChange={field.handleChange}>
-                        <SelectTrigger id={`int-${integration.id}-${f.key}`} aria-invalid={isInvalid(field)}>
-                          <SelectValue placeholder={f.placeholder ?? t('integrations.configure.selectPlaceholder')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {f.options?.map((opt) => (
-                            <SelectItem key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : f.type === 'autocomplete' ? (
-                      <AutocompleteInput fieldDef={f} field={field} integrationId={integration.id} formValues={initial} />
-                    ) : (
-                      <Input
-                        id={`int-${integration.id}-${f.key}`}
-                        type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
-                        inputMode={f.type === 'number' ? 'numeric' : undefined}
-                        value={field.state.value ?? ''}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        onBlur={field.handleBlur}
-                        placeholder={f.placeholder}
-                        autoComplete="off"
-                        aria-invalid={isInvalid(field)}
-                      />
+        <ScrollArea className="max-h-[70vh] -mr-6 pr-6">
+          <div className="flex flex-col gap-4 pb-1">
+            {detectedHint && (
+              <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {t('integrations.configure.detectedFrom')} <span className="font-mono">{detectedHint}</span>
+              </p>
+            )}
+            {tokenHint && (
+              <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                {t('integrations.configure.tokenFrom')} <span className="font-mono">{tokenHint}</span>
+              </p>
+            )}
+            {integration.fields.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('integrations.configure.noConfig')}</p>
+            ) : (
+              integration.fields.map((f) => {
+                const validate = fieldValidator(f);
+                return (
+                  <form.Field key={f.key} name={f.key} validators={validate ? { onChange: validate, onBlur: validate } : undefined}>
+                    {(field) => (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`int-${integration.id}-${f.key}`} className="text-xs text-muted-foreground">
+                            {f.label}
+                            {f.required && <span className="ml-1 text-destructive">*</span>}
+                          </Label>
+                          {f.helpUrl && (
+                            <button type="button" className="text-xs text-primary hover:underline" onClick={() => OpenExternalURL(f.helpUrl!)}>
+                              {f.help}
+                            </button>
+                          )}
+                        </div>
+                        {f.type === 'select' ? (
+                          <Select value={field.state.value ?? ''} onValueChange={field.handleChange}>
+                            <SelectTrigger id={`int-${integration.id}-${f.key}`} aria-invalid={isInvalid(field)}>
+                              <SelectValue placeholder={f.placeholder ?? t('integrations.configure.selectPlaceholder')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {f.options?.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : f.type === 'autocomplete' ? (
+                          <AutocompleteInput fieldDef={f} field={field} integrationId={integration.id} formValues={initial} />
+                        ) : (
+                          <Input
+                            id={`int-${integration.id}-${f.key}`}
+                            type={f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text'}
+                            inputMode={f.type === 'number' ? 'numeric' : undefined}
+                            value={field.state.value ?? ''}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            onBlur={field.handleBlur}
+                            placeholder={f.placeholder}
+                            autoComplete="off"
+                            aria-invalid={isInvalid(field)}
+                          />
+                        )}
+                        <FieldError field={field} />
+                        {f.help && !f.helpUrl && <p className="text-xs text-muted-foreground">{f.help}</p>}
+                      </div>
                     )}
-                    <FieldError field={field} />
-                    {f.help && !f.helpUrl && <p className="text-xs text-muted-foreground">{f.help}</p>}
-                  </div>
-                )}
-              </form.Field>
-            );
-          })
-        )}
+                  </form.Field>
+                );
+              })
+            )}
+
+            {integration.id === 'jira' && <JiraCustomFieldsSection formValues={initial} form={form} customFieldsRef={customFieldsRef} initialFields={storedCustomFields} />}
+          </div>
+        </ScrollArea>
 
         <DialogFooter className="justify-between gap-2 sm:justify-between">
           <div>
@@ -431,5 +451,132 @@ function AutocompleteInput({ fieldDef, field, integrationId, formValues }: Autoc
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+interface JiraCustomFieldsSectionProps {
+  formValues: Record<string, string>;
+  form: { getFieldValue: (key: string) => string | undefined };
+  customFieldsRef: React.RefObject<Array<{ id: string; label: string }>>;
+  initialFields: Array<{ id: string; label: string }>;
+}
+
+function JiraCustomFieldsSection({ formValues, form, customFieldsRef, initialFields }: JiraCustomFieldsSectionProps) {
+  const { t } = useTranslation();
+  const [fields, setFields] = useState<Array<{ id: string; label: string }>>(initialFields);
+  const [available, setAvailable] = useState<tickets.JiraField[]>([]);
+  const [loadingFields, setLoadingFields] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const update = (next: Array<{ id: string; label: string }>) => {
+    setFields(next);
+    customFieldsRef.current = next;
+  };
+
+  const loadAndShow = async () => {
+    if (showPicker) {
+      setShowPicker(false);
+      return;
+    }
+    if (available.length > 0) {
+      setShowPicker(true);
+      return;
+    }
+    const baseUrl = form.getFieldValue('baseUrl') ?? formValues.baseUrl ?? '';
+    const email = form.getFieldValue('email') ?? formValues.email ?? '';
+    const token = form.getFieldValue('token') ?? formValues.token ?? '';
+    if (!baseUrl || !email || !token) return;
+    setLoadingFields(true);
+    try {
+      const result = await ListTicketsFields(tickets.Config.createFrom({ provider: 'jira', baseUrl, email, token }));
+      setAvailable(result ?? []);
+      setShowPicker(true);
+    } catch (err) {
+      toastError({ title: t('integrations.jira.loadFieldsFailed'), err });
+    } finally {
+      setLoadingFields(false);
+    }
+  };
+
+  const toggle = (field: tickets.JiraField) => {
+    const exists = fields.some((f) => f.id === field.id);
+    update(exists ? fields.filter((f) => f.id !== field.id) : [...fields, { id: field.id, label: field.name }]);
+  };
+
+  const filtered = search ? available.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()) || f.id.toLowerCase().includes(search.toLowerCase())) : available;
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-4">
+      <div className="flex items-center justify-between">
+        <Label className="cursor-pointer text-xs text-muted-foreground" onClick={loadAndShow}>
+          {t('integrations.jira.customFields')}
+        </Label>
+        <Button type="button" size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={loadAndShow} disabled={loadingFields}>
+          {loadingFields ? <Loader2 className="size-3 animate-spin" /> : <Plus className="size-3" />}
+          {t('integrations.jira.addField')}
+        </Button>
+      </div>
+
+      {showPicker && (
+        <div className="flex flex-col rounded-md border">
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('integrations.jira.searchFields')} className="rounded-b-none border-0 border-b text-xs focus-visible:ring-0" autoFocus />
+          <ScrollArea className="h-48 pr-1.5">
+            <div className="flex flex-col">
+              {filtered.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-muted-foreground">{t('common.noResults')}</p>
+              ) : (
+                filtered.map((f) => {
+                  const selected = fields.some((cf) => cf.id === f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent"
+                      onClick={() => {
+                        toggle(f);
+                        setShowPicker(false);
+                        setSearch('');
+                      }}
+                    >
+                      <Check className={cn('size-3 shrink-0', selected ? 'opacity-100 text-primary' : 'opacity-0')} />
+                      <span className="flex-1 truncate text-left">{f.name}</span>
+                      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{f.id}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
+      {fields.length === 0 && !showPicker ? (
+        <p className="text-xs text-muted-foreground">{t('integrations.jira.noCustomFields')}</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {fields.map((f, i) => (
+            <div key={f.id} className="flex items-center gap-1.5">
+              <span className="w-32 shrink-0 truncate font-mono text-[11px] text-muted-foreground" title={f.id}>
+                {f.id}
+              </span>
+              <Input
+                value={f.label}
+                onChange={(e) => {
+                  const next = [...fields];
+                  next[i] = { ...f, label: e.target.value };
+                  update(next);
+                }}
+                className="h-7 flex-1 text-xs"
+                placeholder={t('integrations.jira.fieldLabelPlaceholder')}
+              />
+              <Button type="button" size="sm" variant="ghost" className="h-7 w-7 shrink-0 p-0" onClick={() => update(fields.filter((_, j) => j !== i))}>
+                <X className="size-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

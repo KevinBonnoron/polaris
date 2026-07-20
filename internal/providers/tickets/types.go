@@ -19,15 +19,38 @@ var (
 	ErrNoTransition = errors.New("tickets: no available transition to that status")
 )
 
+// CustomFieldConfig is one user-selected Jira custom field stored in the
+// project integration config.
+type CustomFieldConfig struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// CustomFieldValue is a resolved custom field value returned inside IssueDetail.
+type CustomFieldValue struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// JiraField is one entry from the /rest/api/3/field endpoint, used to let the
+// user pick which custom fields to show in the issue detail.
+type JiraField struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
 type Config struct {
 	// Provider selects the concrete ticket backend ("jira", "linear", …).
 	// Empty defaults to "jira" for backward compatibility.
-	Provider   string `json:"provider,omitempty"`
-	BaseURL    string `json:"baseUrl"`
-	Email      string `json:"email"`
-	Token      string `json:"token"`
-	ProjectKey string `json:"projectKey"`
-	BoardID    int64  `json:"boardId,omitempty"`
+	Provider     string              `json:"provider,omitempty"`
+	BaseURL      string              `json:"baseUrl"`
+	Email        string              `json:"email"`
+	Token        string              `json:"token"`
+	ProjectKey   string              `json:"projectKey"`
+	BoardID      int64               `json:"boardId,omitempty"`
+	CustomFields []CustomFieldConfig `json:"customFields,omitempty"`
 }
 
 type BoardInfo struct {
@@ -37,18 +60,20 @@ type BoardInfo struct {
 }
 
 type Issue struct {
-	Key            string   `json:"key"`
-	Summary        string   `json:"summary"`
-	IssueType      string   `json:"issueType"`
-	Priority       string   `json:"priority"`
-	Status         string   `json:"status"`
-	StatusID       string   `json:"statusId"`
-	StatusCategory string   `json:"statusCategory"`
-	Assignee       string   `json:"assignee"`
-	AssigneeEmail  string   `json:"assigneeEmail"`
-	Labels         []string `json:"labels"`
-	URL            string   `json:"url"`
-	UpdatedAt      int64    `json:"updatedAt"`
+	Key                  string   `json:"key"`
+	Summary              string   `json:"summary"`
+	IssueType            string   `json:"issueType"`
+	Priority             string   `json:"priority"`
+	Status               string   `json:"status"`
+	StatusID             string   `json:"statusId"`
+	StatusCategory       string   `json:"statusCategory"`
+	Assignee             string   `json:"assignee"`
+	AssigneeEmail        string   `json:"assigneeEmail"`
+	Labels               []string `json:"labels"`
+	URL                  string   `json:"url"`
+	UpdatedAt            int64    `json:"updatedAt"`
+	OriginalEstimateSec  *int64   `json:"originalEstimateSec,omitempty"`
+	RemainingEstimateSec *int64   `json:"remainingEstimateSec,omitempty"`
 }
 
 // Column statuses are provider status IDs (the board config exposes IDs, not
@@ -90,21 +115,24 @@ type User struct {
 // IssueDetail is the full payload for the issue-detail modal: extends the
 // board-card Issue with description, reporter, and creation timestamp.
 type IssueDetail struct {
-	Key            string   `json:"key"`
-	Summary        string   `json:"summary"`
-	Description    string   `json:"description"`
-	IssueType      string   `json:"issueType"`
-	Priority       string   `json:"priority"`
-	Status         string   `json:"status"`
-	StatusCategory string   `json:"statusCategory"`
-	Assignee       string   `json:"assignee"`
-	AssigneeEmail  string   `json:"assigneeEmail"`
-	Reporter       string   `json:"reporter"`
-	ReporterEmail  string   `json:"reporterEmail"`
-	Labels         []string `json:"labels"`
-	URL            string   `json:"url"`
-	CreatedAt      int64    `json:"createdAt"`
-	UpdatedAt      int64    `json:"updatedAt"`
+	Key                  string             `json:"key"`
+	Summary              string             `json:"summary"`
+	Description          string             `json:"description"`
+	IssueType            string             `json:"issueType"`
+	Priority             string             `json:"priority"`
+	Status               string             `json:"status"`
+	StatusCategory       string             `json:"statusCategory"`
+	Assignee             string             `json:"assignee"`
+	AssigneeEmail        string             `json:"assigneeEmail"`
+	Reporter             string             `json:"reporter"`
+	ReporterEmail        string             `json:"reporterEmail"`
+	Labels               []string           `json:"labels"`
+	URL                  string             `json:"url"`
+	CreatedAt            int64              `json:"createdAt"`
+	UpdatedAt            int64              `json:"updatedAt"`
+	OriginalEstimateSec  *int64             `json:"originalEstimateSec,omitempty"`
+	RemainingEstimateSec *int64             `json:"remainingEstimateSec,omitempty"`
+	CustomFields         []CustomFieldValue `json:"customFields,omitempty"`
 }
 
 // Comment is one entry from the issue comment thread, body flattened to plain
