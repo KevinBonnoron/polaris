@@ -55,6 +55,7 @@ interface Props {
   // Called after a successful push/sync when the user has ticked "Close session".
   onClose?(): Promise<void>;
   onCountChange?: (count: number) => void;
+  refreshRef?: React.MutableRefObject<(() => Promise<void>) | null>;
 }
 
 type ShipAction = 'ship' | 'amend' | 'push-only' | 'push-with-lease' | 'commit-only' | 'sync';
@@ -181,7 +182,7 @@ function splitPath(path: string): { name: string; dir: string } {
   return { name: path.slice(idx + 1), dir: path.slice(0, idx) };
 }
 
-export function GitChangesPanel({ ops, active = true, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange }: Props) {
+export function GitChangesPanel({ ops, active = true, pollInterval = 0, headerSlot, resetKey, onOpenFile, onClose, onCountChange, refreshRef }: Props) {
   const { t } = useTranslation();
   const confirm = useConfirm();
   const { viewMode: view, setViewMode: setView } = useGitChangesViewMode();
@@ -288,6 +289,10 @@ export function GitChangesPanel({ ops, active = true, pollInterval = 0, headerSl
     };
     return run;
   }, [ops]);
+
+  useEffect(() => {
+    if (refreshRef) refreshRef.current = refresh;
+  }, [refreshRef, refresh]);
 
   useEffect(() => {
     // A new target abandons any in-flight refresh from the previous one so its
@@ -579,9 +584,11 @@ export function GitChangesPanel({ ops, active = true, pollInterval = 0, headerSl
                   <ListTree className="size-3.5" />
                 </button>
               </div>
-              <button type="button" onClick={() => void refresh()} disabled={busy} title={t('agents.detail.refreshChanges')} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
-                <RefreshCw className="size-3.5" />
-              </button>
+              {!refreshRef && (
+                <button type="button" onClick={() => void refresh()} disabled={busy} title={t('agents.detail.refreshChanges')} className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-40">
+                  <RefreshCw className="size-3.5" />
+                </button>
+              )}
             </div>
             <ScrollArea className="h-0 flex-1">
               <div className="flex flex-col gap-0.5 p-1">

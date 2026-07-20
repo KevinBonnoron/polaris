@@ -2,10 +2,10 @@
 
 > Desktop cockpit to orchestrate multiple AI coding agents (Claude Code, GitHub Copilot, Cursor, Codex, Gemini, Mistral) across all your projects.
 
-[![Wails](https://img.shields.io/badge/Wails-v2-DF0061?logo=go&logoColor=white)](https://wails.io/)
-[![Go](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Wails](https://img.shields.io/badge/Wails-v3-DF0061?logo=go&logoColor=white)](https://wails.io/)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Bun](https://img.shields.io/badge/Bun-1.3-000000?logo=bun&logoColor=white)](https://bun.com/)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
@@ -26,15 +26,15 @@ Run multiple agents side by side across all your projects, each in its own isola
 
 | Agent | Models |
 |---|---|
-| **Claude Code** | Opus, Sonnet, Haiku (with extended thinking) |
-| **GitHub Copilot** | Claude, GPT-5, Gemini, o3, and more |
+| **Claude Code** | Opus, Sonnet, Haiku (with extended thinking — real-time progressive streaming with 15 configurable visual styles) |
+| **GitHub Copilot** | Model selected by gh CLI (no model override) |
 | **Cursor** | 25+ models including thinking variants |
-| **OpenAI Codex** | GPT-5, o3, o4-mini |
+| **OpenAI Codex** | Models from local cache (~/.codex/models_cache.json) |
 | **Google Gemini** | 2.5 Flash/Pro, Gemini 3 |
 | **Mistral** | Medium 3.5, Devstral Small |
-| **Custom providers** | Any provider via opencode ACP (stdio JSON-RPC) |
+| **Custom providers** | Any provider via opencode ACP (full JSON-RPC 2.0 over stdin/stdout, supports OpenAI-compatible and Anthropic-compatible drivers) |
 
-Agent CLIs are auto-detected from your PATH. Per-agent model defaults are persisted per project.
+Agent CLIs are auto-detected from your PATH. Per-agent model defaults are persisted per project (with global fallback).
 
 ![Agent running](docs/screenshots/home-agent-working.png)
 
@@ -43,18 +43,24 @@ Agent CLIs are auto-detected from your PATH. Per-agent model defaults are persis
 - Stage/unstage files, commit with AI-generated messages, push, sync
 - Branch management (list, switch, create, delete)
 - Diff viewer (worktree vs HEAD)
-- One-click PR creation from an agent's work
+- One-click PR creation from an agent's work (GitHub, via gh CLI)
 - Each agent runs in its own Git worktree — zero interference with your main branch
+- Promote a running agent to an isolated worktree post-hoc
 
 ### Integrations
 
 | Integration | Capabilities |
 |---|---|
-| **GitHub / GitLab / Bitbucket** | PRs, issues, workflow runs, branches. Token auto-detected from system credentials |
+| **GitHub** | PRs, issues, workflow runs, branches. Token auto-detected via gh CLI or GITHUB_TOKEN |
+| **GitLab / Bitbucket** | Remote detection and auth only; API integration not yet implemented |
 | **Jira** | Active sprint, issue creation, transitions, assignees, story points |
 | **Node.js** | npm/Yarn/pnpm/Bun/Deno — detect scripts, run them, manage dependencies |
 | **Python** | Poetry/PDM/uv/Pipenv/pip — scripts, dependencies, virtual envs |
-| **Docker** | Dockerfile/Compose parsing, linting, vulnerability scanning |
+| **C# / .NET** | Project detection, build and test task integration |
+| **Godot** | Engine project detection |
+| **Docker** | Dockerfile/Compose detection, linting, vulnerability scanning |
+| **Taskfile** | Task runner detection, list and run tasks |
+| **Nix devenv / devcontainer** | Dev environment detection and shell integration |
 | **Sentry** | Issue list, event details, status management |
 | **Dokploy** | Service status, deployment history, logs, restart/start/stop |
 | **Slack / Discord / Telegram** | Webhook-based notifications |
@@ -64,31 +70,31 @@ Agent CLIs are auto-detected from your PATH. Per-agent model defaults are persis
 
 ### Automations
 
-Schedule recurring agent tasks with full history, manual triggers, and conditional execution based on integration events (GitHub, Jira sprints, etc.).
+Trigger agent tasks automatically based on integration events (GitHub PRs/issues, Jira ticket transitions, Sentry alerts, Dokploy deployments), with full history and manual triggers.
 
 ### Appearance & customization
 
 ![Appearance settings](docs/screenshots/settings-appearance.png)
 
-**Themes** — Built-in light/dark themes plus a custom theme importer: paste or upload a JSON token file to define your own color scheme.
+**Themes** — 29 built-in named themes (Catppuccin, Dracula, Nord, Tokyo Night, Gruvbox, and more) plus a custom theme importer: paste or upload a JSON token file to define your own color scheme.
 
 **Thinking indicator** — 15 animated styles to visualize agent reasoning: Dots, Spinner, Badge, Bar, Wave, Orbit, Cursor, Breathing, Sine wave, Ellipsis, Ring, Cascade, Gradient, Bounce, Flicker. Each can run in neutral or accent color mode.
 
-**Card animation** — 5 styles for agent cards while running: Pulse, Shimmer, Progress bar, Glow, or None.
+**Card animation** — 5 styles for agent cards while running: Ring, Shimmer, Bar, Glow, or None.
 
 **Configurable status bar** — Drag-and-drop the blocks shown in the agent status bar. Available blocks: Model, Tools, Tokens, Tools used, Cost, Provider, Files, Duration, Usage (remaining or used). Add separators (·, |, —) between blocks. Order and visibility are persisted.
 
 ### IDE & terminal
 
-Auto-detects VS Code, Cursor, Zed, Windsurf, JetBrains IDEs, Sublime Text, Xcode, and Vim. Open any project or file directly from Polaris, with line/column navigation support. Custom IDE command templates supported.
+Auto-detects VS Code, Cursor, Zed, Windsurf, JetBrains IDEs, Sublime Text, Xcode, and Vim / Neovim. Open any project or file directly from Polaris, with line/column navigation support. Custom IDE command templates supported.
 
 ### Notifications
 
-Native notification center with read/unread state. Focus-aware: notifications can pause while the app window is active.
+In-app notification center with read/unread state. Focus-aware: notifications can pause while the app window is active.
 
 ## Stack
 
-- **Backend**: Go + Wails v2, SQLite, agent runner with log capture
+- **Backend**: Go + Wails v3, SQLite, agent runner with log capture
 - **Frontend**: React 19, TypeScript, TanStack Router/DB/Form, Radix UI + Tailwind CSS 4, i18next (EN/FR)
 - **Tooling**: Bun, Vite, Biome
 

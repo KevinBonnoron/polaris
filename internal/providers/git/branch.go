@@ -112,6 +112,8 @@ func providerFor(host string) Provider {
 type BranchInfo struct {
 	Name         string `json:"name"`
 	IsCurrent    bool   `json:"isCurrent"`
+	IsProtected  bool   `json:"isProtected,omitempty"`
+	IsRemote     bool   `json:"isRemote,omitempty"`
 	WorktreePath string `json:"worktreePath,omitempty"`
 	Upstream     string `json:"upstream,omitempty"`
 }
@@ -173,6 +175,7 @@ func ListBranches(dir string) ([]BranchInfo, error) {
 	}
 
 	out := []BranchInfo{}
+	localNames := map[string]bool{}
 	for _, raw := range strings.Split(string(brOut), "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" {
@@ -188,12 +191,43 @@ func ListBranches(dir string) ([]BranchInfo, error) {
 		if len(parts) >= 3 {
 			upstream = parts[2]
 		}
-		info := BranchInfo{Name: name, IsCurrent: isCurrent, Upstream: upstream}
+		protected := name == "main" || name == "master"
+		info := BranchInfo{Name: name, IsCurrent: isCurrent, IsProtected: protected, Upstream: upstream}
 		if wt, ok := worktreeMap[name]; ok && !isCurrent {
 			info.WorktreePath = wt
 		}
 		out = append(out, info)
+		localNames[name] = true
 	}
+
+	// Append remote-only branches (not yet checked out locally).
+	remCmd := exec.CommandContext(ctx, "git", "for-each-ref", "--format=%(refname:short)", "refs/remotes/")
+	remCmd.Dir = dir
+	sysexec.Hide(remCmd)
+	if remOut, err := remCmd.Output(); err == nil {
+		for _, raw := range strings.Split(string(remOut), "\n") {
+			ref := strings.TrimSpace(raw)
+			if ref == "" {
+				continue
+			}
+			// ref looks like "origin/feature/xyz"; split off the remote name.
+			slash := strings.IndexByte(ref, '/')
+			if slash < 0 {
+				continue
+			}
+			name := ref[slash+1:]
+			if name == "HEAD" || localNames[name] {
+				continue
+			}
+			out = append(out, BranchInfo{
+				Name:        name,
+				IsRemote:    true,
+				IsProtected: name == "main" || name == "master",
+				Upstream:    ref,
+			})
+		}
+	}
+
 	return out, nil
 }
 
@@ -206,12 +240,56 @@ func CheckoutBranch(dir, branch string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", "switch", branch)
+	cmd := exec.CommandContext(ctx, "git", "switch", "--", branch)
 	cmd.Dir = dir
 	sysexec.Hide(cmd)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git switch: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// CreateBranch creates a new branch at startPoint (commit, tag, or branch
+// name). When startPoint is empty, HEAD is used.
+func CreateBranch(ctx context.Context, repoPath, branchName, startPoint string) error {
+	if repoPath == "" || branchName == "" {
+		return fmt.Errorf("repoPath and branchName are required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	args := []string{"branch", "--", branchName}
+	if startPoint != "" {
+		args = append(args, startPoint)
+	}
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = repoPath
+	sysexec.Hide(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git branch: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// DeleteBranch deletes branchName from repoPath. When force is true,
+// -D is passed so the branch is removed even when not fully merged.
+func DeleteBranch(ctx context.Context, repoPath, branchName string, force bool) error {
+	if repoPath == "" || branchName == "" {
+		return fmt.Errorf("repoPath and branchName are required")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	cmd := exec.CommandContext(ctx, "git", "branch", flag, "--", branchName)
+	cmd.Dir = repoPath
+	sysexec.Hide(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git branch %s: %s", flag, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
