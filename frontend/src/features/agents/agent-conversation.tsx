@@ -259,7 +259,8 @@ export function AgentConversation({ agentId }: { agentId: string }) {
 
   const [log, setLog] = useState<polaris.StreamEvent[]>([]);
   const logOffset = useRef(0);
-  const [logLoading, setLogLoading] = useState(true);
+  const [logLoadingState, setLogLoading] = useState(!isDraft);
+  const logLoading = !isDraft && logLoadingState;
   const [activeTab, setActiveTab] = useState('logs');
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
