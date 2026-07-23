@@ -4,6 +4,7 @@ import { Check, ChevronDown, ExternalLink, GitBranch, GitBranchPlus, GitPullRequ
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { getAgentLogsCollection } from '@/collections/agent-logs.collection';
 import { agentsCollection } from '@/collections/agents.collection';
 import { customProvidersCollection } from '@/collections/custom-providers.collection';
 import { projectsCollection } from '@/collections/projects.collection';
@@ -29,9 +30,8 @@ import { useStatusBarBlocks } from '@/providers/theme-accent';
 import { useAgentClis } from '@/state/agent-clis';
 import { useAgentDefaults } from '@/state/agent-defaults';
 import { useCurrentProject } from '@/state/projects';
-import { CreatePRForAgent, PromoteAgentToWorktree, ReadAgentLogFrom, SetAgentModel } from '@/wailsjs/go/main/App';
-import type { polaris } from '@/wailsjs/go/models';
-import { BrowserOpenURL, EventsOn } from '@/wailsjs/runtime/runtime';
+import { CreatePRForAgent, PromoteAgentToWorktree, SetAgentModel } from '@/wailsjs/go/main/App';
+import { BrowserOpenURL } from '@/wailsjs/runtime/runtime';
 import { AgentDetailFilesTab } from './agent-detail-files-tab';
 import { AgentDetailLogsTab } from './agent-detail-logs-tab';
 import { AgentInputArea, NO_TOOLS_SENTINEL, TOOL_PRESETS } from './agent-input-area';
@@ -257,90 +257,17 @@ export function AgentConversation({ agentId }: { agentId: string }) {
     setPromoteLoading(false);
   }, [agentId]);
 
-  const [log, setLog] = useState<polaris.StreamEvent[]>([]);
-  const logOffset = useRef(0);
-  const [logLoadingState, setLogLoading] = useState(!isDraft);
-  const logLoading = !isDraft && logLoadingState;
+  const agentLogsCollection = useMemo(() => getAgentLogsCollection(agentId), [agentId]);
+  const { data: log = [], isReady: logReady } = useLiveQuery((q) => q.from({ evt: agentLogsCollection }), [agentLogsCollection]);
+  const logLoading = !isDraft && !logReady;
   const [activeTab, setActiveTab] = useState('logs');
   const logRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // The live log appends only the new tail (read incrementally by byte offset)
-  // whenever the backend signals an append, instead of re-reading and
-  // re-rendering the whole transcript on a timer. A fast-streaming agent could
-  // otherwise saturate the renderer and freeze the UI as its log grew.
   useEffect(() => {
-    if (isDraft) {
-      setLog([]);
-      logOffset.current = 0;
-      setLogLoading(false);
-      return;
-    }
-
-    let active = true;
-    let reading = false;
-    let pendingPull = false;
-    let pendingReset = false;
-    logOffset.current = 0;
-    setLog([]);
-    setLogLoading(true);
     stickToBottom.current = true;
-
-    const pull = (first = false, reset = false) => {
-      if (!active) {
-        return;
-      }
-      if (reading) {
-        // A signal arrived mid-read; coalesce it into a follow-up so the final
-        // tail is never dropped.
-        pendingPull = true;
-        pendingReset = pendingReset || reset;
-        return;
-      }
-      if (reset) {
-        logOffset.current = 0;
-        setLog([]);
-        stickToBottom.current = true;
-      }
-      reading = true;
-      ReadAgentLogFrom(agentId, logOffset.current)
-        .then((tail) => {
-          if (!active) {
-            return;
-          }
-          logOffset.current = tail.offset;
-          const evts = tail.events ?? [];
-          if (evts.length > 0) {
-            setLog((prev) => [...prev, ...evts]);
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          reading = false;
-          if (active && first) {
-            setLogLoading(false);
-          }
-          if (active && pendingPull) {
-            const nextReset = pendingReset;
-            pendingPull = false;
-            pendingReset = false;
-            pull(false, nextReset);
-          }
-        });
-    };
-
-    pull(true);
-    const unsubscribe = EventsOn('agent:log:appended', (payload: { agentId: string; reset?: boolean }) => {
-      if (payload.agentId === agentId) {
-        pull(false, payload.reset === true);
-      }
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [agentId, isDraft]);
+  }, [agentId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: log is the trigger; body reads ref only
   useEffect(() => {
@@ -358,22 +285,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
     stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   }, []);
 
-  const onLogRefresh = useCallback(() => {
-    logOffset.current = 0;
-    ReadAgentLogFrom(agentId, 0)
-      .then((tail) => {
-        logOffset.current = tail.offset;
-        setLog(tail.events ?? []);
-      })
-      .catch(() => {});
-  }, [agentId]);
-
   const onSetActiveTab = useCallback((tab: string) => setActiveTab(tab), []);
-
-  const onClearLog = useCallback(() => {
-    logOffset.current = 0;
-    setLog([]);
-  }, []);
 
   const onPromoteConfirm = useCallback(async () => {
     if (!agent?.id || !promoteBranch.trim() || promoteLoading) {
@@ -611,7 +523,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
         </TabsContent>
       </Tabs>
 
-      <AgentInputArea agentId={agentId} agent={agent} inputRef={inputRef} onLogRefresh={onLogRefresh} onSetActiveTab={onSetActiveTab} onClearLog={onClearLog} allowedTools={allowedTools} onAllowedToolsChange={setAllowedTools} />
+      <AgentInputArea agentId={agentId} agent={agent} inputRef={inputRef} onSetActiveTab={onSetActiveTab} allowedTools={allowedTools} onAllowedToolsChange={setAllowedTools} />
 
       <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
         <DialogContent className="sm:max-w-sm">

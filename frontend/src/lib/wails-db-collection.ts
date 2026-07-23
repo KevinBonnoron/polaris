@@ -7,18 +7,24 @@ import { EventsOn } from '@/wailsjs/runtime/runtime';
 const refreshDebounceMs = 80;
 
 export interface WailsCollectionConfig<TItem extends { id: string }> {
-  /** Logical name — matches the `collection:<name>:changed` event the Go store emits. */
+  /** Logical name used as the collection key. */
   name: string;
+  /**
+   * Event suffix to listen to (defaults to `name`). Use when the Go store emits
+   * a shared event (e.g. `automationRuns`) but each collection instance covers a
+   * filtered subset identified by `name` (e.g. `automationRuns-<id>`).
+   */
+  event?: string;
   /** Fetch the full collection from Go. */
   list: () => Promise<TItem[]>;
-  /** Upsert a row. Must return the persisted record (with server-assigned id if it was empty). */
-  upsert: (item: TItem) => Promise<TItem>;
-  /** Delete a row by id. */
-  remove: (id: string) => Promise<void>;
+  /** Upsert a row. Required for mutable collections. */
+  upsert?: (item: TItem) => Promise<TItem>;
+  /** Delete a row by id. Required for mutable collections. */
+  remove?: (id: string) => Promise<void>;
 }
 
 export function wailsCollectionOptions<TItem extends { id: string }>(config: WailsCollectionConfig<TItem>): CollectionConfig<TItem, string> {
-  const eventName = `collection:${config.name}:changed`;
+  const eventName = `collection:${config.event ?? config.name}:changed`;
 
   const sync: SyncConfig<TItem, string> = {
     sync: ({ begin, write, commit, markReady }) => {
@@ -108,34 +114,157 @@ export function wailsCollectionOptions<TItem extends { id: string }>(config: Wai
     },
   };
 
-  return {
-    getKey: (item: TItem) => item.id,
-    sync,
-    onInsert: async (params: InsertMutationFnParams<TItem, string>) => {
+  const base: CollectionConfig<TItem, string> = { getKey: (item: TItem) => item.id, sync };
+
+  if (config.upsert) {
+    const upsert = config.upsert;
+    base.onInsert = async (params: InsertMutationFnParams<TItem, string>) => {
       const ids: string[] = [];
       for (const mutation of params.transaction.mutations) {
-        const persisted = await config.upsert(mutation.changes as TItem);
+        const persisted = await upsert(mutation.changes as TItem);
         ids.push(persisted.id);
       }
       return ids;
-    },
-    onUpdate: async (params: UpdateMutationFnParams<TItem, string>) => {
+    };
+    base.onUpdate = async (params: UpdateMutationFnParams<TItem, string>) => {
       const keys: string[] = [];
       for (const mutation of params.transaction.mutations) {
         const merged = { ...mutation.original, ...mutation.changes, id: mutation.key } as TItem;
-        await config.upsert(merged);
+        await upsert(merged);
         keys.push(mutation.key);
       }
       return keys;
-    },
-    onDelete: async (params: DeleteMutationFnParams<TItem, string>) => {
+    };
+  }
+
+  if (config.remove) {
+    const remove = config.remove;
+    base.onDelete = async (params: DeleteMutationFnParams<TItem, string>) => {
       const keys: string[] = [];
       for (const mutation of params.transaction.mutations) {
-        await config.remove(mutation.key);
+        await remove(mutation.key);
         keys.push(mutation.key);
       }
       return keys;
+    };
+  }
+
+  return base;
+}
+
+// wailsAppendCollectionOptions builds a CollectionConfig for append-only data
+// (e.g. agent log files) that avoids re-reading the entire source on every change
+// event. Each change calls listFrom(offset) to fetch only the new tail; a reset
+// event (e.g. log cleared or retracted) clears all items and re-reads from 0.
+//
+// TItem must NOT define a `_seq` field — the helper adds it as the stable sort key
+// so that TanStack DB's SortedMap returns events in insertion order. The key is a
+// zero-padded decimal so lexicographic ordering matches insertion order.
+export function wailsAppendCollectionOptions<TItem>(name: string, listFrom: (offset: number) => Promise<{ items: TItem[]; nextOffset: number }>): CollectionConfig<TItem & { _seq: number }, string> {
+  const eventName = `collection:${name}:changed`;
+  type Item = TItem & { _seq: number };
+
+  const sync: SyncConfig<Item, string> = {
+    sync: ({ begin, write, commit, markReady }) => {
+      let offset = 0;
+      let nextSeq = 0;
+      const current = new Map<string, Item>();
+      let refreshing = false;
+      let dirty = false;
+      let pendingReset = false;
+
+      const runRefresh = async (reset: boolean) => {
+        if (reset) {
+          if (current.size > 0) {
+            begin();
+            for (const item of current.values()) {
+              write({ type: 'delete', value: item });
+            }
+            commit();
+            current.clear();
+          }
+          offset = 0;
+          nextSeq = 0;
+        }
+
+        let result: { items: TItem[]; nextOffset: number };
+        try {
+          result = await listFrom(offset);
+        } catch (err) {
+          console.error(`wailsAppendCollection[${name}] refresh failed`, err);
+          return;
+        }
+
+        if (result.items.length > 0) {
+          begin();
+          for (const raw of result.items) {
+            const seq = nextSeq++;
+            const item = { ...raw, _seq: seq } as Item;
+            write({ type: 'insert', value: item });
+            current.set(String(seq), item);
+          }
+          commit();
+        }
+        offset = result.nextOffset;
+      };
+
+      const refresh = async (reset = false) => {
+        if (refreshing) {
+          dirty = true;
+          pendingReset = pendingReset || reset;
+          return;
+        }
+        refreshing = true;
+        let nextReset = reset;
+        try {
+          do {
+            dirty = false;
+            const doReset = nextReset || pendingReset;
+            nextReset = false;
+            pendingReset = false;
+            await runRefresh(doReset);
+          } while (dirty);
+        } finally {
+          refreshing = false;
+        }
+      };
+
+      let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleRefresh = (reset = false) => {
+        if (reset) {
+          if (refreshTimer != null) {
+            clearTimeout(refreshTimer);
+            refreshTimer = null;
+          }
+          void refresh(true);
+          return;
+        }
+        if (refreshTimer != null) {
+          return;
+        }
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null;
+          void refresh();
+        }, refreshDebounceMs);
+      };
+
+      const off = EventsOn(eventName, (payload?: { reset?: boolean }) => {
+        scheduleRefresh(payload?.reset === true);
+      });
+
+      void refresh().finally(() => markReady());
+
+      return () => {
+        if (refreshTimer != null) clearTimeout(refreshTimer);
+        off();
+      };
     },
+  };
+
+  return {
+    // Zero-pad so lexicographic sort in SortedMap matches insertion order.
+    getKey: (item: Item) => String(item._seq).padStart(15, '0'),
+    sync,
   };
 }
 

@@ -339,6 +339,7 @@ func (service *Service) ClearLog(agentID string) error {
 		}
 		return err
 	}
+	service.emitLogResetEvent(agentID)
 	return nil
 }
 
@@ -955,6 +956,7 @@ func (service *Service) emitLogEvent(agentID string, _ StreamEvent) {
 		delete(service.logEmitTimer, agentID)
 		service.logEmitMu.Unlock()
 		service.store.Emit(agentLogEvent, map[string]any{"agentId": agentID})
+		service.store.Emit("collection:agent-log-"+agentID+":changed", nil)
 	})
 }
 
@@ -969,6 +971,7 @@ func (service *Service) emitLogResetEvent(agentID string) {
 	}
 	service.logEmitMu.Unlock()
 	service.store.Emit(agentLogEvent, map[string]any{"agentId": agentID, "reset": true})
+	service.store.Emit("collection:agent-log-"+agentID+":changed", map[string]any{"reset": true})
 }
 
 // appendAgentEvent writes a StreamEvent as JSONL to the agent's log file and

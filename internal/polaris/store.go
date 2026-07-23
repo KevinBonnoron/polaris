@@ -1458,7 +1458,7 @@ func (store *Store) InsertAutomationRun(run AutomationRun) (AutomationRun, error
 	); err != nil {
 		return run, err
 	}
-	store.emit("automationRuns")
+	store.emit("automationRuns-" + run.AutomationID)
 	return run, nil
 }
 
