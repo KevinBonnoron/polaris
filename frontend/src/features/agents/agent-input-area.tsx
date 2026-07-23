@@ -1,4 +1,5 @@
 import { useLiveQuery } from '@tanstack/react-db';
+import { evictAgentLogsCollection } from '@/collections/agent-logs.collection';
 import { Clock, Mic, Paperclip, Send, Square, TriangleAlert, X, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -38,14 +39,12 @@ interface Props {
   agentId: string;
   agent: Agent | null;
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
-  onLogRefresh: () => void;
   onSetActiveTab: (tab: string) => void;
-  onClearLog: () => void;
   allowedTools: string[];
   onAllowedToolsChange: (tools: string[]) => void;
 }
 
-export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetActiveTab, onClearLog, allowedTools, onAllowedToolsChange }: Props) {
+export function AgentInputArea({ agentId, agent, inputRef, onSetActiveTab, allowedTools, onAllowedToolsChange }: Props) {
   const { t } = useTranslation();
   const { project, projectId } = useCurrentProject();
   const { kinds: cliKinds, opencode, loading: cliLoading } = useAgentClis();
@@ -304,7 +303,6 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
             const retracted = await StopAndRetractLastMessage(agentId);
             if (retracted) {
               recallIntoInput(retracted);
-              onLogRefresh();
             }
           } catch (err) {
             toastError({ title: t('agents.detail.couldNotStop'), err });
@@ -341,7 +339,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isWorking, isSleeping, agentId, t, onLogRefresh, queuedMessage, recallIntoInput, clearQueued, inputRef]);
+  }, [isWorking, isSleeping, agentId, t, queuedMessage, recallIntoInput, clearQueued, inputRef]);
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -433,7 +431,6 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
       await (interrupt ? InterruptAndSendToAgent(agentId, text) : SendToAgent(agentId, text));
       setMessage('');
       setAttachments([]);
-      onLogRefresh();
     } catch (err) {
       toastError({ title: t('agents.detail.couldNotSend'), err });
     } finally {
@@ -502,7 +499,6 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
         onSetActiveTab('files');
         break;
       case 'clear':
-        onClearLog();
         void ClearAgentLog(agentId).catch((err) => toastError({ title: t('agents.detail.couldNotClear'), err }));
         break;
       case 'compact':
@@ -531,6 +527,7 @@ export function AgentInputArea({ agentId, agent, inputRef, onLogRefresh, onSetAc
             }
             try {
               await agentsCollection.delete(agent.id);
+              evictAgentLogsCollection(agent.id);
             } catch {
               // draft cleanup is best-effort
             }
