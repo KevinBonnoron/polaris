@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
-import { GetNotificationSettings, UpdateNotificationSettings } from '@/wailsjs/go/main/App';
-import { EventsOff, EventsOn } from '@/wailsjs/runtime/runtime';
+import { useLiveQuery } from '@tanstack/react-db';
+import { useCallback } from 'react';
+import { SINGLETON_ID, type NotificationSettingsItem, notificationSettingsCollection } from '@/collections/notification-settings.collection';
 
 export interface NotificationEventFlags {
   waiting: boolean;
@@ -11,7 +11,7 @@ export interface NotificationEventFlags {
   user: boolean;
 }
 
-interface NotificationSettings {
+export interface NotificationSettings {
   osEnabled: boolean;
   sound: string;
   silenceAll: boolean;
@@ -25,54 +25,32 @@ const DEFAULTS: NotificationSettings = {
   events: { waiting: true, completed: true, errored: true, started: false, automation: true, user: true },
 };
 
-const CHANGE_EVENT = 'collection:notificationSettings:changed';
-
 export function useNotificationSettings() {
-  const [settings, setSettings] = useState<NotificationSettings>(DEFAULTS);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = () => {
-      GetNotificationSettings()
-        .then((value) => {
-          if (cancelled || !value) {
-            return;
-          }
-          setSettings(value as NotificationSettings);
-          setLoaded(true);
-        })
-        .catch(() => {
-          setLoaded(true);
-        });
-    };
-    refresh();
-    EventsOn(CHANGE_EVENT, refresh);
-    return () => {
-      cancelled = true;
-      EventsOff(CHANGE_EVENT);
-    };
-  }, []);
+  const { data, isReady } = useLiveQuery((q) => q.from({ s: notificationSettingsCollection }));
+  const settings = (data[0] ?? DEFAULTS) as NotificationSettings;
 
   const update = useCallback(
-    async (patch: Partial<Omit<NotificationSettings, 'events'>> & { events?: Partial<NotificationEventFlags> }) => {
-      const next: NotificationSettings = {
-        ...settings,
-        ...patch,
-        events: { ...settings.events, ...(patch.events ?? {}) },
-      };
-      setSettings(next);
-      try {
-        const saved = await UpdateNotificationSettings(next as never);
-        if (saved) {
-          setSettings(saved as NotificationSettings);
-        }
-      } catch (err) {
-        console.error('updateNotificationSettings failed', err);
+    (patch: Partial<Omit<NotificationSettings, 'events'>> & { events?: Partial<NotificationEventFlags> }) => {
+      if (!isReady) return;
+      const { events, ...settingsPatch } = patch;
+      if (data[0]) {
+        notificationSettingsCollection.update(SINGLETON_ID, (draft: NotificationSettingsItem) => {
+          Object.assign(draft, settingsPatch);
+          if (events) {
+            draft.events = { ...draft.events, ...events };
+          }
+        });
+      } else {
+        notificationSettingsCollection.insert({
+          ...DEFAULTS,
+          ...settingsPatch,
+          events: { ...DEFAULTS.events, ...(events ?? {}) },
+          id: SINGLETON_ID,
+        });
       }
     },
-    [settings],
+    [isReady, data],
   );
 
-  return { settings, loaded, update };
+  return { settings, loaded: isReady, update };
 }

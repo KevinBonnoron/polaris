@@ -1,7 +1,8 @@
 import { ChevronDown, History, Pencil, Play, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { evictAutomationRunsCollection, getAutomationRunsCollection } from '@/collections/automation-runs.collection';
 import { automationsCollection } from '@/collections/automations.collection';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,9 +10,9 @@ import { Switch } from '@/components/ui/switch';
 import { formatAgo } from '@/lib/format-ago';
 import { cn } from '@/lib/utils';
 import type { Automation } from '@/types';
-import { FireAutomation, ListAutomationRuns } from '@/wailsjs/go/main/App';
+import { FireAutomation } from '@/wailsjs/go/main/App';
 import type { polaris } from '@/wailsjs/go/models';
-import { EventsOn } from '@/wailsjs/runtime/runtime';
+import { useLiveQuery } from '@tanstack/react-db';
 import { AutomationEditModal } from './automation-edit-modal';
 import { actionsSummary, triggerSummary } from './automation-summary';
 
@@ -24,32 +25,11 @@ interface Props {
 export function AutomationCard({ automation, statusName, fromStatusNames }: Props) {
   const { t, i18n } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const [runs, setRuns] = useState<polaris.AutomationRun[]>([]);
-  const [runsLoading, setRunsLoading] = useState(false);
   const [firing, setFiring] = useState(false);
 
-  const loadRuns = useCallback(async () => {
-    setRunsLoading(true);
-    try {
-      const list = await ListAutomationRuns(automation.id, 20);
-      setRuns(list ?? []);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
-    } finally {
-      setRunsLoading(false);
-    }
-  }, [automation.id]);
-
-  useEffect(() => {
-    if (!expanded) {
-      return;
-    }
-    void loadRuns();
-    const off = EventsOn('collection:automationRuns:changed', () => {
-      void loadRuns();
-    });
-    return () => off();
-  }, [expanded, loadRuns]);
+  const runsCollection = useMemo(() => getAutomationRunsCollection(automation.id), [automation.id]);
+  const { data: runs = [], isReady } = useLiveQuery((q) => (expanded ? q.from({ r: runsCollection }).orderBy(({ r }) => r.startedAt, 'desc') : undefined), [expanded, runsCollection]);
+  const runsLoading = expanded && !isReady && runs.length === 0;
 
   const toggleEnabled = () => {
     automationsCollection.update(automation.id, (draft) => {
@@ -72,6 +52,7 @@ export function AutomationCard({ automation, statusName, fromStatusNames }: Prop
   const handleDelete = async () => {
     try {
       await automationsCollection.delete(automation.id);
+      evictAutomationRunsCollection(automation.id);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err));
     }
@@ -115,7 +96,7 @@ export function AutomationCard({ automation, statusName, fromStatusNames }: Prop
 
         {expanded && (
           <div className="flex flex-col gap-1.5 rounded-md border bg-muted/30 px-2 py-2">
-            {runsLoading && runs.length === 0 ? (
+            {runsLoading ? (
               <p className="px-1 py-0.5 text-xs text-muted-foreground">{t('common.loading')}</p>
             ) : runs.length === 0 ? (
               <p className="px-1 py-0.5 text-xs text-muted-foreground">{t('automations.runs.empty')}</p>
