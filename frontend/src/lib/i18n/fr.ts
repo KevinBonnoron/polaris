@@ -1158,6 +1158,10 @@ export const fr: Translation = {
       noToolsTitle: "Aucun CLI d'agent détecté",
       noToolsDesc: 'Installez au moins un CLI ci-dessous, puis relancez la détection pour continuer.',
       recheck: 'Revérifier les outils installés',
+      skipNoTools: 'Continuer sans CLI',
+      copyInstall: "Copier la commande d'installation de {{label}}",
+      copied: 'Copié',
+      checking: 'Vérification des agents installés…',
     },
   },
   shell: {

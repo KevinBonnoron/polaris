@@ -1156,6 +1156,10 @@ export const en = {
       noToolsTitle: 'No coding agent CLI detected',
       noToolsDesc: 'Install at least one CLI below, then re-check to continue.',
       recheck: 'Re-check installed tools',
+      skipNoTools: 'Continue without a CLI',
+      copyInstall: 'Copy {{label}} install command',
+      copied: 'Copied',
+      checking: 'Checking installed agents…',
     },
   },
   shell: {
