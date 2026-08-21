@@ -275,6 +275,12 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   html {
     font-size: 18px;
   }
