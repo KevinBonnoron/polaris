@@ -3,6 +3,7 @@ package polaris
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -668,13 +669,17 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		var stats streamTurnStats
 		attemptStarted := time.Now()
 		var codexThreadID string
-		cmd := exec.Command(binary, args...)
+		execBin, execArgs := wslUnwrap(binary, args)
+		cmd := exec.Command(execBin, execArgs...)
 		if workDir != "" {
 			cmd.Dir = workDir
 		}
 		env := append(os.Environ(), extraEnv...)
 		if kind == "claude-code" && os.Getenv("CLAUDE_CODE_MAX_OUTPUT_TOKENS") == "" {
 			env = append(env, "CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000")
+		}
+		if strings.HasPrefix(execBin, "wsl.exe") {
+			env = wslFilterEnv(env)
 		}
 		cmd.Env = env
 		sysexec.Hide(cmd)
@@ -1107,4 +1112,56 @@ func parseLogLine(line string) (StreamEvent, bool) {
 		return StreamEvent{}, false
 	}
 	return StreamEvent{Type: "text", Ts: ts, Content: content}, true
+}
+
+// wslUnwrap translates a "wsl:<linuxPath>" binary sentinel (produced by
+// wslWhich on Windows) into a wsl.exe invocation so the subprocess runs
+// inside the default WSL distribution.
+var (
+	wslShellOnce sync.Once
+	wslShellBin  = "sh"
+)
+
+// wslFilterEnv removes HOME and USERPROFILE from env so that bash inside WSL
+// resolves the Linux home via /etc/passwd instead of using the Windows path.
+func wslFilterEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		if strings.EqualFold(k, "HOME") || strings.EqualFold(k, "USERPROFILE") {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// resolveWslShell returns the user's configured WSL login shell name (e.g.
+// "bash", "zsh"). Falls back to "bash" if detection fails. Cached.
+func resolveWslShell() string {
+	wslShellOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "wsl.exe", "--", "sh", "-c", `echo "$SHELL"`).Output()
+		if err == nil {
+			if s := strings.TrimSpace(string(out)); strings.HasPrefix(s, "/") {
+				wslShellBin = filepath.Base(s)
+			}
+		}
+	})
+	return wslShellBin
+}
+
+// wslUnwrap translates a "wsl:<linuxPath>" sentinel into a wsl.exe invocation
+// using the user's configured login shell so their init files (proxy vars,
+// API keys) are sourced. Each argument is single-quoted for safety.
+func wslUnwrap(binary string, args []string) (string, []string) {
+	if linuxPath, ok := strings.CutPrefix(binary, "wsl:"); ok {
+		parts := make([]string, 0, len(args)+1)
+		for _, s := range append([]string{linuxPath}, args...) {
+			parts = append(parts, "'"+strings.ReplaceAll(s, "'", "'\\''")+"'")
+		}
+		return "wsl.exe", []string{"--", resolveWslShell(), "-lc", strings.Join(parts, " ")}
+	}
+	return binary, args
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,7 @@ import (
 	"github.com/KevinBonnoron/polaris/internal/store/repositorystore"
 	"github.com/KevinBonnoron/polaris/internal/store/sentrystore"
 	"github.com/KevinBonnoron/polaris/internal/store/ticketsstore"
+	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
 
 type BackendStatus struct {
@@ -78,11 +81,9 @@ func extraBinDirs() []string {
 	}
 }
 
-// resolveAgentBinary locates an agent CLI by name. It honours PATH first, then
-// falls back to extraBinDirs so a binary installed outside the GUI app's PATH
-// (e.g. opencode via curl) is still found. The returned path is absolute when
-// found, so callers can exec it regardless of PATH.
-func resolveAgentBinary(binaries []string) (name, path string, installed bool) {
+// resolveAgentBinaryLocal locates an agent CLI via PATH and extraBinDirs only
+// (no WSL). Used during batch detection where WSL is probed separately.
+func resolveAgentBinaryLocal(binaries []string) (name, path string, installed bool) {
 	for _, b := range binaries {
 		if p, err := exec.LookPath(b); err == nil {
 			return b, p, true
@@ -97,6 +98,121 @@ func resolveAgentBinary(binaries []string) (name, path string, installed bool) {
 		}
 	}
 	return binaries[0], "", false
+}
+
+// resolveAgentBinary locates an agent CLI by name. It honours PATH and
+// extraBinDirs first, then probes WSL on Windows. Used for on-demand lookups
+// (spawn, model listing) where per-call latency is acceptable.
+func resolveAgentBinary(binaries []string) (name, path string, installed bool) {
+	if name, path, ok := resolveAgentBinaryLocal(binaries); ok {
+		return name, path, ok
+	}
+	if runtime.GOOS == "windows" {
+		for _, b := range binaries {
+			if p, ok := wslWhich(b); ok {
+				return b, p, true
+			}
+		}
+	}
+	return binaries[0], "", false
+}
+
+// wslEnv returns the current process environment with HOME and USERPROFILE
+// removed so that bash inside WSL uses /etc/passwd to resolve the Linux home
+// directory, rather than inheriting the Windows path (C:\Users\...) which
+// would prevent login files (.bash_profile, .profile) from being sourced.
+func wslEnv() []string {
+	env := make([]string, 0, len(os.Environ()))
+	for _, e := range os.Environ() {
+		k, _, _ := strings.Cut(e, "=")
+		if strings.EqualFold(k, "HOME") || strings.EqualFold(k, "USERPROFILE") {
+			continue
+		}
+		env = append(env, e)
+	}
+	return env
+}
+
+// wslExePath returns the path to wsl.exe, trying PATH first then the known
+// system location so GUI processes with a stripped PATH still work.
+func wslExePath() string {
+	if p, err := exec.LookPath("wsl.exe"); err == nil {
+		return p
+	}
+	return `C:\Windows\System32\wsl.exe`
+}
+
+// wslWhichBatch probes WSL for all given binaries in a single bash invocation
+// to avoid the per-process startup cost of wsl.exe. Returns a map of
+// binary name → "wsl:<linuxPath>" for each binary that was found.
+func wslWhichBatch(binaries []string) map[string]string {
+	if len(binaries) == 0 {
+		return nil
+	}
+	var sb strings.Builder
+	// Diagnostic output to stderr so it's always logged regardless of what's found.
+	sb.WriteString(">&2 echo \"wsl_path=$PATH\"; ")
+	sb.WriteString("[ -f ~/.bashrc ] && . ~/.bashrc; export PATH=\"$PATH:/snap/bin:$HOME/.local/bin\"; ")
+	sb.WriteString(">&2 echo \"wsl_path_after=$PATH\"; ")
+	for _, b := range binaries {
+		fmt.Fprintf(&sb, "p=$(command -v %q 2>/dev/null); [ -n \"$p\" ] && echo %q=\"$p\"; ", b, b)
+	}
+	sb.WriteString("true") // ensure exit 0 even when no binaries are found
+	wsl := wslExePath()
+	script := sb.String()
+	log.Printf("polaris: wslWhichBatch: running %s -- bash -lc %q", wsl, script)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-lc", script)
+	// cmd.Env = wslEnv() // TODO: fix env filtering — snap/opencode doesn't work without full env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	sysexec.Hide(cmd)
+	out, err := cmd.Output()
+	log.Printf("polaris: wslWhichBatch: err=%v stderr=%q", err, stderr.String())
+	if err != nil {
+		return nil
+	}
+	if len(out) == 0 {
+		log.Printf("polaris: wslWhichBatch: no binaries found among %v", binaries)
+		return nil
+	}
+	result := make(map[string]string)
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "=", 2)
+		if len(parts) == 2 && strings.HasPrefix(parts[1], "/") {
+			result[parts[0]] = "wsl:" + parts[1]
+		}
+	}
+	if len(result) == 0 {
+		log.Printf("polaris: wslWhichBatch: no binaries found among %v, raw output: %q", binaries, string(out))
+	}
+	return result
+}
+
+// wslWhich probes the default WSL distribution for a binary via a bash login
+// shell so installer-added PATH entries are visible. Returns a
+// "wsl:<linuxPath>" sentinel that the runner translates to wsl.exe -- <path>.
+func wslWhich(binary string) (string, bool) {
+	wsl := wslExePath()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	script := fmt.Sprintf("[ -f ~/.bashrc ] && . ~/.bashrc; export PATH=\"$PATH:/snap/bin:$HOME/.local/bin\"; command -v %q 2>/dev/null", binary)
+	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-lc", script)
+	// cmd.Env = wslEnv() // TODO: fix env filtering — snap/opencode doesn't work without full env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	sysexec.Hide(cmd)
+	out, err := cmd.Output()
+	if err != nil || len(out) == 0 {
+		log.Printf("polaris: wslWhich %q: not found (err=%v, stderr=%q)", binary, err, stderr.String())
+		return "", false
+	}
+	p := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(p, "/") {
+		return "", false
+	}
+	return "wsl:" + p, true
 }
 
 var ideCandidates = []struct {

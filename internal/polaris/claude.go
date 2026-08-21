@@ -70,7 +70,11 @@ type claudeSession struct {
 // when non-empty, is also surfaced as a user_message log bubble. appendLog=false
 // truncates the log (fresh spawn); resume builds a --resume command.
 func (runner *Runner) startClaudeSession(svc *Service, agent *Agent, workDir, stdinMsg, startMsg string, appendLog, resume bool) error {
-	binary, args, err := claudeSessionCommand(agent, resume)
+	resolvedBinary := ""
+	if svc.resolveBinary != nil {
+		resolvedBinary = svc.resolveBinary(agent.Kind)
+	}
+	binary, args, err := claudeSessionCommand(agent, resolvedBinary, resume)
 	if err != nil {
 		return err
 	}
@@ -91,7 +95,8 @@ func (runner *Runner) startClaudeSession(svc *Service, agent *Agent, workDir, st
 		svc.emitLogEvent(agent.ID, evt)
 	}
 
-	cmd := exec.Command(binary, args...)
+	execBin, execArgs := wslUnwrap(binary, args)
+	cmd := exec.Command(execBin, execArgs...)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
@@ -160,11 +165,11 @@ func (runner *Runner) startClaudeSession(svc *Service, agent *Agent, workDir, st
 
 // claudeSessionCommand builds the spawn or resume command for the persistent
 // session, reusing the same arg builders as the one-shot path.
-func claudeSessionCommand(agent *Agent, resume bool) (string, []string, error) {
+func claudeSessionCommand(agent *Agent, binary string, resume bool) (string, []string, error) {
 	if resume {
-		return buildResumeCommand(agent.Kind, "", agent.SessionID, "", agent.Source, agent.Model, agent.AllowedTools)
+		return buildResumeCommand(agent.Kind, binary, agent.SessionID, "", agent.Source, agent.Model, agent.AllowedTools)
 	}
-	return buildSpawnCommand(agent.Kind, "", agent.Model, agent.SessionID, "", agent.Source, agent.AllowedTools)
+	return buildSpawnCommand(agent.Kind, binary, agent.Model, agent.SessionID, "", agent.Source, agent.AllowedTools)
 }
 
 func (c *claudeSession) readLoop(stdout, stderr io.Reader) {

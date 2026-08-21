@@ -119,9 +119,13 @@ type acpMessage struct {
 // turn. It is called from Spawn for ACP-based agents, and from Send to resume a
 // finished session.
 func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntime, workDir, task string, env []string, baseTokens int, baseCost float64, resumeSessionID string) error {
-	cmd := exec.Command(rt.binary, rt.args...)
+	execBin, execArgs := wslUnwrap(rt.binary, rt.args)
+	cmd := exec.Command(execBin, execArgs...)
 	if workDir != "" {
 		cmd.Dir = workDir
+	}
+	if execBin == "wsl.exe" {
+		env = wslFilterEnv(env)
 	}
 	cmd.Env = env
 	sysexec.Hide(cmd)
@@ -401,6 +405,12 @@ func (a *acpSession) callWithin(method string, params any, timeout time.Duration
 
 func acpCallResult(msg acpMessage) (json.RawMessage, error) {
 	if msg.Error != nil {
+		var rpcErr struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(msg.Error, &rpcErr); err == nil && rpcErr.Message != "" {
+			return nil, fmt.Errorf("%s", rpcErr.Message)
+		}
 		return nil, fmt.Errorf("%s", string(msg.Error))
 	}
 	return msg.Result, nil

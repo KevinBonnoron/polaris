@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronDown, Copy, ExternalLink, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Copy, ExternalLink, RefreshCw, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -82,16 +82,22 @@ function AgentKindCard({ kind, detecting, defaultModel, onDefaultModelChange, no
 
 export function AgentsSettings() {
   const { t } = useTranslation();
-  const { kinds, opencode, loading: detecting } = useAgentClis();
+  const { kinds, opencode, loading: detecting, refresh } = useAgentClis();
   const defaults = useAgentDefaults();
   const [showNotInstalled, setShowNotInstalled] = useState(false);
 
-  const installed = detecting ? kinds : kinds.filter((k) => k.installed);
-  const notInstalled = detecting ? [] : kinds.filter((k) => !k.installed);
+  const installed = kinds.filter((k) => k.installed);
+  const notInstalled = kinds.filter((k) => !k.installed);
 
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" size="sm" onClick={() => void refresh()} disabled={detecting}>
+            <RefreshCw className={cn(detecting && 'animate-spin')} />
+            {t('settings.agents.recheck')}
+          </Button>
+        </div>
         {installed.map((kind) => (
           <AgentKindCard key={kind.id} kind={kind} detecting={detecting} defaultModel={defaults.get(kind.id) ?? kind.models[0]?.value ?? ''} onDefaultModelChange={(model) => defaults.set(kind.id, model)} />
         ))}
