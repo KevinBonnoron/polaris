@@ -72,6 +72,7 @@ export const en = {
     inbox: 'Inbox',
     terminal: 'Terminal',
     settings: 'Settings',
+    logs: 'Logs',
     console: 'Console',
     consoleNoProject: 'Select a project to open a terminal',
     consoleNoTerminal: 'No terminal detected',
@@ -1273,6 +1274,7 @@ export const en = {
       appearance: 'Appearance',
       notifications: 'Notifications',
       shortcuts: 'Shortcuts',
+      logs: 'Logs',
       statusBar: 'Status bar',
       about: 'About',
     },
@@ -1484,6 +1486,13 @@ export const en = {
     hint: 'Type text and press Enter to search.',
     copyFilters: 'Copy filters',
     removeToken: 'Remove {{label}} filter',
+  },
+  logs: {
+    title: 'Application logs',
+    empty: 'No logs yet.',
+    path: 'app.log',
+    scrollToBottom: 'Scroll to bottom',
+    clear: 'Clear logs',
   },
 };
 
