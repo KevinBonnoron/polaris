@@ -7,6 +7,7 @@ import { AboutSettings } from './about-settings';
 import { AgentsSettings } from './agents-settings';
 import { AppearanceSettings } from './appearance-settings';
 import { GeneralSettings } from './general-settings';
+import { LogsSettings } from './logs-settings';
 import { NotificationsSettings } from './notifications-settings';
 import { SettingsNav, type SettingsSection } from './settings-nav';
 import { ShortcutsSettings } from './shortcuts-settings';
@@ -17,6 +18,7 @@ const SECTIONS: Record<SettingsSection, React.ComponentType> = {
   agents: AgentsSettings,
   notifications: NotificationsSettings,
   shortcuts: ShortcutsSettings,
+  logs: LogsSettings,
   about: AboutSettings,
 };
 

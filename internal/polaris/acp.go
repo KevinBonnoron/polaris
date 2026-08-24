@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -169,7 +170,9 @@ func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntim
 	go a.readLoop(stdout)
 	go func() {
 		if err := a.bootstrap(workDir, resumeSessionID); err != nil {
-			a.svc.markAgentError(agentID, fmt.Sprintf("%s acp: %v", a.label, err))
+			msg := fmt.Sprintf("%s acp: %v", a.label, err)
+			log.Printf("[ERROR] polaris: acp bootstrap failed: %s", msg)
+			a.svc.markAgentError(agentID, msg)
 			a.shutdown(runner)
 			return
 		}
@@ -278,6 +281,7 @@ func (a *acpSession) runTurn(r *Runner, text string) {
 	}
 
 	if err != nil {
+		log.Printf("[ERROR] polaris: acp runturn %s: %v", a.label, err)
 		if !a.isClosed() {
 			a.emitEvent(StreamEvent{Type: "system", Content: "✗ " + err.Error()})
 			_ = a.svc.store.PatchAgent(a.agentID, map[string]any{"status": "error"})

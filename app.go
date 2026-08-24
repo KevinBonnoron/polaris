@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -160,7 +161,7 @@ func wslWhichBatch(binaries []string) map[string]string {
 	sb.WriteString("true") // ensure exit 0 even when no binaries are found
 	wsl := wslExePath()
 	script := sb.String()
-	log.Printf("polaris: wslWhichBatch: running %s -- bash -lc %q", wsl, script)
+	logInfo("polaris: wslWhichBatch: running %s -- bash -lc %q", wsl, script)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-lc", script)
@@ -169,12 +170,13 @@ func wslWhichBatch(binaries []string) map[string]string {
 	cmd.Stderr = &stderr
 	sysexec.Hide(cmd)
 	out, err := cmd.Output()
-	log.Printf("polaris: wslWhichBatch: err=%v stderr=%q", err, stderr.String())
+	logInfo("polaris: wslWhichBatch: err=%v stderr=%q", err, stderr.String())
 	if err != nil {
+		logError("polaris: wslWhichBatch: wsl.exe failed: %v", err)
 		return nil
 	}
 	if len(out) == 0 {
-		log.Printf("polaris: wslWhichBatch: no binaries found among %v", binaries)
+		logWarn("polaris: wslWhichBatch: no binaries found among %v", binaries)
 		return nil
 	}
 	result := make(map[string]string)
@@ -182,10 +184,11 @@ func wslWhichBatch(binaries []string) map[string]string {
 		parts := strings.SplitN(strings.TrimSpace(line), "=", 2)
 		if len(parts) == 2 && strings.HasPrefix(parts[1], "/") {
 			result[parts[0]] = "wsl:" + parts[1]
+			logDebug("polaris: wslWhichBatch: found %s → %s", parts[0], parts[1])
 		}
 	}
 	if len(result) == 0 {
-		log.Printf("polaris: wslWhichBatch: no binaries found among %v, raw output: %q", binaries, string(out))
+		logWarn("polaris: wslWhichBatch: no binaries found among %v, raw output: %q", binaries, string(out))
 	}
 	return result
 }
@@ -205,13 +208,15 @@ func wslWhich(binary string) (string, bool) {
 	sysexec.Hide(cmd)
 	out, err := cmd.Output()
 	if err != nil || len(out) == 0 {
-		log.Printf("polaris: wslWhich %q: not found (err=%v, stderr=%q)", binary, err, stderr.String())
+		logWarn("polaris: wslWhich %q: not found (err=%v, stderr=%q)", binary, err, stderr.String())
 		return "", false
 	}
 	p := strings.TrimSpace(string(out))
 	if !strings.HasPrefix(p, "/") {
+		logError("polaris: wslWhich %q: unexpected output %q", binary, p)
 		return "", false
 	}
+	logDebug("polaris: wslWhich %q: found → %s", binary, p)
 	return "wsl:" + p, true
 }
 
@@ -247,9 +252,10 @@ type App struct {
 	taskfileRunner  *taskfile.Runner
 	godotRunner     *godot.Runner
 
-	statusMu sync.RWMutex
-	ready    bool
-	lastErr  string
+	statusMu   sync.RWMutex
+	ready      bool
+	lastErr    string
+	appLogPath string
 }
 
 func NewApp() *App {
@@ -296,19 +302,32 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 		app.setError(fmt.Errorf("resolve data dir: %w", err))
 		return nil
 	}
-	log.Printf("polaris: using data dir %s", dataDir)
+
+	logsDir := filepath.Join(dataDir, "logs")
+	worktreesDir := filepath.Join(dataDir, "worktrees")
+
+	if err := os.MkdirAll(logsDir, 0o755); err == nil {
+		appLogPath := filepath.Join(logsDir, "app.log")
+		if f, err := os.OpenFile(appLogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644); err == nil {
+			log.SetOutput(io.MultiWriter(stderrWriter{}, f))
+			app.appLogPath = appLogPath
+		} else {
+			logError("polaris: could not open app log: %v", err)
+		}
+	} else {
+		logError("polaris: could not create logs dir: %v", err)
+	}
+
+	logDebug("polaris: using data dir %s", dataDir)
 
 	store, err := polaris.OpenStore(filepath.Join(dataDir, "polaris.db"))
 	if err != nil {
-		log.Printf("polaris: open store failed: %v", err)
+		logError("polaris: open store failed: %v", err)
 		app.setError(fmt.Errorf("open store: %w", err))
 		return nil
 	}
 	store.SetEmitter(wailsEmitter{})
 	app.store = store
-
-	logsDir := filepath.Join(dataDir, "logs")
-	worktreesDir := filepath.Join(dataDir, "worktrees")
 
 	app.repositoryStore = repositorystore.New(&repositorystore.SQLitePersistence{DB: store.DB()})
 	app.ticketsStore = ticketsstore.New(&ticketsstore.SQLitePersistence{DB: store.DB()})
@@ -335,12 +354,12 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 		})
 
 	if err := app.svc.RecoverInterruptedAgents(); err != nil {
-		log.Printf("polaris: recover interrupted agents: %v", err)
+		logWarn("polaris: recover interrupted agents: %v", err)
 	}
 
 	app.automation = polaris.NewAutomationManager(app.svc)
 	if err := app.automation.Start(ctx); err != nil {
-		log.Printf("polaris: start automation manager: %v", err)
+		logError("polaris: start automation manager: %v", err)
 	}
 
 	app.nodeRunner = nodejs.NewRunner(wailsEmitter{})
@@ -446,7 +465,7 @@ func (app *App) ResetAllData() error {
 	}
 	if app.automation != nil {
 		if err := app.automation.Start(app.ctx); err != nil {
-			log.Printf("polaris: restart automation manager after reset: %v", err)
+			logError("polaris: restart automation manager after reset: %v", err)
 		}
 	}
 	return nil

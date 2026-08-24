@@ -74,6 +74,7 @@ export const fr: Translation = {
     inbox: 'Boîte de réception',
     terminal: 'Terminal',
     settings: 'Paramètres',
+    logs: 'Journaux',
     console: 'Console',
     consoleNoProject: 'Sélectionnez un projet pour ouvrir un terminal',
     consoleNoTerminal: 'Aucun terminal détecté',
@@ -1275,6 +1276,7 @@ export const fr: Translation = {
       appearance: 'Apparence',
       notifications: 'Notifications',
       shortcuts: 'Raccourcis',
+      logs: 'Journaux',
       statusBar: 'Barre de statut',
       about: 'À propos',
     },
@@ -1486,5 +1488,12 @@ export const fr: Translation = {
     hint: 'Tapez du texte et appuyez sur Entrée pour rechercher.',
     copyFilters: 'Copier les filtres',
     removeToken: 'Supprimer le filtre {{label}}',
+  },
+  logs: {
+    title: "Journaux de l'application",
+    empty: "Aucun journal pour l'instant.",
+    path: 'app.log',
+    scrollToBottom: 'Défiler vers le bas',
+    clear: 'Effacer les journaux',
   },
 };
