@@ -1142,7 +1142,7 @@ func resolveWslShell() string {
 	wslShellOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		out, err := exec.CommandContext(ctx, "wsl.exe", "--", "sh", "-c", `echo "$SHELL"`).Output()
+		out, err := exec.CommandContext(ctx, wslExe(), "--", "sh", "-c", `echo "$SHELL"`).Output()
 		if err == nil {
 			if s := strings.TrimSpace(string(out)); strings.HasPrefix(s, "/") {
 				wslShellBin = filepath.Base(s)
@@ -1152,16 +1152,34 @@ func resolveWslShell() string {
 	return wslShellBin
 }
 
-// wslUnwrap translates a "wsl:<linuxPath>" sentinel into a wsl.exe invocation
-// using the user's configured login shell so their init files (proxy vars,
-// API keys) are sourced. Each argument is single-quoted for safety.
+// windowsToWSLPath converts a Windows absolute path (e.g. C:\Users\foo\bar) to
+// its WSL mount equivalent (/mnt/c/Users/foo/bar). Returns the input unchanged
+// if it is already a Unix path or does not look like a Windows path.
+func windowsToWSLPath(p string) string {
+	if len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') {
+		drive := strings.ToLower(string(p[0]))
+		rest := strings.ReplaceAll(p[3:], "\\", "/")
+		return "/mnt/" + drive + "/" + rest
+	}
+	return p
+}
+
+// wslExe returns the absolute path to wsl.exe, falling back to the standard
+// System32 location when the binary is not on PATH (common in GUI processes
+// that start with a stripped environment).
+var wslExe = sync.OnceValue(func() string {
+	if p, err := exec.LookPath("wsl.exe"); err == nil {
+		return p
+	}
+	return `C:\Windows\System32\wsl.exe`
+})
+
+// wslUnwrap translates a "wsl:<linuxPath>" sentinel into a wsl.exe invocation.
+// The binary is run directly (no shell wrapper) to avoid login-shell profile
+// scripts producing stdout output that would corrupt JSON-RPC streams.
 func wslUnwrap(binary string, args []string) (string, []string) {
 	if linuxPath, ok := strings.CutPrefix(binary, "wsl:"); ok {
-		parts := make([]string, 0, len(args)+1)
-		for _, s := range append([]string{linuxPath}, args...) {
-			parts = append(parts, "'"+strings.ReplaceAll(s, "'", "'\\''")+"'")
-		}
-		return "wsl.exe", []string{"--", resolveWslShell(), "-lc", strings.Join(parts, " ")}
+		return wslExe(), append([]string{"--", linuxPath}, args...)
 	}
 	return binary, args
 }
