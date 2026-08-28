@@ -57,8 +57,7 @@ func ListOpencodeModels(binary string) ([]string, error) {
 
 	var cmd *exec.Cmd
 	if linuxPath, ok := strings.CutPrefix(binary, "wsl:"); ok {
-		cmd = exec.CommandContext(ctx, "wsl.exe", "--", resolveWslShell(), "-lc", "'"+strings.ReplaceAll(linuxPath, "'", "'\\''")+"' models")
-		// cmd.Env = wslFilterEnv(os.Environ()) // TODO: fix env filtering — snap/opencode doesn't work without full env
+		cmd = exec.CommandContext(ctx, wslExe(), "--", linuxPath, "models")
 	} else {
 		cmd = exec.CommandContext(ctx, binary, "models")
 	}

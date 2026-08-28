@@ -150,29 +150,32 @@ func wslWhichBatch(binaries []string) map[string]string {
 	if len(binaries) == 0 {
 		return nil
 	}
+	// Extra directories to probe directly, bypassing PATH entirely.
+	// Passed via stdin to avoid Windows command-line argument escaping issues.
+	extraDirs := []string{"/snap/bin", "$HOME/.local/bin", "$HOME/.cargo/bin", "$HOME/.opencode/bin"}
+
 	var sb strings.Builder
-	// Diagnostic output to stderr so it's always logged regardless of what's found.
-	sb.WriteString(">&2 echo \"wsl_path=$PATH\"; ")
-	sb.WriteString("[ -f ~/.bashrc ] && . ~/.bashrc; export PATH=\"$PATH:/snap/bin:$HOME/.local/bin\"; ")
-	sb.WriteString(">&2 echo \"wsl_path_after=$PATH\"; ")
 	for _, b := range binaries {
-		fmt.Fprintf(&sb, "p=$(command -v %q 2>/dev/null); [ -n \"$p\" ] && echo %q=\"$p\"; ", b, b)
+		// Check PATH first, then known locations directly with -e (follows symlinks) or -L (symlink).
+		fmt.Fprintf(&sb, "p=$(command -v %s 2>/dev/null)\n", b)
+		for _, d := range extraDirs {
+			fmt.Fprintf(&sb, "[ -z \"$p\" ] && { [ -e %s/%s ] || [ -L %s/%s ]; } && p=%s/%s\n", d, b, d, b, d, b)
+		}
+		fmt.Fprintf(&sb, "[ -n \"$p\" ] && echo %s=\"$p\"\n", b)
 	}
-	sb.WriteString("true") // ensure exit 0 even when no binaries are found
+
 	wsl := wslExePath()
 	script := sb.String()
-	logInfo("polaris: wslWhichBatch: running %s -- bash -lc %q", wsl, script)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-lc", script)
-	// cmd.Env = wslEnv() // TODO: fix env filtering — snap/opencode doesn't work without full env
+	cmd := exec.CommandContext(ctx, wsl, "--", "bash")
+	cmd.Stdin = strings.NewReader(script)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	sysexec.Hide(cmd)
 	out, err := cmd.Output()
-	logInfo("polaris: wslWhichBatch: err=%v stderr=%q", err, stderr.String())
 	if err != nil {
-		logError("polaris: wslWhichBatch: wsl.exe failed: %v", err)
+		logError("polaris: wslWhichBatch: wsl.exe failed: %v (stderr=%q)", err, stderr.String())
 		return nil
 	}
 	if len(out) == 0 {
@@ -201,7 +204,7 @@ func wslWhich(binary string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	script := fmt.Sprintf("[ -f ~/.bashrc ] && . ~/.bashrc; export PATH=\"$PATH:/snap/bin:$HOME/.local/bin\"; command -v %q 2>/dev/null", binary)
-	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-lc", script)
+	cmd := exec.CommandContext(ctx, wsl, "--", "bash", "-c", script)
 	// cmd.Env = wslEnv() // TODO: fix env filtering — snap/opencode doesn't work without full env
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
