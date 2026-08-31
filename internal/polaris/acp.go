@@ -122,11 +122,13 @@ type acpMessage struct {
 func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntime, workDir, task string, env []string, baseTokens int, baseCost float64, resumeSessionID string) error {
 	execBin, execArgs := wslUnwrap(rt.binary, rt.args)
 	cmd := exec.Command(execBin, execArgs...)
-	if workDir != "" {
-		cmd.Dir = workDir
-	}
+	acpWorkDir := workDir
 	if execBin == "wsl.exe" {
 		env = wslFilterEnv(env)
+		acpWorkDir = windowsToWSLPath(workDir)
+	}
+	if workDir != "" {
+		cmd.Dir = workDir
 	}
 	cmd.Env = env
 	sysexec.Hide(cmd)
@@ -169,7 +171,7 @@ func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntim
 
 	go a.readLoop(stdout)
 	go func() {
-		if err := a.bootstrap(workDir, resumeSessionID); err != nil {
+		if err := a.bootstrap(acpWorkDir, resumeSessionID); err != nil {
 			msg := fmt.Sprintf("%s acp: %v", a.label, err)
 			log.Printf("[ERROR] polaris: acp bootstrap failed: %s", msg)
 			a.svc.markAgentError(agentID, msg)
@@ -283,7 +285,7 @@ func (a *acpSession) runTurn(r *Runner, text string) {
 	if err != nil {
 		log.Printf("[ERROR] polaris: acp runturn %s: %v", a.label, err)
 		if !a.isClosed() {
-			a.emitEvent(StreamEvent{Type: "system", Content: "✗ " + err.Error()})
+			_ = a.svc.appendAgentEvent(a.agentID, StreamEvent{Type: "system", Content: "✗ " + err.Error()})
 			_ = a.svc.store.PatchAgent(a.agentID, map[string]any{"status": "error"})
 			a.svc.notifyAgentEvent(a.agentID, "error", err.Error())
 		}

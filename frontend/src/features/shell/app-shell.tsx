@@ -13,6 +13,7 @@ import { AgentDefaultsProvider } from '@/state/agent-defaults';
 import { ProjectsProvider } from '@/state/projects';
 import { SetAppFocused } from '@/wailsjs/go/main/App';
 import { BackendHealthCheck } from './backend-health-check';
+import { NotificationToast } from './notification-toast';
 import { ShellBody } from './shell-body';
 
 interface Props {
@@ -56,6 +57,7 @@ export function AppShell({ children }: Props) {
                         <ShortcutsProvider>
                           <ShellBody>{children}</ShellBody>
                           <BackendHealthCheck />
+                          <NotificationToast />
                           <Toaster position="bottom-right" richColors />
                         </ShortcutsProvider>
                       </ShellRunProvider>
