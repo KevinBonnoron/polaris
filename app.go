@@ -301,7 +301,7 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 
 	dataDir, err := resolveDataDir()
 	if err != nil {
-		log.Printf("polaris: cannot resolve data dir: %v", err)
+		log.Printf("cannot resolve data dir: %v", err)
 		app.setError(fmt.Errorf("resolve data dir: %w", err))
 		return nil
 	}
@@ -355,6 +355,8 @@ func (app *App) ServiceStartup(ctx context.Context, _ application.ServiceOptions
 			}
 			return ""
 		})
+
+	go app.svc.WarmPACCache()
 
 	if err := app.svc.RecoverInterruptedAgents(); err != nil {
 		logWarn("polaris: recover interrupted agents: %v", err)
