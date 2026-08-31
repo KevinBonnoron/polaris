@@ -376,6 +376,91 @@ func DefaultGeneralSettings() GeneralSettings {
 	}
 }
 
+type ProxyMode string
+
+const (
+	ProxyModeNone   ProxyMode = "none"
+	ProxyModeManual ProxyMode = "manual"
+	ProxyModePAC    ProxyMode = "pac"
+)
+
+type NetworkSettings struct {
+	Mode       ProxyMode `json:"mode,omitempty"`
+	HTTPProxy  string    `json:"httpProxy,omitempty"`
+	HTTPSProxy string    `json:"httpsProxy,omitempty"`
+	NoProxy    string    `json:"noProxy,omitempty"`
+	PACUrl     string    `json:"pacUrl,omitempty"`
+}
+
+func (s NetworkSettings) manualEnv() []string {
+	var env []string
+	if s.HTTPProxy != "" {
+		env = append(env, "HTTP_PROXY="+s.HTTPProxy, "http_proxy="+s.HTTPProxy)
+	}
+	if s.HTTPSProxy != "" {
+		env = append(env, "HTTPS_PROXY="+s.HTTPSProxy, "https_proxy="+s.HTTPSProxy)
+	}
+	if s.NoProxy != "" {
+		env = append(env, "NO_PROXY="+s.NoProxy, "no_proxy="+s.NoProxy)
+	}
+	return env
+}
+
+// NetworkEnv returns proxy-related env vars to inject into subprocess
+// environments. It reads from the PAC cache when mode is "pac" so it is
+// always synchronous regardless of mode.
+func (s *Service) NetworkEnv() []string {
+	if s.store == nil {
+		return nil
+	}
+	ns, err := s.store.GetNetworkSettings()
+	if err != nil {
+		return nil
+	}
+	switch ns.Mode {
+	case ProxyModePAC:
+		if s.pacCache == nil {
+			return nil
+		}
+		return s.pacCache.Env()
+	case ProxyModeNone:
+		return nil
+	default: // "" (backward compat) or "manual"
+		return ns.manualEnv()
+	}
+}
+
+func (s *Service) GetNetworkSettings() (NetworkSettings, error) {
+	if s.store == nil {
+		return NetworkSettings{}, errors.New("store not initialised")
+	}
+	return s.store.GetNetworkSettings()
+}
+
+func (s *Service) UpdateNetworkSettings(in NetworkSettings) (NetworkSettings, error) {
+	if s.store == nil {
+		return NetworkSettings{}, errors.New("store not initialised")
+	}
+	out, err := s.store.UpdateNetworkSettings(in)
+	if err != nil {
+		return out, err
+	}
+	switch in.Mode {
+	case ProxyModePAC:
+		if s.pacCache == nil {
+			s.pacCache = newPACResultCache()
+		} else {
+			s.pacCache.invalidate()
+		}
+		if in.PACUrl != "" {
+			go s.refreshPACCache(in.PACUrl)
+		}
+	default:
+		s.pacCache = nil
+	}
+	return out, nil
+}
+
 // AutomationTrigger is the discriminated payload describing what conditions
 // fire an automation. The wire format is JSON so the frontend can evolve the
 // shape without forcing a Go-side migration on every change.
@@ -513,6 +598,10 @@ type Service struct {
 	// compacting serialises concurrent /compact calls per agent: a bool stored
 	// under agentId prevents a second compact from starting while one is running.
 	compacting sync.Map
+
+	// pacCache holds the proxy settings derived from the last PAC evaluation.
+	// Nil when PAC mode is not active.
+	pacCache *pacResultCache
 }
 
 func NewService(store *Store) *Service {

@@ -678,6 +678,7 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		if kind == "claude-code" && os.Getenv("CLAUDE_CODE_MAX_OUTPUT_TOKENS") == "" {
 			env = append(env, "CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000")
 		}
+		env = append(env, svc.NetworkEnv()...)
 		if strings.HasPrefix(execBin, "wsl.exe") {
 			env = wslFilterEnv(env)
 		}

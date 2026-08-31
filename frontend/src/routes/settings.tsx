@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { SettingsPage } from '@/features/settings/settings-page';
 import type { SettingsSection } from '@/features/settings/settings-nav';
 
-const VALID_SECTIONS: SettingsSection[] = ['general', 'appearance', 'agents', 'notifications', 'shortcuts', 'logs', 'about'];
+const VALID_SECTIONS: SettingsSection[] = ['general', 'appearance', 'agents', 'notifications', 'shortcuts', 'network', 'logs', 'about'];
 
 export const Route = createFileRoute('/settings')({
   validateSearch: (search: Record<string, unknown>) => ({

@@ -8,6 +8,7 @@ import { AgentsSettings } from './agents-settings';
 import { AppearanceSettings } from './appearance-settings';
 import { GeneralSettings } from './general-settings';
 import { LogsSettings } from './logs-settings';
+import { NetworkSettings } from './network-settings';
 import { NotificationsSettings } from './notifications-settings';
 import { SettingsNav, type SettingsSection } from './settings-nav';
 import { ShortcutsSettings } from './shortcuts-settings';
@@ -18,6 +19,7 @@ const SECTIONS: Record<SettingsSection, React.ComponentType> = {
   agents: AgentsSettings,
   notifications: NotificationsSettings,
   shortcuts: ShortcutsSettings,
+  network: NetworkSettings,
   logs: LogsSettings,
   about: AboutSettings,
 };
@@ -35,11 +37,17 @@ export function SettingsPage() {
       </div>
       <div className="flex min-h-0 flex-1 gap-6 px-6 pb-6">
         <SettingsNav current={section} onSelect={(s) => navigate({ search: { section: s } })} />
-        <ScrollArea className="flex-1">
-          <div className="pb-6 pr-4">
+        {section === 'logs' ? (
+          <div className="flex-1 overflow-hidden">
             <Section />
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="flex-1">
+            <div className="pb-6 pr-4">
+              <Section />
+            </div>
+          </ScrollArea>
+        )}
       </div>
     </div>
   );
