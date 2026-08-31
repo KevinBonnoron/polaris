@@ -116,7 +116,7 @@ export function AgentConversation({ agentId }: { agentId: string }) {
   const agentDefaults = useAgentDefaults();
   const spawnModel = (defaultsId ? agentDefaults.get(defaultsId) : undefined) ?? models[0]?.value ?? '';
   const activeModelValue = (isDraft ? (agent?.model ?? spawnModel) : agent?.model) ?? '';
-  const activeModelLabel = models.find((m) => m.value === activeModelValue)?.label ?? activeModelValue;
+  const activeModelLabel = models.find((m) => m.value === activeModelValue)?.label ?? (activeModelValue || cliCfg?.label) ?? '';
   const KindIcon = useMemo(() => {
     if (!agent) {
       return undefined;

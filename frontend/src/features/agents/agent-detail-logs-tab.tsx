@@ -45,7 +45,7 @@ export function AgentDetailLogsTab({ log, isWorking, isLoading, logRef, onLogScr
         ) : (
           <span className="font-mono text-xs text-muted-foreground">{isWorking ? t('agents.detail.waitingOutput') : t('agents.detail.noOutput')}</span>
         )}
-        {isWorking && <ThinkingIndicator />}
+        {isWorking && !!blocks && <ThinkingIndicator />}
       </ScrollArea>
       <Tooltip>
         <TooltipTrigger asChild>
