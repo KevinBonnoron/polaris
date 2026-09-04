@@ -4,14 +4,15 @@ import { toast } from 'sonner';
 import { notificationsCollection } from '@/collections/notifications.collection';
 
 export function NotificationToast() {
-  const { data: notifications = [] } = useLiveQuery((q) => q.from({ n: notificationsCollection }));
+  const { data: notifications = [], isReady } = useLiveQuery((q) => q.from({ n: notificationsCollection }));
   const seenIdsRef = useRef<Set<string> | null>(null);
 
   useEffect(() => {
-    if (notifications.length === 0) return;
+    if (!isReady) return;
 
     if (seenIdsRef.current === null) {
-      // First load — mark all existing notifications as seen without toasting.
+      // First completed result — mark all existing notifications as seen
+      // without toasting, including when the initial snapshot is empty.
       seenIdsRef.current = new Set(notifications.map((n) => n.id));
       return;
     }
@@ -24,7 +25,7 @@ export function NotificationToast() {
         }
       }
     }
-  }, [notifications]);
+  }, [notifications, isReady]);
 
   return null;
 }
