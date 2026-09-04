@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -119,7 +120,38 @@ type acpMessage struct {
 // turn. It is called from Spawn for ACP-based agents, and from Send to resume a
 // finished session.
 func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntime, workDir, task string, env []string, baseTokens int, baseCost float64, resumeSessionID string) error {
-	cmd := exec.Command(rt.binary, rt.args...)
+	execBin, execArgs := wslUnwrap(rt.binary, rt.args)
+	acpWorkDir := workDir
+	if execBin == "wsl.exe" {
+		env = wslFilterEnv(env)
+		acpWorkDir = windowsToWSLPath(workDir)
+		if proxyVars := svc.NetworkEnv(); len(proxyVars) > 0 {
+			// Forward proxy vars to the Linux process via WSLENV — WSL's native
+			// mechanism for passing Windows env vars to Linux. The vars are already
+			// in cmd.Env (Windows side); WSLENV tells WSL which ones to mirror.
+			var names []string
+			for _, kv := range proxyVars {
+				if name, _, ok := strings.Cut(kv, "="); ok {
+					names = append(names, name)
+				}
+			}
+			addon := strings.Join(names, ":")
+			merged := false
+			for i, e := range env {
+				if k, _, ok := strings.Cut(e, "="); ok && strings.EqualFold(k, "WSLENV") {
+					env[i] = e + ":" + addon
+					merged = true
+					break
+				}
+			}
+			if !merged {
+				env = append(env, "WSLENV="+addon)
+			}
+			log.Printf("[DEBUG] acp wsl WSLENV proxy vars: %s", addon)
+		}
+	}
+	log.Printf("[DEBUG] acp launch: %s %s", execBin, strings.Join(execArgs, " "))
+	cmd := exec.Command(execBin, execArgs...)
 	if workDir != "" {
 		cmd.Dir = workDir
 	}
@@ -134,9 +166,19 @@ func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntim
 	if err != nil {
 		return err
 	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	go func() {
+		sc := bufio.NewScanner(stderr)
+		for sc.Scan() {
+			log.Printf("[DEBUG] acp %s stderr: %s", rt.label, sc.Text())
+		}
+	}()
 
 	decided, _ := svc.store.ListAgentDecisions(agentID)
 	if decided == nil {
@@ -164,8 +206,9 @@ func (runner *Runner) startACPSession(svc *Service, agentID string, rt acpRuntim
 
 	go a.readLoop(stdout)
 	go func() {
-		if err := a.bootstrap(workDir, resumeSessionID); err != nil {
-			a.svc.markAgentError(agentID, fmt.Sprintf("%s acp: %v", a.label, err))
+		if err := a.bootstrap(acpWorkDir, resumeSessionID); err != nil {
+			log.Printf("[ERROR] %s bootstrap: %v", a.label, err)
+			a.svc.markAgentError(agentID, fmt.Sprintf("failed to start %s: %v", a.label, err))
 			a.shutdown(runner)
 			return
 		}
@@ -274,8 +317,9 @@ func (a *acpSession) runTurn(r *Runner, text string) {
 	}
 
 	if err != nil {
+		log.Printf("[ERROR] acp runturn %s: %v", a.label, err)
 		if !a.isClosed() {
-			a.emitEvent(StreamEvent{Type: "system", Content: "✗ " + err.Error()})
+			_ = a.svc.appendAgentEvent(a.agentID, StreamEvent{Type: "system", Content: "✗ " + err.Error()})
 			_ = a.svc.store.PatchAgent(a.agentID, map[string]any{"status": "error"})
 			a.svc.notifyAgentEvent(a.agentID, "error", err.Error())
 		}
@@ -401,6 +445,12 @@ func (a *acpSession) callWithin(method string, params any, timeout time.Duration
 
 func acpCallResult(msg acpMessage) (json.RawMessage, error) {
 	if msg.Error != nil {
+		var rpcErr struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(msg.Error, &rpcErr); err == nil && rpcErr.Message != "" {
+			return nil, fmt.Errorf("%s", rpcErr.Message)
+		}
 		return nil, fmt.Errorf("%s", string(msg.Error))
 	}
 	return msg.Result, nil

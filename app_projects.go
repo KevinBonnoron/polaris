@@ -109,3 +109,15 @@ func (app *App) GetGeneralSettings() (polaris.GeneralSettings, error) {
 func (app *App) UpdateGeneralSettings(s polaris.GeneralSettings) (polaris.GeneralSettings, error) {
 	return app.svc.UpdateGeneralSettings(s)
 }
+
+func (app *App) GetNetworkSettings() (polaris.NetworkSettings, error) {
+	return app.svc.GetNetworkSettings()
+}
+
+func (app *App) UpdateNetworkSettings(s polaris.NetworkSettings) (polaris.NetworkSettings, error) {
+	return app.svc.UpdateNetworkSettings(s)
+}
+
+func (app *App) GetSystemPACUrl() string {
+	return polaris.SystemPACUrl()
+}

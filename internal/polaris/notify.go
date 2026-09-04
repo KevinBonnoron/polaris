@@ -26,6 +26,6 @@ func dispatchOSNotification(n Notification, settings NotificationSettings) {
 		err = beeep.Alert(title, n.Title, "")
 	}
 	if err != nil {
-		log.Printf("polaris: os notification failed: %v", err)
+		log.Printf("os notification failed: %v", err)
 	}
 }

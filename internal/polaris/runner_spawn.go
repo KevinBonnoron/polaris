@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,8 +171,11 @@ func (service *Service) Spawn(in SpawnAgentInput) (*Agent, error) {
 	if isACP {
 		_ = service.appendAgentEvent(created.ID, StreamEvent{Type: "user_message", Content: task})
 		env := append(os.Environ(), acpEnv...)
+		env = append(env, service.NetworkEnv()...)
 		if err := service.runner.startACPSession(service, created.ID, acpRT, runDir, task, env, created.Tokens.Total(), created.CostUSD, ""); err != nil {
-			service.markAgentError(created.ID, fmt.Sprintf("start %s acp: %v", acpRT.label, err))
+			msg := fmt.Sprintf("start %s acp: %v", acpRT.label, err)
+			log.Printf("[ERROR] %s", msg)
+			service.markAgentError(created.ID, msg)
 		}
 		return &created, nil
 	}

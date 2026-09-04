@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/KevinBonnoron/polaris/internal/sysexec"
 )
 
 // ansiEscape matches ANSI/VT100 escape sequences produced by TUI-based CLIs.
@@ -39,15 +41,28 @@ func ParseModelsOutput(raw string) []string {
 }
 
 // ListOpencodeModels returns the list of models from the opencode CLI.
-func ListOpencodeModels() ([]string, error) {
-	path, err := exec.LookPath("opencode")
-	if err != nil {
-		return nil, err
+// binary is the already-resolved path from detection (may carry a "wsl:" prefix
+// on Windows); pass empty to fall back to exec.LookPath.
+func ListOpencodeModels(binary string) ([]string, error) {
+	if binary == "" {
+		p, err := exec.LookPath("opencode")
+		if err != nil {
+			return nil, err
+		}
+		binary = p
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "models").Output()
+
+	var cmd *exec.Cmd
+	if linuxPath, ok := strings.CutPrefix(binary, "wsl:"); ok {
+		cmd = exec.CommandContext(ctx, wslExe(), "--", linuxPath, "models")
+	} else {
+		cmd = exec.CommandContext(ctx, binary, "models")
+	}
+	sysexec.Hide(cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
 	}

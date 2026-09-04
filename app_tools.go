@@ -17,7 +17,8 @@ import (
 )
 
 func (app *App) ListOpencodeModels() []string {
-	models, err := polaris.ListOpencodeModels()
+	_, binary, _ := resolveAgentBinary([]string{"opencode"})
+	models, err := polaris.ListOpencodeModels(binary)
 	if err != nil {
 		return []string{}
 	}
@@ -88,9 +89,33 @@ func (app *App) ListCliModels(kind string) []polaris.ModelInfo {
 
 func (app *App) DetectAgentClis() []AgentCli {
 	out := make([]AgentCli, 0, len(agentCliCandidates))
-	for _, c := range agentCliCandidates {
-		name, path, installed := resolveAgentBinary(c.binaries)
-		out = append(out, AgentCli{Kind: c.kind, Binary: name, Installed: installed, Path: path})
+
+	// First pass: fast local detection (PATH + extraBinDirs).
+	var wslNeeded []int
+	for i, c := range agentCliCandidates {
+		name, path, ok := resolveAgentBinaryLocal(c.binaries)
+		out = append(out, AgentCli{Kind: c.kind, Binary: name, Installed: ok, Path: path})
+		if !ok && runtime.GOOS == "windows" {
+			wslNeeded = append(wslNeeded, i)
+		}
+	}
+
+	// Second pass: single WSL invocation for all not-yet-found binaries.
+	if len(wslNeeded) > 0 {
+		var allBins []string
+		for _, idx := range wslNeeded {
+			allBins = append(allBins, agentCliCandidates[idx].binaries...)
+		}
+		wslPaths := wslWhichBatch(allBins)
+		for _, idx := range wslNeeded {
+			c := agentCliCandidates[idx]
+			for _, b := range c.binaries {
+				if p, found := wslPaths[b]; found {
+					out[idx] = AgentCli{Kind: c.kind, Binary: b, Installed: true, Path: p}
+					break
+				}
+			}
+		}
 	}
 
 	return out

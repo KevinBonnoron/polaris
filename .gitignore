@@ -37,7 +37,7 @@ coverage
 *.lcov
 
 # logs
-logs
+/logs
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
@@ -59,3 +59,4 @@ package.json.md5
 
 # Finder (MacOS) folder config
 .DS_Store
+frontend/polaris

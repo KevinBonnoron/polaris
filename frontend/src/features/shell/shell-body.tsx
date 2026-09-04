@@ -31,10 +31,10 @@ export function ShellBody({ children }: Props) {
   }
 
   return (
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen={false} className="!min-h-0 h-full">
       <ShortcutDispatcher />
       <AppSidebar />
-      <SidebarInset className="flex h-screen flex-col overflow-hidden">
+      <SidebarInset className="flex h-full flex-col overflow-hidden">
         <main className="flex-1 overflow-auto">{children}</main>
         <ShellPane />
       </SidebarInset>

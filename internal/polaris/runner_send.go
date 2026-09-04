@@ -370,6 +370,7 @@ func (service *Service) resumeACP(agent *Agent, message string) error {
 	_ = service.store.PatchAgent(agent.ID, map[string]any{"status": "working"})
 
 	env := append(os.Environ(), acpEnv...)
+	env = append(env, service.NetworkEnv()...)
 	return service.runner.startACPSession(service, agent.ID, rt, workDir, message, env, agent.Tokens.Total(), agent.CostUSD, agent.SessionID)
 }
 

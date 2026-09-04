@@ -3,6 +3,7 @@ package polaris
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -668,13 +669,18 @@ func (runner *Runner) run(svc *Service, agentID, kind, binary string, args []str
 		var stats streamTurnStats
 		attemptStarted := time.Now()
 		var codexThreadID string
-		cmd := exec.Command(binary, args...)
+		execBin, execArgs := wslUnwrap(binary, args)
+		cmd := exec.Command(execBin, execArgs...)
 		if workDir != "" {
 			cmd.Dir = workDir
 		}
 		env := append(os.Environ(), extraEnv...)
 		if kind == "claude-code" && os.Getenv("CLAUDE_CODE_MAX_OUTPUT_TOKENS") == "" {
 			env = append(env, "CLAUDE_CODE_MAX_OUTPUT_TOKENS=64000")
+		}
+		env = append(env, svc.NetworkEnv()...)
+		if strings.HasPrefix(execBin, "wsl.exe") {
+			env = wslFilterEnv(env)
 		}
 		cmd.Env = env
 		sysexec.Hide(cmd)
@@ -1107,4 +1113,74 @@ func parseLogLine(line string) (StreamEvent, bool) {
 		return StreamEvent{}, false
 	}
 	return StreamEvent{Type: "text", Ts: ts, Content: content}, true
+}
+
+// wslUnwrap translates a "wsl:<linuxPath>" binary sentinel (produced by
+// wslWhich on Windows) into a wsl.exe invocation so the subprocess runs
+// inside the default WSL distribution.
+var (
+	wslShellOnce sync.Once
+	wslShellBin  = "sh"
+)
+
+// wslFilterEnv removes HOME and USERPROFILE from env so that bash inside WSL
+// resolves the Linux home via /etc/passwd instead of using the Windows path.
+func wslFilterEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, e := range env {
+		k, _, _ := strings.Cut(e, "=")
+		if strings.EqualFold(k, "HOME") || strings.EqualFold(k, "USERPROFILE") {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// resolveWslShell returns the user's configured WSL login shell name (e.g.
+// "bash", "zsh"). Falls back to "bash" if detection fails. Cached.
+func resolveWslShell() string {
+	wslShellOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, wslExe(), "--", "sh", "-c", `echo "$SHELL"`).Output()
+		if err == nil {
+			if s := strings.TrimSpace(string(out)); strings.HasPrefix(s, "/") {
+				wslShellBin = filepath.Base(s)
+			}
+		}
+	})
+	return wslShellBin
+}
+
+// windowsToWSLPath converts a Windows absolute path (e.g. C:\Users\foo\bar) to
+// its WSL mount equivalent (/mnt/c/Users/foo/bar). Returns the input unchanged
+// if it is already a Unix path or does not look like a Windows path.
+func windowsToWSLPath(p string) string {
+	if len(p) >= 3 && p[1] == ':' && (p[2] == '\\' || p[2] == '/') {
+		drive := strings.ToLower(string(p[0]))
+		rest := strings.ReplaceAll(p[3:], "\\", "/")
+		return "/mnt/" + drive + "/" + rest
+	}
+	return p
+}
+
+// wslExe returns the absolute path to wsl.exe, falling back to the standard
+// System32 location when the binary is not on PATH (common in GUI processes
+// that start with a stripped environment).
+var wslExe = sync.OnceValue(func() string {
+	if p, err := exec.LookPath("wsl.exe"); err == nil {
+		return p
+	}
+	return `C:\Windows\System32\wsl.exe`
+})
+
+// wslUnwrap translates a "wsl:<linuxPath>" sentinel into a wsl.exe invocation.
+// The binary is run directly (no shell wrapper) to avoid login-shell profile
+// scripts producing stdout output that would corrupt JSON-RPC streams.
+func wslUnwrap(binary string, args []string) (string, []string) {
+	if linuxPath, ok := strings.CutPrefix(binary, "wsl:"); ok {
+		return wslExe(), append([]string{"--", linuxPath}, args...)
+	}
+	return binary, args
 }

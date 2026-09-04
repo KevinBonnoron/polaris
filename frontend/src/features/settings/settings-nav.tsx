@@ -1,9 +1,9 @@
 import type { LucideIcon } from 'lucide-react';
-import { Bell, Bot, Info, Keyboard, Palette, Settings } from 'lucide-react';
+import { Bell, Bot, Info, Keyboard, Network, Palette, ScrollText, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
-export type SettingsSection = 'general' | 'appearance' | 'agents' | 'notifications' | 'shortcuts' | 'about';
+export type SettingsSection = 'general' | 'appearance' | 'agents' | 'notifications' | 'shortcuts' | 'network' | 'logs' | 'about';
 
 interface NavEntry {
   id: SettingsSection;
@@ -16,6 +16,8 @@ const ENTRIES: NavEntry[] = [
   { id: 'appearance', icon: Palette },
   { id: 'notifications', icon: Bell },
   { id: 'shortcuts', icon: Keyboard },
+  { id: 'network', icon: Network },
+  { id: 'logs', icon: ScrollText },
   { id: 'about', icon: Info },
 ];
 

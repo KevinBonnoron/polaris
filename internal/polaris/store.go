@@ -1272,6 +1272,40 @@ func (store *Store) UpdateGeneralSettings(in GeneralSettings) (GeneralSettings, 
 	return in, nil
 }
 
+const networkSettingsKey = "network"
+
+func (store *Store) GetNetworkSettings() (NetworkSettings, error) {
+	row := store.db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, networkSettingsKey)
+	var raw string
+	if err := row.Scan(&raw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return NetworkSettings{}, nil
+		}
+		return NetworkSettings{}, err
+	}
+	var out NetworkSettings
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &out)
+	}
+	return out, nil
+}
+
+func (store *Store) UpdateNetworkSettings(in NetworkSettings) (NetworkSettings, error) {
+	payload, err := json.Marshal(in)
+	if err != nil {
+		return in, err
+	}
+	_, err = store.db.Exec(
+		`INSERT INTO app_settings (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+		networkSettingsKey, string(payload),
+	)
+	if err != nil {
+		return in, err
+	}
+	return in, nil
+}
+
 // --- custom providers ---
 
 func (store *Store) ListCustomProviders() ([]CustomProvider, error) {
