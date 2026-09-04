@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ export function NetworkSettings() {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<polaris.NetworkSettings | null>(null);
   const [detecting, setDetecting] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     GetNetworkSettings()
@@ -23,7 +24,15 @@ export function NetworkSettings() {
 
   function persist(next: polaris.NetworkSettings) {
     setSettings(next);
-    UpdateNetworkSettings(next).catch(() => {});
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      UpdateNetworkSettings(next).catch(() => {
+        // Revert displayed state to what is actually persisted on failure.
+        GetNetworkSettings()
+          .then(setSettings)
+          .catch(() => {});
+      });
+    }, 300);
   }
 
   function handleModeChange(value: string) {

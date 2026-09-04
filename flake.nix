@@ -101,7 +101,7 @@
 
           src = ./.;
 
-          vendorHash = "sha256-2oeZlJRfPx51ZNOX2AGQavVdvfD8KmoQ3VKNkhAvgeg=";
+          vendorHash = "sha256-HsA/oYY4XvHv9lvF2yDITyT/cgdAVkzmns4WDx12RAY=";
           proxyVendor = true;
           env.GOWORK = "off";
 
