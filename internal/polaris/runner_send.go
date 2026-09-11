@@ -307,6 +307,7 @@ func (service *Service) StopAndRetractLast(agentID string) (string, error) {
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
 		return "", err
 	}
+	service.emitLogResetEvent(agentID)
 
 	// Also rewind claude-code's own transcript so the message is gone from the
 	// model's context on the next --resume, not just from the Polaris log.
